@@ -118,3 +118,13 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `access.public_url` | string | `` | deployment | specific | `admin.settings.edit` |  |
 | `system.telemetry_opt_in` | bool | `False` | deployment | specific | `admin.settings.edit` | needs capability `telemetry_sender` |
 
+## Quotas & Scheduling
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `media.max_concurrent_jobs` | int | `2` | deployment, role, team, user | min | `admin.quotas.edit` |  |
+| `media.daily_generations` | int | `0` | deployment, role, team, user | min_nonzero | `admin.quotas.edit` |  |
+| `media.max_assets` | int | `200` | deployment, role, team, user | min_nonzero | `admin.quotas.edit` |  |
+| `media.default_image_size` | int | `0` | deployment, role, team | specific | `admin.settings.edit` |  |
+| `media.video_max_seconds` | int | `8` | deployment, role, team | min | `admin.quotas.edit` |  |
+

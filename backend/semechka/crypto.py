@@ -60,6 +60,16 @@ class Vault:
         raw = base64.urlsafe_b64decode(token[len(_PREFIX):])
         return AESGCM(self._key(purpose)).decrypt(raw[:12], raw[12:], purpose.encode()).decode()
 
+    # --- media block: binary payloads (generated images and video), bound to their asset id as associated data
+    def encrypt_bytes(self, data: bytes, purpose: str, bind: str) -> bytes:
+        nonce = os.urandom(12)
+        return b"SMA1" + nonce + AESGCM(self._key(purpose)).encrypt(nonce, data, f"{purpose}:{bind}".encode())
+
+    def decrypt_bytes(self, blob: bytes, purpose: str, bind: str) -> bytes:
+        if blob[:4] != b"SMA1":
+            raise ValueError("unrecognised ciphertext format")
+        return AESGCM(self._key(purpose)).decrypt(blob[4:16], blob[16:], f"{purpose}:{bind}".encode())
+
     def mac(self, value: str, purpose: str) -> str:
         return hmac.new(self._key(purpose), value.encode(), hashlib.sha256).hexdigest()
 
