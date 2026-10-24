@@ -566,28 +566,6 @@ def bulk_models(body: ModelBulk, ctx: Ctx = Depends(require("admin.models.manage
     return {"done": len(models)}
 
 
-@router.post("/models/{mid}/{op}")
-async def model_lifecycle(mid: str, op: str, ctx: Ctx = Depends(current)):
-    """load/unload: operating infrastructure, a separate permission from managing the catalogue."""
-    if op not in ("load", "unload"):
-        raise _err(404, "not_found", "Unknown operation.")
-    ctx.need("ops.model.load")
-    m = ctx.s.get(Model, mid)
-    if m is None:
-        raise _err(404, "not_found", "No such model.")
-    b = ctx.s.get(Backend, m.backend_id)
-    ad = adapter_for(b, ctx.st)
-    audit_ctx(ctx, f"model.{op}", mid)
-    ctx.s.commit()
-    try:
-        await (ad.load if op == "load" else ad.unload)(m.real_id)
-    except adapters.Unsupported as e:
-        raise _err(501, "unsupported", str(e))
-    except adapters.AdapterError as e:
-        raise _err(e.status, e.kind, str(e))
-    return {"ok": True}
-
-
 @router.get("/explain/model")
 def explain_model(user_id: str, model_id: str, ctx: Ctx = Depends(require("admin.users.view"))):
     """'Why can't they use Model X?' — deterministic answer naming the rule."""

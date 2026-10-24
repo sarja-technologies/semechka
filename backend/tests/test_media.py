@@ -57,8 +57,8 @@ def all_bytes(root: Path) -> bytes:
 
 # ---- discovery and mode state ----------------------------------------------------------------------
 def test_media_models_are_discovered_for_their_mode_and_never_offered_to_chat(mo):
-    chat = [m["alias"] for m in mo.get("/api/chat/models").json()]
-    assert chat == ["fake-chat"]
+    chat = [(m["alias"], m["restricted"]) for m in mo.get("/api/chat/models").json()]
+    assert chat == [("fake-chat", False), ("fake-big", True)]  # the owner may also use models not offered to everyone
     o = mo.get("/api/media/options", params={"kind": "image"}).json()
     assert [m["alias"] for m in o["models"]] == ["fake-turbo"]
     m = o["models"][0]
@@ -67,7 +67,7 @@ def test_media_models_are_discovered_for_their_mode_and_never_offered_to_chat(mo
     assert v["limits"]["resolutions"] == [[512, 320], [320, 512]] and v["defaults"]["frames"] <= 49
     # unsupported engine models and LoRAs are not catalogued as generators
     items = mo.get("/api/admin/models").json()["items"]
-    assert not any("unsupported-one" in str(x) or "some-lora" in str(x) for x in items) and len(items) == 3
+    assert not any("unsupported-one" in str(x) or "some-lora" in str(x) for x in items) and len(items) == 4
 
 
 def test_mode_state_reflects_the_connected_backend(mo):

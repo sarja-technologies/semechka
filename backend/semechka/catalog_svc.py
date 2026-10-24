@@ -31,15 +31,19 @@ def grant_mode_for(op: str) -> str:
 class Provider:
     id: str
     label: str
-    mark: str  # lettermark shown when no uploaded logo exists (never a third-party logo)
+    mark: str  # lettermark shown when there is no logo
     tone: str  # restrained background tone for the lettermark
     patterns: tuple[str, ...]
+    finetuner: bool = False  # publishes fine-tunes of other developers' models: also look for the base family
 
 
-# Order matters: the first match wins, so fine-tune families come before their base family.
+# Order matters: the first match wins, so fine-tune families come before their base family. The developer is the
+# party that made the model, never the account that re-packaged (quantised) it or the runtime that serves it.
 PROVIDERS: list[Provider] = [
-    Provider("dolphin", "Cognitive Computations (Dolphin)", "Dp", "#3E6A7A", (r"dolphin",)),
-    Provider("nous", "Nous Research (Hermes)", "Nh", "#5B5F45", (r"hermes", r"\bnous")),
+    Provider("dolphin", "Dolphin AI", "Dp", "#3E6A7A", (r"dolphin",), finetuner=True),
+    Provider("nous", "Nous Research", "Nh", "#5B5F45", (r"hermes", r"\bnous"), finetuner=True),
+    Provider("huihui", "huihui.ai", "Hh", "#5A5A66", (r"huihui",), finetuner=True),
+    Provider("hauhaucs", "HauhauCS", "HC", "#5A5A66", (r"hauhaucs",), finetuner=True),
     Provider("qwen", "Qwen (Alibaba)", "Qw", "#3D5A80", (r"qwen", r"\bqwq\b")),
     Provider("deepseek", "DeepSeek", "DS", "#3F5E9E", (r"deepseek",)),
     Provider("moonshot", "Moonshot AI (Kimi)", "Ki", "#2F3437", (r"kimi", r"moonshot")),
@@ -52,25 +56,69 @@ PROVIDERS: list[Provider] = [
     Provider("microsoft", "Microsoft (Phi)", "Ph", "#3A6EA5", (r"\bphi[-_]?\d", r"\bphi\b", r"microsoft")),
     Provider("minimax", "MiniMax", "MM", "#9E3F4E", (r"minimax",)),
     Provider("bfl", "Black Forest Labs (FLUX)", "Fx", "#2F3437", (r"flux",)),
-    Provider("stability", "Stability AI (Stable Diffusion)", "SD", "#6B5B3E", (r"stable[-_]?diffusion", r"\bsdxl", r"\bsd[-_]?3", r"\bsd[-_]?turbo", r"stability")),
-    Provider("wan", "Wan (Alibaba)", "Wn", "#4A6670", (r"\bwan[-_]?\d", r"\bwan2", r"\bwan[-_]")),
-    Provider("ltx", "Lightricks (LTX)", "LT", "#7A4A3E", (r"\bltx",)),
-    Provider("hunyuan", "Tencent (Hunyuan)", "Hy", "#2F6A9E", (r"hunyuan",)),
-    Provider("zimage", "Z-Image (Alibaba Tongyi)", "Zi", "#4A6A8C", (r"z[-_]?image",)),
+    Provider("stability", "Stability AI", "SD", "#6B5B3E", (r"stable[-_]?diffusion", r"\bsdxl", r"\bsd[-_]?3", r"\bsd[-_]?turbo", r"stability")),
+    Provider("wan", "Wan (Alibaba Tongyi Lab)", "Wn", "#4A6670", (r"\bwan[-_]?\d", r"\bwan2", r"\bwan[-_]")),
+    Provider("ltx", "LTX (Lightricks)", "LT", "#7A4A3E", (r"\bltx",)),
+    Provider("hunyuan", "Tencent Hunyuan", "Hy", "#2F6A9E", (r"hunyuan",)),
+    Provider("zimage", "Z-Image (Alibaba Tongyi Lab)", "Zi", "#4A6A8C", (r"z[-_]?image",)),
     Provider("glm", "Zhipu (GLM)", "GL", "#3A5A9A", (r"\bglm", r"chatglm", r"zhipu")),
     Provider("cohere", "Cohere (Command)", "Co", "#3E6B5A", (r"command[-_]?r", r"cohere", r"\baya\b")),
     Provider("ibm", "IBM (Granite)", "Gr", "#2F5E9E", (r"granite",)),
     Provider("nvidia", "NVIDIA (Nemotron)", "Nv", "#4E7A2A", (r"nemotron", r"nvidia")),
     Provider("allenai", "Ai2 (OLMo)", "Ol", "#9A5A2A", (r"\bolmo", r"allenai")),
 ]
+
+
+# ---- developer logos ---------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Logo:
+    file: str  # under web/static/model-logos/
+    mask: bool  # one-colour mark drawn in the text colour (so it works on light and dark surfaces)
+    owner: str
+    source: str
+    licence: str
+    dark: str | None = None  # one-colour variant used on dark surfaces when `file` is a colour mark
+
+
+# Only marks whose owner's published terms allow identifying their own model (nominative use) without prior
+# approval. OpenAI, Meta, Microsoft, NVIDIA, Stability AI and Google require permission, so they get lettermarks.
+# Sources, verification and terms per mark: docs/MODEL_ICONS.md and web/static/model-logos/NOTICE.md.
+LOGOS: dict[str, Logo] = {
+    "qwen": Logo("qwen-color.svg", False, "Alibaba Cloud (Qwen)", "LobeHub Icons", "MIT (drawing)", dark="qwen.svg"),
+    "nous": Logo("nous.svg", True, "Nous Research", "LobeHub Icons", "MIT (drawing)"),
+    "bfl": Logo("bfl.svg", True, "Black Forest Labs", "bfl.ai/brand", "Owner's brand kit"),
+    "hunyuan": Logo("hunyuan-color.svg", False, "Tencent", "hy.tencent.com", "Owner's file; no affiliation"),
+    "ltx": Logo("ltx.svg", True, "Lightricks (LTX)", "ltx.io", "Owner's file"),
+    "minimax": Logo("minimax-color.svg", False, "MiniMax", "github.com/MiniMax-AI", "Owner's file"),
+    "wan": Logo("tongyi.svg", True, "Alibaba (Tongyi Lab)", "Simple Icons", "CC0-1.0 (drawing)"),
+    "zimage": Logo("tongyi.svg", True, "Alibaba (Tongyi Lab)", "Simple Icons", "CC0-1.0 (drawing)"),
+    "mistral": Logo("mistral-color.svg", False, "Mistral AI", "LobeHub Icons", "MIT (drawing)"),
+    "deepseek": Logo("deepseek-color.svg", False, "DeepSeek", "LobeHub Icons", "MIT (drawing)"),
+}
+LOGO_BASE = "/model-logos/"
+
+
+def logo_icon(provider_id: str) -> dict | None:
+    lg = LOGOS.get(provider_id)
+    if lg is None:
+        return None
+    out = {"logo": LOGO_BASE + lg.file, "mask": lg.mask}
+    if lg.dark:
+        out["dark"] = LOGO_BASE + lg.dark
+    return out
+
+
 _COMPILED = [(p, [re.compile(x, re.I) for x in p.patterns]) for p in PROVIDERS]
 BY_PROVIDER = {p.id: p for p in PROVIDERS}
 
 
-def detect_provider(*names: str | None) -> Provider | None:
-    """Case-insensitive pattern match over the model's identifiers and names. Name-based only, so never authoritative."""
+def detect_provider(*names: str | None, base: bool = False) -> Provider | None:
+    """Case-insensitive pattern match over the model's identifiers and names. Name-based only, so never authoritative.
+    base=True skips fine-tuners, to find the family a fine-tune is built on."""
     hay = " ".join(n for n in names if n).replace("/", " ")
     for p, rxs in _COMPILED:
+        if base and p.finetuner:
+            continue
         if any(rx.search(hay) for rx in rxs):
             return p
     return None
@@ -114,7 +162,7 @@ def _param_label(n) -> str | None:
     return f"{n / 1e6:.0f}M"
 
 
-def profile_of(m: Model, provider_icons: dict | None = None) -> dict:
+def profile_of(m: Model, provider_icons: dict | None = None, logos: bool = True) -> dict:
     """Effective metadata with the source of every value: 'admin', 'backend' or 'name'. Unknown values are absent."""
     meta, prof = m.meta or {}, m.profile or {}
     out: dict = {}
@@ -125,7 +173,7 @@ def profile_of(m: Model, provider_icons: dict | None = None) -> dict:
             out[key], src[key] = val, source
 
     named = from_name(m.real_id)
-    det = detect_provider(m.real_id, m.alias, meta.get("family"))
+    det = detect_provider(m.real_id, meta.get("engine_name"), meta.get("family"))  # never the alias: names can mislead
     put("provider", det.id if det else None, "name")
     put("provider", meta.get("provider") if meta.get("provider") in BY_PROVIDER else None, "backend")
     put("family", meta.get("family"), "backend")
@@ -145,8 +193,14 @@ def profile_of(m: Model, provider_icons: dict | None = None) -> dict:
             put(k, prof[k], "admin")
     p = BY_PROVIDER.get(out.get("provider", ""))
     out["provider_label"] = p.label if p else (out.get("provider") or None)
+    if p and p.finetuner and src.get("provider") != "admin":  # a fine-tune: name the family it is built on, if named
+        bp = detect_provider(m.real_id, meta.get("engine_name"), base=True)
+        if bp:
+            out["based_on"] = bp.label
     icon = prof.get("icon_asset") or (provider_icons or {}).get(out.get("provider", ""))
-    out["icon"] = {"asset": icon} if icon else ({"mark": p.mark, "tone": p.tone} if p else {"mark": None, "tone": None})
+    lg = logo_icon(p.id) if p and logos else None
+    out["icon"] = ({"asset": icon} if icon else lg if lg else
+                   {"mark": p.mark, "tone": p.tone} if p else {"mark": None, "tone": None})
     out["_source"] = src
     return out
 
@@ -242,3 +296,86 @@ def audience_ok(g: ModelGroup, p: perms.Principal) -> bool:
 
 def _backends(s) -> dict[str, Backend]:
     return {b.id: b for b in s.execute(select(Backend)).scalars()}
+
+
+# ---- the picker: sorting and sections ---------------------------------------------------------------------
+_SIZE = re.compile(r"(\d+(?:\.\d+)?)\s*([BM])", re.I)
+SIZE_BUCKETS = [(10, "Under 10B"), (40, "10B to 40B"), (100, "40B to 100B"), (float("inf"), "Over 100B")]
+SORTS = ("custom", "name", "size_desc", "size_asc", "context")
+GROUP_BYS = ("groups", "family", "capability", "engine", "size", "none")
+
+
+def size_b(parameters: str | None) -> float | None:
+    """Billions of parameters from a label such as '35B (A3B active)' or '350M'; None when unknown."""
+    m = _SIZE.search(parameters or "")
+    if not m:
+        return None
+    n = float(m.group(1))
+    return n if m.group(2).upper() == "B" else n / 1000
+
+
+def sort_rows(rows: list[dict], how: str) -> list[dict]:
+    """rows carry 'label', 'sort', 'size_b', 'context'. Unknown sizes and contexts go last; ties keep custom order."""
+    if how == "name":
+        return sorted(rows, key=lambda r: (r["label"].casefold(), r["sort"]))
+    if how in ("size_desc", "size_asc"):
+        sign = -1 if how == "size_desc" else 1
+        return sorted(rows, key=lambda r: (r["size_b"] is None, sign * (r["size_b"] or 0), r["sort"]))
+    if how == "context":
+        return sorted(rows, key=lambda r: (r["context"] is None, -(r["context"] or 0), r["sort"]))
+    return sorted(rows, key=lambda r: r["sort"])
+
+
+def capability_label(row: dict) -> str:
+    media = row.get("media_modes") or []
+    if row.get("modality") == "image":
+        return "Edits images too" if any(x in media for x in ("edit", "img2img", "inpaint")) else "Images from text"
+    if row.get("modality") == "video":
+        return "Video from an image too" if "i2v" in media else "Video from text"
+    return "Reads images too" if row.get("modality") == "text+image" else "Text"
+
+
+def section_key(row: dict, group_by: str) -> str:
+    if group_by == "family":
+        return row.get("provider_label") or "Other developers"
+    if group_by == "capability":
+        return capability_label(row)
+    if group_by == "engine":
+        return row.get("engine") or "Unknown engine"
+    if group_by == "size":
+        b = row.get("size_b")
+        return "Size not reported" if b is None else next(lbl for top, lbl in SIZE_BUCKETS if b < top)
+    return ""
+
+
+def sections(rows: list[dict], group_by: str, admin_groups: list[dict], *, custom: bool = True) -> list[dict]:
+    """[{id, title, models: [ids], collapsed}] in display order. rows are already sorted; with the custom order an
+    administrator's group keeps its own member order."""
+    if group_by == "none":
+        return [{"id": "all", "title": "", "models": [r["id"] for r in rows], "collapsed": False}] if rows else []
+    if group_by == "groups":
+        ids = {r["id"] for r in rows}
+        rank = {r["id"]: i for i, r in enumerate(rows)}
+        out, seen = [], set()
+        for g in admin_groups:
+            mine = [x for x in g["models"] if x in ids]
+            if not custom:
+                mine.sort(key=rank.get)
+            if mine:
+                out.append({"id": g["id"], "title": g["name"], "models": mine, "collapsed": g.get("collapsed", False),
+                            "description": g.get("description") or ""})
+                seen.update(mine)
+        rest = [r["id"] for r in rows if r["id"] not in seen]
+        if rest:
+            out.append({"id": "other", "title": "Other models" if out else "", "models": rest, "collapsed": False})
+        return out
+    buckets: dict[str, list[str]] = {}
+    for r in rows:
+        buckets.setdefault(section_key(r, group_by), []).append(r["id"])
+    if group_by == "size":
+        order = [lbl for _, lbl in SIZE_BUCKETS][::-1] + ["Size not reported"]
+        titles = [t for t in order if t in buckets]
+    else:
+        last = {"Other developers", "Unknown engine"}
+        titles = sorted(buckets, key=lambda t: (t in last, t.casefold()))
+    return [{"id": f"{group_by}:{t}", "title": t, "models": buckets[t], "collapsed": False} for t in titles]

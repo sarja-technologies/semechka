@@ -36,6 +36,10 @@ def _provider_icons(ctx: Ctx) -> dict:
     return ctx.st.settings.deployment(ctx.s, "models.provider_icons") or {}
 
 
+def _logos(ctx: Ctx) -> bool:
+    return bool(ctx.st.settings.deployment(ctx.s, "models.developer_logos"))
+
+
 def _grant_out(g: ModelGrant) -> dict:
     return {"subject_type": g.subject_type, "subject_id": g.subject_id, "effect": g.effect, "modes": g.modes}
 
@@ -46,7 +50,7 @@ def admin_catalog(ctx: Ctx = Depends(require_any(MANAGE, PRESENT))):
     full = ctx.principal.can("tech.model.id")
     backends = {b.id: b for b in ctx.s.execute(select(Backend)).scalars()}
     grants = catalog_svc.grants_by_model(ctx.s)
-    icons = _provider_icons(ctx)
+    icons, logos = _provider_icons(ctx), _logos(ctx)
     groups = catalog_svc.groups(ctx.s)
     member_of: dict[str, list[str]] = {}
     for g, mids in groups:
@@ -55,7 +59,7 @@ def admin_catalog(ctx: Ctx = Depends(require_any(MANAGE, PRESENT))):
     models = []
     for m in catalog_svc.ordered_models(ctx.s):
         b = backends.get(m.backend_id)
-        prof = catalog_svc.profile_of(m, icons)
+        prof = catalog_svc.profile_of(m, icons, logos)
         models.append({
             "id": m.id, "alias": m.alias, "real_id": services.display_id(m.real_id) if full else None,
             "backend": b.name if b else None, "enabled": m.enabled, "available": m.available, "pinned": m.pinned,
@@ -68,12 +72,17 @@ def admin_catalog(ctx: Ctx = Depends(require_any(MANAGE, PRESENT))):
     return {"models": models,
             "groups": [{"id": g.id, "name": g.name, "description": g.description, "sort": g.sort,
                         "collapsed": g.collapsed, "audience": g.audience or [], "members": mids} for g, mids in groups],
-            "providers": [{"id": p.id, "label": p.label, "mark": p.mark, "tone": p.tone, "icon": icons.get(p.id)}
+            "providers": [{"id": p.id, "label": p.label, "mark": p.mark, "tone": p.tone, "icon": icons.get(p.id),
+                           "logo": catalog_svc.logo_icon(p.id),
+                           "logo_source": ({"owner": lg.owner, "source": lg.source, "licence": lg.licence}
+                                           if (lg := catalog_svc.LOGOS.get(p.id)) else None)}
                           for p in catalog_svc.PROVIDERS],
+            "developer_logos": logos,
             "grant_modes": catalog_svc.GRANT_MODES,
-            "icon_note": "Semechka ships neutral lettermarks, not vendor logos: their trademark licences do not allow "
-                         "redistribution with an Apache-2.0 project. Upload a logo you are licensed to use per "
-                         "provider or per model."}
+            "icon_note": "Developer logos are shown only where the developer's published terms allow a mark to "
+                         "identify its own model; the others use lettermarks. Each mark belongs to its owner and implies "
+                         "no endorsement. Turn them off under Model display, or upload a logo you are licensed to use "
+                         "per developer or per model."}
 
 
 class OrderIn(BaseModel):
@@ -137,7 +146,7 @@ def patch_entry(mid: str, body: EntryPatch, ctx: Ctx = Depends(require_any(PRESE
         m.defaults = d
     audit_ctx(ctx, "catalog.model", mid, {k: ("changed" if k == "profile" else v)
                                           for k, v in body.model_dump(exclude_none=True).items()})
-    return {"ok": True, "profile": catalog_svc.profile_of(m, _provider_icons(ctx))}
+    return {"ok": True, "profile": catalog_svc.profile_of(m, _provider_icons(ctx), _logos(ctx))}
 
 
 @router.post("/admin/catalog/icons")
@@ -282,23 +291,53 @@ def catalog_bulk(body: CatalogBulk, ctx: Ctx = Depends(require(PRESENT))):
     return {"done": len(models)}
 
 
-# ---- the chooser people see ------------------------------------------------------------------------------
-def _visible_profile(ctx: Ctx, prof: dict, flags: dict) -> dict:
-    out = {"provider": prof.get("provider"), "provider_label": prof.get("provider_label"), "icon": prof.get("icon"),
-           "modality": prof.get("modality"), "description": prof.get("description")}
-    if flags["model_meta"]:
-        out["family"] = prof.get("family")
-        out["parameters"] = prof.get("parameters")
-        if flags["quantization"]:
-            out["quantization"] = prof.get("quantization")
-        if flags["context_size"]:
-            out["context_length"] = prof.get("context_length")
-    return {k: v for k, v in out.items() if v not in (None, "")}
+# ---- the picker people see ------------------------------------------------------------------------------
+TECH_FIELDS = [  # profile/meta field -> the technical-visibility permission that reveals it
+    ("family", "tech.model.family"), ("architecture", "tech.model.family"), ("parameters", "tech.model.params"),
+    ("quantization", "tech.model.quant"), ("format", "tech.model.quant"), ("context_length", "tech.model.context"),
+    ("license", "tech.model.license"), ("memory_mb", "tech.resources.gpu"), ("size_bytes", "tech.model.quant"),
+    ("source_repo", "tech.model.id"),
+]
+
+
+def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, restricted: bool, usable: bool) -> dict:
+    p, meta = ctx.principal, m.meta or {}
+    real = meta.get("engine_name") or services.display_id(m.real_id)
+    names = opts["names"]
+    label, sub = (real, None) if names == "real" else (m.alias, real if names == "both" and real != m.alias else None)
+    tech = {"family": prof.get("family"), "architecture": meta.get("architecture"),
+            "parameters": prof.get("parameters"), "quantization": prof.get("quantization"), "format": meta.get("format"),
+            "context_length": prof.get("context_length"), "license": meta.get("license"),
+            "memory_mb": meta.get("vram_estimate_mb"), "size_bytes": meta.get("size_bytes"),
+            "source_repo": meta.get("source_repo")}
+    if not opts["show_quant"]:
+        tech.pop("quantization", None)
+    if not opts["show_context"]:
+        tech.pop("context_length", None)
+    details = {k: tech[k] for k, perm in TECH_FIELDS if tech.get(k) not in (None, "") and p.can(perm)}
+    if meta.get("reasoning"):
+        details["reasoning"] = True
+    info = meta.get("media") or {}
+    row = {"id": m.id, "label": label, "sub": sub, "alias": m.alias, "pinned": m.pinned, "restricted": restricted,
+           "usable": usable, "capabilities": catalog_svc.capabilities(m), "external": services.is_external(m, b),
+           "provider": prof.get("provider"), "provider_label": prof.get("provider_label"), "icon": prof.get("icon"),
+           "based_on": prof.get("based_on"), "modality": prof.get("modality"), "description": prof.get("description"),
+           "media_modes": info.get("modes") or [], "details": details}
+    if p.can("tech.model.id"):
+        row["real_id"] = services.display_id(m.real_id)
+    if p.can("tech.runtime.name") or opts["group_by"] == "engine":
+        row["engine"] = b.name
+    # private sort keys (removed before sending)
+    row["sort"], row["size_b"] = m.sort, catalog_svc.size_b(prof.get("parameters"))
+    row["context"] = prof.get("context_length")
+    return row
 
 
 @router.get("/models/catalog")
-def chooser(operation: str = "text", ctx: Ctx = Depends(current)):
-    """Models this person may use for one kind of turn, in the administrator's groups and order."""
+async def chooser(operation: str = "text", ctx: Ctx = Depends(current)):
+    """Models this person may use for one kind of turn, arranged the way the administrator (and, where allowed, the
+    person) chose. With models.view_all, installed models they may not use are listed too, marked unusable: seeing is
+    not using, and every use is checked again by services.model_access."""
     if operation not in catalog_svc.OPERATIONS:
         raise _err(422, "invalid", "Unknown operation.")
     mode = catalog_svc.OPERATIONS[operation][0] if operation != "vision" else "vision"
@@ -307,32 +346,79 @@ def chooser(operation: str = "text", ctx: Ctx = Depends(current)):
     if not state["enabled"]:
         code = {"disabled": 403, "forbidden": 403, "no_model": 409, "unsupported": 501}.get(state.get("code"), 403)
         raise HTTPException(code, {"code": state.get("code", "forbidden"), "message": state["reason"]})
-    g = lambda k: ctx.st.settings.value_for(ctx.s, k, ctx.principal)  # noqa: E731
-    flags = {k: bool(g(f"ui.{k}")) for k in ("model_meta", "quantization", "context_size", "model_names")}
-    usable = services.accessible_models(ctx.s, ctx.principal, ctx.st, mode, include_hidden=False)
-    ids = [m.id for m, _ in usable]
-    icons = _provider_icons(ctx)
-    models = []
-    for m, b in usable:
-        prof = catalog_svc.profile_of(m, icons)
-        info = (m.meta or {}).get("media") or {}
-        models.append({"id": m.id, "alias": m.alias, "pinned": m.pinned, "capabilities": catalog_svc.capabilities(m),
-                       "external": services.is_external(m, b), "profile": _visible_profile(ctx, prof, flags),
-                       "media_modes": info.get("modes") or [], "loaded": (m.meta or {}).get("loaded")})
-    groups = []
-    grouped: set[str] = set()
-    for grp, mids in catalog_svc.groups(ctx.s):
-        mine = [mid for mid in mids if mid in ids]
-        if not mine or not catalog_svc.audience_ok(grp, ctx.principal):
-            continue
-        groups.append({"id": grp.id, "name": grp.name, "description": grp.description, "collapsed": grp.collapsed,
-                       "models": mine})
-        grouped.update(mine)
-    rest = [i for i in ids if i not in grouped]
+    p = ctx.principal
+    g = lambda k: ctx.st.settings.value_for(ctx.s, k, p)  # noqa: E731
+    mine = (ctx.user.prefs or {}).get("picker") or {}
+    opts = {"names": g("models.display.names"), "pinned_first": bool(g("models.display.pinned_first")),
+            "group_by": mine.get("group_by") or g("models.display.group_by"),
+            "sort": mine.get("sort") or g("models.display.sort"),
+            "view": mine.get("view") or g("models.display.view"),
+            "show_quant": bool(g("ui.quantization")), "show_context": bool(g("ui.context_size"))}
+    usable = services.accessible_models(ctx.s, p, ctx.st, mode, include_hidden=False)
+    grants = catalog_svc.grants_by_model(ctx.s)
+    icons, logos = _provider_icons(ctx), _logos(ctx)
+    rows = [_row(ctx, m, b, catalog_svc.profile_of(m, icons, logos), opts, usable=True,
+                 restricted=services.is_restricted(ctx.s, p, m, mode, grants.get(m.id, []))) for m, b in usable]
+    others = []
+    if p.can("models.view_all"):  # every installed model for this operation, even ones they cannot use
+        have = {r["id"] for r in rows}
+        backends = {b.id: b for b in ctx.s.execute(select(Backend)).scalars()}
+        need = "vision" if mode == "vision" else services.MODE_CAPABILITY[mode]
+        for m in catalog_svc.ordered_models(ctx.s):
+            b = backends.get(m.backend_id)
+            if m.id in have or m.hidden or not m.available or b is None or need not in catalog_svc.capabilities(m):
+                continue
+            ok, why = services.model_access(ctx.s, p, m, b, ctx.st, mode, grants.get(m.id, []))
+            r = _row(ctx, m, b, catalog_svc.profile_of(m, icons, logos), opts, usable=False, restricted=True)
+            r["reason"] = why
+            others.append(r)
+    status_ok = p.can("models.status.view")
+    if status_ok:
+        from .. import lifecycle_svc
+        states = {}
+        for b in {b.id: b for _, b in usable}.values():
+            states[b.id] = await lifecycle_svc.cached_state(ctx.st, b)
+        by_id = {m.id: (m, b) for m, b in usable}
+        for r in rows:
+            m, b = by_id[r["id"]]
+            r["state"] = lifecycle_svc.model_state(m, states.get(b.id))
+    rows = catalog_svc.sort_rows(rows, opts["sort"])
+    others = catalog_svc.sort_rows(others, opts["sort"])
+    ids = [r["id"] for r in rows]
+    favs = [x for x in (ctx.user.prefs or {}).get("favourite_models") or [] if x in ids]
+    admin_groups = [{"id": grp.id, "name": grp.name, "description": grp.description, "collapsed": grp.collapsed,
+                     "models": mids} for grp, mids in catalog_svc.groups(ctx.s) if catalog_svc.audience_ok(grp, p)]
+    lead: list[dict] = []
+    taken: set[str] = set()
+    if favs:
+        lead.append({"id": "favourites", "title": "Favourites", "models": favs, "collapsed": False})
+        taken.update(favs)
+    pinned = [r["id"] for r in rows if r["pinned"] and r["id"] not in taken]
+    if opts["pinned_first"] and pinned:
+        lead.append({"id": "pinned", "title": "Recommended", "models": pinned, "collapsed": False})
+        taken.update(pinned)
+    custom = opts["sort"] == "custom"
+    secs = lead + catalog_svc.sections([r for r in rows if r["id"] not in taken], opts["group_by"], admin_groups,
+                                       custom=custom)
+    order = list(dict.fromkeys(x for sec in secs for x in sec["models"]))
+    rank = {x: i for i, x in enumerate(order)}
+    rows.sort(key=lambda r: rank.get(r["id"], len(rank)))
     key = {"text": "chat", "code": "code", "vision": "vision", "image": "image", "video": "video"}[operation]
     default = g(f"models.default.{key}")
     if default not in ids:
-        default = next((m["id"] for m in models if m["pinned"]), ids[0] if ids else None)
-    return {"operation": operation, "models": models, "groups": groups, "ungrouped": rest,
-            "pinned": [m["id"] for m in models if m["pinned"]], "default": default,
-            "show_names": flags["model_names"]}
+        default = next((r["id"] for r in rows if r["pinned"] and not r["restricted"]),
+                       next((r["id"] for r in rows if not r["restricted"]), ids[0] if ids else None))
+    legacy = catalog_svc.sections(rows, "groups", admin_groups, custom=custom)
+    for r in rows + others:
+        for k in ("sort", "size_b", "context"):
+            r.pop(k, None)
+    return {"operation": operation, "models": rows, "sections": secs, "unusable": others, "favourites": favs,
+            "default": default, "status": status_ok, "show_names": bool(g("ui.model_names")),
+            "display": {k: opts[k] for k in ("names", "group_by", "sort", "view", "pinned_first")},
+            "choices": {"group_by": list(catalog_svc.GROUP_BYS), "sort": list(catalog_svc.SORTS)},
+            # 0.3.0 shape, kept for custom interfaces
+            "groups": [{"id": x["id"], "name": x["title"], "description": x.get("description", ""),
+                        "collapsed": x["collapsed"], "models": x["models"]}
+                       for x in legacy if x["id"] != "other"],
+            "ungrouped": next((x["models"] for x in legacy if x["id"] == "other"), []),
+            "pinned": [r["id"] for r in rows if r["pinned"]]}

@@ -236,9 +236,16 @@ def _down_5(conn: Connection, _c: Ctx) -> None:
 # ---- 6: model permissions split, model display settings ------------------------------------------
 # Permissions 0.4.0 introduces. Whoever could already edit the catalogue and its access rules (admin.models.manage)
 # could give themselves all of these, so the upgrade grants them to exactly those roles: nobody gains power.
-_PERMS_6 = ["admin.models.present", "admin.models.defaults", "models.view_all", "models.use_all", "models.status.view"]
+# new permission -> the 0.3.0 permissions whose holders receive it on upgrade (any one suffices)
+_GRANTS_6 = {"admin.models.present": ("admin.models.manage",), "admin.models.defaults": ("admin.models.manage",),
+             "models.view_all": ("admin.models.manage",), "models.use_all": ("admin.models.manage",),
+             "models.status.view": ("admin.models.manage",),
+             "ops.queue.view": ("ops.jobs.cancel_others", "ops.model.load")}
+_PERMS_6 = list(_GRANTS_6)
 # Settings keys (or prefixes ending in '.') that only 0.4.0 understands; removed on downgrade.
-_SETTINGS_6 = ["models.display.", "deployment.preset", "chat.enter_sends", "chat.prompt_history"]
+_SETTINGS_6 = ["models.display.", "models.developer_logos", "deployment.preset", "chat.enter_sends",
+               "chat.prompt_history"]
+_PREFS_6 = ("favourite_models", "picker", "enter_sends", "prompt_history")  # personal preferences 0.3.0 lacks
 
 
 def _rows(conn: Connection, table: str):
@@ -256,9 +263,7 @@ def _up_6(conn: Connection, _c: Ctx) -> None:
         def holds(pid, grants=grants, denies=denies):
             return any(perms._matches(x, pid, for_grant=True) for x in grants) and \
                 not any(perms._matches(x, pid, for_grant=False) for x in denies)
-        if not holds("admin.models.manage"):
-            continue
-        new = [pid for pid in _PERMS_6 if not holds(pid)]
+        new = [pid for pid, needs in _GRANTS_6.items() if any(map(holds, needs)) and not holds(pid)]
         if new:
             conn.execute(text("update roles set grants=:g where id=:i"), {"g": json.dumps(grants + new), "i": rid})
             added[rid] = new
@@ -282,8 +287,8 @@ def _down_6(conn: Connection, _c: Ctx) -> None:
         conn.execute(text("delete from setting_revisions where key like :k" if k.endswith(".") else
                           "delete from setting_revisions where key = :k"), {"k": k + "%" if k.endswith(".") else k})
     for uid, p in _users_prefs(conn):  # 0.4.0 preferences 0.3.0 would carry around unused
-        if any(k in p for k in ("favourite_models", "model_view", "enter_sends")):
-            for k in ("favourite_models", "model_view", "enter_sends"):
+        if any(k in p for k in _PREFS_6):
+            for k in _PREFS_6:
                 p.pop(k, None)
             conn.execute(text("update users set prefs=:p where id=:i"), {"p": json.dumps(p), "i": uid})
 

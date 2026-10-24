@@ -107,7 +107,11 @@ def ui_config(ctx_s, st, p, *, preview=False, prefs: dict | None = None) -> dict
                      "max_chars": g("chat.max_input_chars"),
                      "ephemeral": bool(g("privacy.ephemeral_allowed") and p.can("chat.ephemeral")),
                      "edit_params": p.can("ops.gen.edit_params") and flags["gen_params"],
-                     "delete": bool(g("privacy.user_delete_conversations"))},
+                     "delete": bool(g("privacy.user_delete_conversations")),
+                     # personal choice first, then the organisation's default
+                     "enter_sends": prefs["enter_sends"] if isinstance(prefs.get("enter_sends"), bool) else bool(g("chat.enter_sends")),
+                     "prompt_history": prefs["prompt_history"] if isinstance(prefs.get("prompt_history"), bool)
+                     else bool(g("chat.prompt_history"))},
         "tech": {"drawer": bool(g("tech.drawer_enabled") and flags["technical_drawer"] and services.has_any_tech(p)),
                  "fields": services.tech_fields_allowed(p) if g("tech.drawer_enabled") else []},
         "retention_days": days,
@@ -141,6 +145,14 @@ class PrefsIn(BaseModel):
     theme: str | None = None
     show_tech: bool | None = None  # only effective when the admin granted tech fields
     density: str | None = None
+    enter_sends: bool | None = None
+    prompt_history: bool | None = None
+    picker: dict | None = None  # {"view": compact|detailed, "group_by": ..., "sort": ...}; a null value clears one
+    favourite_models: list[str] | None = Field(default=None, max_length=200)
+
+
+PICKER_CHOICES = {"view": ("compact", "detailed"), "group_by": ("groups", "family", "capability", "engine", "size", "none"),
+                  "sort": ("custom", "name", "size_desc", "size_asc", "context")}
 
 
 @router.patch("/me")
@@ -160,6 +172,23 @@ def update_me(body: PrefsIn, ctx: Ctx = Depends(current)):
         prefs["density"] = body.density
     if body.show_tech is not None:
         prefs["show_tech"] = bool(body.show_tech)
+    for k in ("enter_sends", "prompt_history"):
+        if getattr(body, k) is not None:
+            prefs[k] = getattr(body, k)
+    if body.picker is not None:
+        pk = dict(prefs.get("picker") or {})
+        for k, v in body.picker.items():
+            if k not in PICKER_CHOICES or (v is not None and v not in PICKER_CHOICES[k]):
+                raise HTTPException(422, {"code": "invalid", "message": f"Unknown model picker option: {k}."})
+            if v is None:
+                pk.pop(k, None)
+            else:
+                pk[k] = v
+        prefs["picker"] = pk
+    if body.favourite_models is not None:  # model ids only; whether one may be used is decided at use, as always
+        if any(not isinstance(x, str) or len(x) > 32 for x in body.favourite_models):
+            raise HTTPException(422, {"code": "invalid", "message": "Favourites are model ids."})
+        prefs["favourite_models"] = list(dict.fromkeys(body.favourite_models))
     ctx.user.prefs = prefs
     return {"ok": True}
 

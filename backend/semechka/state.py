@@ -25,6 +25,7 @@ class AppState:
     started: float = field(default_factory=time.time)
     stop_events: dict[str, asyncio.Event] = field(default_factory=dict)
     scheduler: Scheduler = field(default_factory=Scheduler)  # per-backend generation queue (see scheduler.py)
+    lifecycle: dict[str, dict] = field(default_factory=dict)  # backend_id -> model load/unload in progress or last
 
     @property
     def cookie_name(self) -> str:

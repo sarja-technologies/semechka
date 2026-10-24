@@ -76,6 +76,15 @@ class Adapter:
     async def system_info(self) -> dict | None:
         return None
 
+    async def status(self) -> dict | None:
+        """Live engine state for the lifecycle panel, normalised (see sarness.py for the shape). None: not reported."""
+        return None
+
+    async def engine_jobs(self) -> list[dict] | None:
+        """Running and queued engine jobs: id, kind, status, model, progress, queue_position, times. Never prompts.
+        None: this backend has no job queue it can report."""
+        return None
+
     async def load(self, model: str) -> None:
         raise Unsupported("loading models")
 

@@ -287,10 +287,10 @@ DEFS: list[Def] = [
         min=100, max=1000000, scopes=["deployment", "role", "team"], merge="min"),
     Def("chat.enter_sends", U, "Enter sends the message", "On: Enter sends and Shift+Enter starts a new line. Off: "
         "Enter starts a new line and Ctrl+Enter (Cmd+Enter on a Mac) sends. People can change it for themselves.",
-        "bool", True, scopes=["deployment", "role", "team", "user"]),
+        "bool", True, scopes=["deployment", "role", "team"]),
     Def("chat.prompt_history", U, "Recall earlier messages with Alt+Up", "Off by default. When on, Alt+Up and Alt+Down "
         "in an empty composer step through the messages you sent in this conversation. Plain Up and Down always move "
-        "the cursor.", "bool", False, scopes=["deployment", "role", "team", "user"]),
+        "the cursor. People can change it for themselves.", "bool", False, scopes=["deployment", "role", "team"]),
     # ---- registration & sign-in ----
     Def("signup.mode", S_, "Registration mode", "How people get an account.", "enum", "admin",
         choices=["public", "domain", "invite", "admin", "sso"], scopes=["deployment"], edit_perm="admin.signup.edit",
@@ -497,12 +497,15 @@ DEFS: list[Def] = [
     Def("models.display.group_by", N, "Group models by", "groups: the administrator's own headings. family: the "
         "developer (Qwen, OpenAI, ...). capability: what a model can do. engine: the server it runs on. size: parameter "
         "count. none: one list.", "enum", "groups", choices=["groups", "family", "capability", "engine", "size", "none"],
-        scopes=["deployment", "role", "team", "user"], edit_perm="admin.models.present"),
+        scopes=["deployment", "role", "team"], edit_perm="admin.models.present"),
     Def("models.display.sort", N, "Sort models", "custom: the administrator's order. name: alphabetical. size_desc / "
         "size_asc: by parameter count where it is known (unknown sizes last). context: by context window. There is no "
         "automatic quality ranking: use custom order to rank.", "enum", "custom",
-        choices=["custom", "name", "size_desc", "size_asc", "context"], scopes=["deployment", "role", "team", "user"],
+        choices=["custom", "name", "size_desc", "size_asc", "context"], scopes=["deployment", "role", "team"],
         edit_perm="admin.models.present"),
+    Def("models.developer_logos", N, "Developer logos", "Show the logos of model developers whose published terms allow "
+        "it (bundled with Semechka, never fetched from elsewhere). Off: lettermarks only. Uploaded icons are always "
+        "shown.", "bool", True, edit_perm="admin.models.present"),
     Def("models.display.pinned_first", N, "Pinned models first", "Recommended (pinned) models are listed above the rest.",
         "bool", True, scopes=["deployment", "role", "team"], edit_perm="admin.models.present"),
     Def("models.display.view", N, "Model picker detail", "compact: name and developer. detailed: also size, "

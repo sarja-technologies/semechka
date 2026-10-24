@@ -699,7 +699,8 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
             qa = ctx_args["queue"]
             ticket = st.scheduler.submit(backend_id=b_copy.id, user_id=user_id, rank=qa["rank"], kind="chat",
                                          label=m_copy.alias, user_label=qa["user_label"], backend_limit=qa["backend_limit"],
-                                         user_limit=qa["user_limit"], max_wait=qa["max_wait"], max_depth=qa["max_depth"])
+                                         user_limit=qa["user_limit"], max_wait=qa["max_wait"], max_depth=qa["max_depth"],
+                                         model_id=m_copy.id)
             queue_info["position_on_arrival"] = ticket.position_on_arrival
             if ticket.state == "waiting":
                 queue_info["state"] = "waited"

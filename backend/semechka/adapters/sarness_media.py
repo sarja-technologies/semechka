@@ -7,7 +7,6 @@ Audited against the engine source (api/jobs.py, jobs/service.py, workflow/templa
   POST   /v1/jobs/{id}/cancel
   GET    /v1/files/{file_id}                           bytes (Bearer)
   DELETE /v1/generations/{id}?permanent=true           removes the output file and its library row
-  GET    /v1/models                                    category image|video with capabilities, defaults, limits
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ import re
 
 import httpx
 
-from .base import AdapterError, DiscoveredModel
+from .base import AdapterError
 from .openai_compat import _short
 
 _PATH = re.compile(r"(?:/[\w.@+\-]+){3,}")
@@ -35,30 +34,6 @@ def _h(key):
 
 
 class SarnessMediaMixin:
-    async def media_models(self) -> list[DiscoveredModel]:
-        try:
-            async with httpx.AsyncClient(timeout=15) as c:
-                r = await c.get(self.base_url + "/v1/models", headers=_h(self.api_key))
-            r.raise_for_status()
-            rows = r.json()
-        except (httpx.HTTPError, ValueError):
-            return []
-        out = []
-        for m in rows if isinstance(rows, list) else []:
-            cat = m.get("category")
-            if cat not in ("image", "video") or not m.get("supported", True):
-                continue
-            caps = m.get("capabilities") or {}
-            meta = {"family": m.get("family"), "license": m.get("license"), "vram_estimate_mb": m.get("vram_mb"),
-                    "size_bytes": m.get("size"), "description": m.get("description"),
-                    "media": {"kind": cat, "modes": caps.get("modes"),
-                              "negative_prompt": bool(caps.get("negative_prompt")),
-                              "schedulers": caps.get("schedulers") or [], "audio": bool(caps.get("audio")),
-                              "defaults": m.get("defaults") or {}, "limits": m.get("limits") or {}}}
-            out.append(DiscoveredModel(f"{cat}:{m['id']}", [cat], {k: v for k, v in meta.items() if v is not None},
-                                       loaded=bool(m.get("loaded"))))
-        return out
-
     async def _call(self, method, path, *, json=None, timeout=20):
         try:
             async with httpx.AsyncClient(timeout=timeout) as c:

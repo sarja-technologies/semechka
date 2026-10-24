@@ -60,6 +60,7 @@ class Ticket:
     kind: str
     label: str
     max_wait: float
+    model_id: str = ""  # Semechka model id, so model lifecycle can see who is waiting for which model
     id: str = field(default_factory=lambda: "q_" + uuid.uuid4().hex[:12])
     state: str = "waiting"  # waiting | running | done | cancelled | timeout | rejected
     enqueued_at: float = 0.0
@@ -128,10 +129,11 @@ class Scheduler:
     # ---- submitting ---------------------------------------------------------------------------------
     def submit(self, *, backend_id: str, user_id: str, rank: int = 100, kind: str = "chat", label: str = "",
                user_label: str = "", backend_limit: int = 2, user_limit: int = 1, max_wait: float = 300.0,
-               max_depth: int = 50) -> Ticket:
+               max_depth: int = 50, model_id: str = "") -> Ticket:
         b = self.backends.setdefault(backend_id, _Backend())
         b.limit, b.user_limit = max(1, backend_limit), max(1, user_limit)
-        t = Ticket(self, backend_id, user_id, user_label, rank, kind, label, max_wait, enqueued_at=self.clock())
+        t = Ticket(self, backend_id, user_id, user_label, rank, kind, label, max_wait, model_id=model_id,
+                   enqueued_at=self.clock())
         if len(b.waiting) >= max_depth:
             t.state = "rejected"
             raise QueueFull(f"The queue for this backend is full ({max_depth} waiting). Try again shortly.")
@@ -256,6 +258,15 @@ class Scheduler:
         return True
 
     # ---- observability ------------------------------------------------------------------------------
+    def model_load(self, backend_id: str) -> dict[str, dict[str, int]]:
+        """model id -> {"running", "waiting"} tickets on one backend."""
+        out: dict[str, dict[str, int]] = {}
+        b = self.backends.get(backend_id)
+        for state, rows in (("running", b.running if b else []), ("waiting", b.waiting if b else [])):
+            for t in rows:
+                out.setdefault(t.model_id, {"running": 0, "waiting": 0})[state] += 1
+        return out
+
     def snapshot(self, *, user_id: str | None = None) -> dict:
         now = self.clock()
         out = []
