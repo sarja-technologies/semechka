@@ -26,7 +26,7 @@ from . import adapters, services
 from .adapters import AdapterError
 from .backends_svc import adapter_for
 from .media_models import MediaAsset, MediaJob
-from .models import Backend, Model, UsageEvent, User
+from .models import Backend, Message, Model, UsageEvent, User
 
 log = logging.getLogger("semechka.media")
 
@@ -262,26 +262,57 @@ def _finish(st, job_id: str, status: str, error: str | None = None, text: str | 
         j.progress_text = text or {"completed": "Done", "failed": "Failed", "cancelled": "Cancelled"}[status]
         if status == "completed":
             j.progress = 1.0
+        if j.message_id:  # a generation that lives in a conversation: the message shows the job's outcome
+            msg = s.get(Message, j.message_id)
+            if msg is not None:
+                msg.status = {"completed": "complete", "failed": "error", "cancelled": "stopped"}[status]
         s.add(UsageEvent(user_id=j.user_id, model_id=j.model_id, kind=j.kind, tokens_source="unavailable",
                          duration_s=j.finished_at - (j.started_at or j.created_at), ephemeral=not j.save,
                          status={"completed": "complete"}.get(status, status)))
 
 
 async def submit(st, user: User, kind: str, m: Model, b: Backend, params: dict, save: bool,
-                 expires_at: float | None) -> str:
-    """Create the job row and hand the job to the engine. Raises AdapterError (nothing is left behind)."""
-    job_id = "mj_" + uuid.uuid4().hex[:24]
+                 expires_at: float | None, *, job_id: str | None = None, conversation_id: str | None = None,
+                 message_id: str | None = None) -> str:
+    """Create the job row and hand the job to the engine. Raises AdapterError (nothing is left behind).
+    `params` may carry engine-side source images (reference_image / start_image); they are not stored here."""
+    job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
     ad = adapter_for(b, st)
     real = m.real_id.split(":", 1)[1]
     remote = await ad.media_submit(kind, {**params, "model": real}, job_id)
+    params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image")}
     with st.db.session() as s:
         j = MediaJob(id=job_id, user_id=user.id, kind=kind, model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                      prompt_enc=st.vault.encrypt(params["prompt"], "media") if save else None,
                      params_enc=st.vault.encrypt(json.dumps({k: v for k, v in params.items() if k != "prompt"}), "media")
                      if save else None, status="queued", progress_text="Queued", started_at=None,
-                     expires_at=expires_at if save else None)
+                     expires_at=expires_at if save else None, conversation_id=conversation_id,
+                     message_id=message_id)
         s.add(j)
     return job_id
+
+
+def new_job_id() -> str:
+    return "mj_" + uuid.uuid4().hex[:24]
+
+
+def delete_for_conversation(st, s, conversation_id: str) -> list[str]:
+    """Remove the jobs and result files a conversation produced (conversation deletion and retention).
+    Returns the ids of jobs still running, which the caller cancels; their rows and any late result expire at once."""
+    running: list[str] = []
+    for j in s.execute(select(MediaJob).where(MediaJob.conversation_id == conversation_id)).scalars().all():
+        for a in s.execute(select(MediaAsset).where(MediaAsset.job_id == j.id)).scalars().all():
+            remove_asset_file(st, a.user_id, a.id)
+            s.delete(a)
+        for k in [k for k, v in _mem(st).items() if v["job_id"] == j.id]:
+            _mem(st).pop(k, None)
+        if j.status in ACTIVE:
+            j.conversation_id = j.message_id = None
+            j.prompt_enc, j.params_enc, j.expires_at = None, None, time.time()  # the sweep removes what remains
+            running.append(j.id)
+        else:
+            s.delete(j)
+    return running
 
 
 async def refresh(st, job_id: str) -> None:

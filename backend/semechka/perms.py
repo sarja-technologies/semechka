@@ -2,8 +2,9 @@
 
 Rules (restrictions first):
   1. A permission is allowed iff at least one source grants it AND no source denies it.
-  2. Grants/denies may use a trailing wildcard ("tech.*"). The bare "*" grant covers every permission
-     that is not marked `sensitive` (content access, raw logs): those must always be granted by name.
+  2. Grants/denies may use a trailing wildcard ("tech.*"). No wildcard grant ("*" or "admin.*") covers a
+     permission marked `sensitive` (reading other people's content): those must always be granted by name.
+     Wildcard denies do cover them.
   3. Sources: role grants/denies (every role the user holds), team grants/denies, direct user override.
   4. Suspended or non-active users hold nothing.
 The same evaluator backs the HTTP dependencies, background work and the "Why was access denied?" explainer.
@@ -87,6 +88,9 @@ REGISTRY: list[Perm] = [
     _p("admin.backup.manage", "Manage backups", "Administration"),
     _p("admin.preview_role", "Preview the product as another role", "Administration"),
     _p("admin.sso.manage", "Configure single sign-on providers", "Administration"),  # SSO
+    _p("admin.content.read", "Read other people's conversations", "Administration",
+       "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
+       "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),
 ]
 
 BY_ID: dict[str, Perm] = {p.id: p for p in REGISTRY}
@@ -105,7 +109,7 @@ def _matches(pattern: str, perm: str, *, for_grant: bool) -> bool:
     if pattern == "*":
         return not (for_grant and BY_ID[perm].sensitive) if perm in BY_ID else False
     if pattern.endswith(".*"):
-        return perm.startswith(pattern[:-1])
+        return perm.startswith(pattern[:-1]) and not (for_grant and perm in BY_ID and BY_ID[perm].sensitive)
     return pattern == perm
 
 

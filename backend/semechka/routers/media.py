@@ -89,19 +89,12 @@ class JobIn(BaseModel):
     save: bool = True
 
 
-@router.post("/jobs")
-async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
-    _gate(ctx, body.kind)
-    s, st, p = ctx.s, ctx.st, ctx.principal
-    m = s.get(Model, body.model_id)
-    b = s.get(Backend, m.backend_id) if m else None
-    if m is None or b is None:
-        raise HTTPException(404, {"code": "not_found", "message": "Model not found."})
-    ok, why = services.model_access(s, p, m, b, st, body.kind)
-    if not ok:
-        raise HTTPException(403, {"code": "model_forbidden", "message": why})
+def admit_job(ctx: Ctx, save: bool, kind: str) -> bool:
+    """Server-side limits for one new generation. Returns whether the result will be saved."""
+    s, p = ctx.s, ctx.principal
+    if not _val(ctx, f"ui.{kind}_gen"):
+        raise HTTPException(403, {"code": "disabled", "message": f"{kind.capitalize()} generation is turned off for you by your administrator."})
     days = _val(ctx, "privacy.chat_retention_days")
-    save = body.save
     if not save and not (_val(ctx, "privacy.ephemeral_allowed") and p.can("chat.ephemeral")):
         raise HTTPException(403, {"code": "ephemeral_forbidden", "message": "No-save generation is not available to you."})
     if days == 0:
@@ -114,10 +107,34 @@ async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
     cap = _val(ctx, "media.max_assets")
     if save and cap and media_svc.count_assets(s, ctx.user.id) >= cap:
         raise HTTPException(409, {"code": "gallery_full", "message": f"Your gallery holds {cap} items, the maximum. Delete some to continue."})
+    return save
+
+
+def check_params(ctx: Ctx, kind: str, m: Model, body: dict) -> dict:
     try:
-        params = media_svc.validate_params(body.kind, m, body.model_dump(), _val(ctx, "media.video_max_seconds"))
+        return media_svc.validate_params(kind, m, body, _val(ctx, "media.video_max_seconds"))
     except media_svc.ParamError as e:
         raise HTTPException(422, {"code": "invalid", "message": str(e)}) from e
+
+
+def backend_error(e: AdapterError) -> HTTPException:
+    return _backend_error(e)
+
+
+@router.post("/jobs")
+async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
+    _gate(ctx, body.kind)
+    s, st, p = ctx.s, ctx.st, ctx.principal
+    m = s.get(Model, body.model_id)
+    b = s.get(Backend, m.backend_id) if m else None
+    if m is None or b is None:
+        raise HTTPException(404, {"code": "not_found", "message": "Model not found."})
+    ok, why = services.model_access(s, p, m, b, st, body.kind)
+    if not ok:
+        raise HTTPException(403, {"code": "model_forbidden", "message": why})
+    days = _val(ctx, "privacy.chat_retention_days")
+    save = admit_job(ctx, body.save, body.kind)
+    params = check_params(ctx, body.kind, m, body.model_dump())
     s.commit()  # release the request transaction before the service opens its own
     try:
         jid = await media_svc.submit(st, ctx.user, body.kind, m, b, params, save,

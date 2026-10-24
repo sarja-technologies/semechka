@@ -26,8 +26,16 @@ def test_no_grant_means_denied_and_wildcards():
     assert p.can("tech.perf.tps") and not p.can("tech.resources.gpu")
 
 
-def test_star_grants_everything():
-    assert all(P(grants=["*"]).can(x.id) for x in perms.REGISTRY)
+def test_star_grants_everything_except_sensitive():
+    assert all(P(grants=["*"]).can(x.id) for x in perms.REGISTRY if not x.sensitive)
+    assert not P(grants=["*"]).can("admin.content.read")
+
+
+def test_no_wildcard_grants_content_access_but_wildcard_denies_apply():
+    assert perms.BY_ID["admin.content.read"].sensitive
+    assert not P(grants=["admin.*"]).can("admin.content.read")
+    assert P(grants=["admin.content.read"]).can("admin.content.read")
+    assert not P(grants=["admin.content.read"], denies=["admin.*"]).can("admin.content.read")
 
 
 def test_inactive_user_holds_nothing():

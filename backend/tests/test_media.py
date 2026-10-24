@@ -7,40 +7,13 @@ import time
 from pathlib import Path
 
 import pytest
-
 from semechka import media_svc
 from semechka.media_models import MediaAsset, MediaJob
-from semechka.models import Backend, Model, ModelGrant, UsageEvent, User
+from semechka.models import Backend, ModelGrant, UsageEvent, User
 from sqlalchemy import select
 
 from . import fake_sarness as fs
-from .conftest import PW, Api, Server, _free_port, make_user
-
-
-@pytest.fixture(scope="session")
-def sarness_url():
-    srv = Server(fs.app, _free_port())
-    srv.start()
-    yield f"http://127.0.0.1:{srv.port}"
-    srv.stop()
-
-
-@pytest.fixture
-def mo(app, st, sarness_url):
-    """Owner of an install whose only backend is the Sarness double, with chat + image + video models enabled."""
-    fs.reset()
-    api = Api(app)
-    from semechka.routers.setup import ensure_setup_token
-    token = ensure_setup_token(st)
-    r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
-        "owner": {"email": "owner@example.test", "password": PW, "display_name": "Olga Owner"}, "preset": "business",
-        "settings": {"modes.image.enabled": True, "modes.video.enabled": True, "privacy.chat_retention_days": 30},
-        "backend": {"adapter": "sarness", "base_url": sarness_url, "api_key": fs.TOKEN},
-        "enable_models": ["local:fake-chat", "image:fake-turbo", "video:fake-clip"], "smoke_model": "local:fake-chat"})
-    assert r.status_code == 200, r.text
-    assert r.json()["models_enabled"] == 3 and r.json()["smoke"]["ok"]
-    api.csrf = api.get("/api/me").json()["csrf"]
-    return api
+from .conftest import Api, make_user
 
 
 def grant(owner, role, perms):
@@ -470,6 +443,7 @@ def test_protection_statement_is_derived_from_the_configuration(mo):
 
 def test_other_adapters_report_media_as_unsupported():
     import asyncio
+
     from semechka import adapters
     ad = adapters.make("openai_compat", "http://127.0.0.1:1/v1")
     with pytest.raises(adapters.Unsupported):
@@ -478,9 +452,10 @@ def test_other_adapters_report_media_as_unsupported():
 
 
 def test_backup_carries_the_encrypted_gallery(mo, cfg):
-    from semechka.cli import _snapshot
     import io
     import tarfile
+
+    from semechka.cli import _snapshot
     finish(mo, img(mo).json()["id"])
     with tarfile.open(fileobj=io.BytesIO(_snapshot(cfg)), mode="r:gz") as tf:
         assert any(n.startswith("assets/") and n.endswith(".bin") for n in tf.getnames())

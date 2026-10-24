@@ -37,6 +37,6 @@ class AppState:
         cfg.ensure()
         db = Database(cfg.db_url)
         db.create_all()
-        migrations.apply(db)
+        migrations.apply(db, cfg.data_dir)
         vault = Vault(load_or_create_master_key(cfg.key_path))
         return cls(cfg, db, vault, SettingsService(db, vault))

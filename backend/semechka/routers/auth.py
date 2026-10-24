@@ -29,6 +29,7 @@ class LoginIn(BaseModel):
     email: str = Field(max_length=320)
     password: str = Field(max_length=300)
     totp: str | None = Field(default=None, max_length=12)
+    recovery_code: str | None = Field(default=None, max_length=40)
 
 
 def _norm_email(e: str) -> str:
@@ -231,11 +232,22 @@ def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db)
     if local_login_blocked(s, st, user):
         raise HTTPException(403, {"code": "sso_required", "message": "Your organisation uses single sign-on. Use the sign-in button for your identity provider."})
     if user.totp_enabled:
-        if not body.totp:
+        if not body.totp and not body.recovery_code:
             raise HTTPException(401, {"code": "mfa_required", "message": "Enter your authentication code."})
-        secret = st.vault.decrypt(user.totp_secret_enc, "totp")
-        if not st.limiter.hit(f"totp:{user.id}", 6, 300) or not security.totp_verify(secret, body.totp):
-            raise HTTPException(401, {"code": "bad_totp", "message": "That code is not valid."})
+        if not st.limiter.hit(f"totp:{user.id}", 6, 300):
+            raise HTTPException(401, {"code": "bad_totp", "message": "Too many codes tried. Wait five minutes."})
+        if body.recovery_code:
+            h = security.recovery_hash(body.recovery_code)
+            left = list(user.mfa_recovery or [])
+            if h not in left:
+                raise HTTPException(401, {"code": "bad_totp", "message": "That recovery code is not valid or was already used."})
+            left.remove(h)
+            user.mfa_recovery = left
+            audit.record(s, user.id, "account.mfa_recovery_used", user.id, {"remaining": len(left)}, ip)
+        else:
+            secret = st.vault.decrypt(user.totp_secret_enc, "totp")
+            if not security.totp_verify(secret, body.totp):
+                raise HTTPException(401, {"code": "bad_totp", "message": "That code is not valid."})
     user.failed_logins = 0
     user.last_login_at = now
     if security.needs_rehash(user.password_hash):
@@ -296,6 +308,8 @@ def revoke_session(sid: str, ctx: Ctx = Depends(current)):
 
 @router.post("/auth/mfa/begin")
 def mfa_begin(ctx: Ctx = Depends(current)):
+    if services.mfa_policy(ctx.s, ctx.st) == "off":
+        raise HTTPException(403, {"code": "mfa_off", "message": "Your organisation has not enabled multi-factor authentication."})
     if ctx.user.totp_enabled:
         raise HTTPException(409, {"code": "already", "message": "MFA is already on."})
     secret = security.new_totp_secret()
@@ -312,18 +326,40 @@ def mfa_confirm(body: dict, ctx: Ctx = Depends(current)):
     if not ctx.st.limiter.hit(f"totp:{ctx.user.id}", 6, 300) or not security.totp_verify(secret, str(body.get("code", ""))):
         raise HTTPException(422, {"code": "bad_totp", "message": "That code is not valid."})
     ctx.user.totp_enabled = True
+    codes = security.new_recovery_codes()
+    ctx.user.mfa_recovery = [security.recovery_hash(c) for c in codes]
     audit.record(ctx.s, ctx.user.id, "account.mfa_enabled", ctx.user.id, {}, ctx.ip)
-    return {"ok": True}
+    return {"ok": True, "recovery_codes": codes}
+
+
+@router.get("/auth/mfa")
+def mfa_state(ctx: Ctx = Depends(current)):
+    return {"enabled": ctx.user.totp_enabled, "policy": services.mfa_policy(ctx.s, ctx.st),
+            "required": services.mfa_required(ctx.s, ctx.st, ctx.principal),
+            "recovery_codes_left": len(ctx.user.mfa_recovery or []) if ctx.user.totp_enabled else 0}
+
+
+@router.post("/auth/mfa/recovery-codes")
+def mfa_new_recovery(body: dict, ctx: Ctx = Depends(current)):
+    """Replace the recovery codes. Needs the password, because whoever holds them can pass the second factor."""
+    if not ctx.user.totp_enabled:
+        raise HTTPException(409, {"code": "not_enabled", "message": "Turn on multi-factor authentication first."})
+    if not ctx.st.limiter.hit(f"pw:{ctx.user.id}", 6, 300) or \
+            not security.verify_password(ctx.user.password_hash, str(body.get("password", ""))):
+        raise HTTPException(403, {"code": "bad_credentials", "message": "Password is incorrect."})
+    codes = security.new_recovery_codes()
+    ctx.user.mfa_recovery = [security.recovery_hash(c) for c in codes]
+    audit.record(ctx.s, ctx.user.id, "account.mfa_recovery_regenerated", ctx.user.id, {}, ctx.ip)
+    return {"recovery_codes": codes}
 
 
 @router.post("/auth/mfa/disable")
 def mfa_disable(body: dict, ctx: Ctx = Depends(current)):
-    if services.is_admin_like(ctx.principal) and ctx.st.settings.deployment(ctx.s, "auth.mfa_required_admins") \
-            or ctx.st.settings.deployment(ctx.s, "auth.mfa_required_all"):
-        raise HTTPException(403, {"code": "mfa_required", "message": "Your organisation requires MFA."})
+    if services.mfa_required(ctx.s, ctx.st, ctx.principal):
+        raise HTTPException(403, {"code": "mfa_required", "message": "Your organisation requires multi-factor authentication for you."})
     if not security.verify_password(ctx.user.password_hash, str(body.get("password", ""))):
         raise HTTPException(403, {"code": "bad_credentials", "message": "Password is incorrect."})
-    ctx.user.totp_enabled, ctx.user.totp_secret_enc = False, None
+    ctx.user.totp_enabled, ctx.user.totp_secret_enc, ctx.user.mfa_recovery = False, None, None
     audit.record(ctx.s, ctx.user.id, "account.mfa_disabled", ctx.user.id, {}, ctx.ip)
     return {"ok": True}
 
@@ -339,6 +375,7 @@ def delete_me(body: dict, response: Response, ctx: Ctx = Depends(current)):
     if any(o.user_id == ctx.user.id for o in owners) and len(owners) == 1:
         raise HTTPException(409, {"code": "last_owner", "message": "You are the only owner. Assign another owner first."})
     audit.record(ctx.s, ctx.user.id, "account.delete", ctx.user.id, {}, ctx.ip)
+    services.purge_user_files(ctx.st, ctx.user.id)
     ctx.s.delete(ctx.user)
     response.delete_cookie(ctx.st.cookie_name, path="/")
     return {"ok": True}

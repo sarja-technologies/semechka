@@ -204,6 +204,56 @@ def set_password(uid: str, body: SetPassword, ctx: Ctx = Depends(require("admin.
     return {"ok": True}
 
 
+class ReasonIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+
+
+@router.post("/users/{uid}/mfa-reset")
+def reset_mfa(uid: str, body: ReasonIn, ctx: Ctx = Depends(require("admin.users.manage"))):
+    """Account recovery for someone who lost their authenticator and recovery codes. Removes the factor (the secret is
+    never shown to anyone), ends every session of that person and records who did it and why."""
+    u = ctx.s.get(User, uid)
+    if u is None:
+        raise _err(404, "not_found", "No such person.")
+    _guard_target(ctx, u)
+    if u.id == ctx.user.id:
+        raise _err(409, "self", "Use your own account page, or ask another administrator.")
+    if not u.totp_enabled:
+        raise _err(409, "not_enabled", "This person has no second factor to reset.")
+    u.totp_enabled, u.totp_secret_enc, u.mfa_recovery = False, None, None
+    n = 0
+    for sess in ctx.s.execute(select(SessionRow).where(SessionRow.user_id == u.id)).scalars():
+        ctx.s.delete(sess)
+        n += 1
+    audit_ctx(ctx, "user.mfa_reset", u.id, {"reason": body.reason.strip(), "sessions_ended": n})
+    return {"ok": True, "sessions_ended": n}
+
+
+@router.get("/users/{uid}/sessions")
+def user_sessions(uid: str, ctx: Ctx = Depends(require("admin.users.view"))):
+    """Active sessions of one person: when and from where. Never the token."""
+    if ctx.s.get(User, uid) is None:
+        raise _err(404, "not_found", "No such person.")
+    rows = ctx.s.execute(select(SessionRow).where(SessionRow.user_id == uid).order_by(SessionRow.last_seen.desc())).scalars()
+    return [{"id": r.id_hash[:12], "created_at": r.created_at, "last_seen": r.last_seen, "expires_at": r.expires_at,
+             "ip": r.ip, "ua": r.ua} for r in rows]
+
+
+@router.post("/users/{uid}/sessions/end")
+def end_user_sessions(uid: str, ctx: Ctx = Depends(require("admin.users.manage"))):
+    u = ctx.s.get(User, uid)
+    if u is None:
+        raise _err(404, "not_found", "No such person.")
+    _guard_target(ctx, u)
+    n = 0
+    for sess in ctx.s.execute(select(SessionRow).where(SessionRow.user_id == u.id)).scalars():
+        if sess.id_hash != ctx.session.id_hash:
+            ctx.s.delete(sess)
+            n += 1
+    audit_ctx(ctx, "user.sessions_ended", u.id, {"count": n})
+    return {"ok": True, "sessions_ended": n}
+
+
 @router.delete("/users/{uid}")
 def delete_user(uid: str, ctx: Ctx = Depends(require("admin.users.manage"))):
     u = ctx.s.get(User, uid)
@@ -214,6 +264,7 @@ def delete_user(uid: str, ctx: Ctx = Depends(require("admin.users.manage"))):
         raise _err(409, "self", "You cannot delete yourself here.")
     _last_owner_guard(ctx, u, removing_owner=True)
     audit_ctx(ctx, "user.delete", u.id)
+    services.purge_user_files(ctx.st, u.id)
     ctx.s.delete(u)
     return {"ok": True}
 
@@ -259,6 +310,7 @@ def bulk_users(body: Bulk, ctx: Ctx = Depends(require("admin.users.manage"))):
                     ctx.s.delete(sess)
             elif body.action == "delete":
                 _last_owner_guard(ctx, u, removing_owner=True)
+                services.purge_user_files(ctx.st, u.id)
                 ctx.s.delete(u)
             elif body.action == "add_role":
                 if not any(r.role_id == role.id for r in u.roles):

@@ -30,8 +30,8 @@ def test_setup_settings_are_validated_atomically(app, st):
     api = Api(app)
     r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
         "owner": {"email": "a@example.test", "password": PW, "display_name": "A"}, "preset": "personal",
-        "settings": {"brand.accent_light": "#FFFF00"}})  # fails contrast
-    assert r.status_code == 422 and r.json()["detail"]["setting"] == "brand.accent_light"
+        "settings": {"theme.custom": {"light": {"fg": "#FFFF00"}}}})  # fails contrast
+    assert r.status_code == 422 and r.json()["detail"]["setting"] == "theme.custom"
     assert api.get("/api/public").json()["needs_setup"] is True  # nothing was created
 
 
@@ -137,12 +137,12 @@ def test_mfa_enrolment_and_login(owner, app):
 def test_mfa_required_for_admins_blocks_until_enrolled(owner, app):
     m = make_user(owner, app, "ops@example.test", role="platform_admin")
     # cannot require MFA while the acting admin has none (would lock them out)
-    assert owner.put("/api/admin/settings/auth.mfa_required_admins", json={"value": True, "confirm_weaker": True}).status_code == 409
+    assert owner.put("/api/admin/settings/auth.mfa_policy", json={"value": "admins", "confirm_weaker": True}).status_code == 409
     import time
     from semechka import security
     b = owner.post("/api/auth/mfa/begin").json()
     owner.post("/api/auth/mfa/confirm", json={"code": security.totp_at(b["secret"], time.time())})
-    assert owner.put("/api/admin/settings/auth.mfa_required_admins", json={"value": True, "confirm_weaker": True}).status_code == 200
+    assert owner.put("/api/admin/settings/auth.mfa_policy", json={"value": "admins", "confirm_weaker": True}).status_code == 200
     assert m.get("/api/admin/users").status_code == 403  # not enrolled: admin API closed
     assert m.get("/api/chat/models").status_code == 403 or m.get("/api/chat/models").json()["detail"]["code"] == "mfa_enrolment_required"
     assert m.get("/api/me").status_code == 200  # can still reach enrolment
@@ -181,3 +181,68 @@ def test_installer_backend_hint_keeps_key_server_side_and_is_removed_after_setup
             "backend": {"adapter": "x", "base_url": "http://ignored.invalid", "hint_id": "spark"}}
     assert api.post("/api/setup/complete", headers=h, json=body).status_code == 200
     assert not p.exists()  # plaintext key file is deleted once the key is stored encrypted
+
+
+def _enrol(api):
+    import time
+    from semechka import security
+    b = api.post("/api/auth/mfa/begin").json()
+    r = api.post("/api/auth/mfa/confirm", json={"code": security.totp_at(b["secret"], time.time())})
+    assert r.status_code == 200, r.text
+    return b["secret"], r.json()["recovery_codes"]
+
+
+def test_mfa_is_optional_by_default_and_can_be_turned_off(owner, app):
+    m = make_user(owner, app, "m@example.test")
+    me = m.get("/api/me").json()
+    assert me["mfa_enrolment_required"] is False and m.get("/api/chat/models").status_code == 200
+    assert m.get("/api/auth/mfa").json()["policy"] == "optional"
+    _enrol(m)
+    assert m.post("/api/auth/mfa/disable", json={"password": PW}).status_code == 200
+    owner.put("/api/admin/settings/auth.mfa_policy", json={"value": "off", "confirm_weaker": True})
+    r = m.post("/api/auth/mfa/begin")
+    assert r.status_code in (403, 409) and m.get("/api/auth/mfa").json()["policy"] == "off"
+
+
+def test_recovery_codes_sign_in_once_each_and_can_be_replaced(owner, app):
+    m = make_user(owner, app, "m@example.test")
+    _, codes = _enrol(m)
+    assert len(codes) == 10 and len(set(codes)) == 10
+    a = Api(app)
+    assert a.post("/api/auth/login", json={"email": "m@example.test", "password": PW, "recovery_code": codes[0]}).status_code == 200
+    b = Api(app)
+    assert b.post("/api/auth/login", json={"email": "m@example.test", "password": PW, "recovery_code": codes[0]}).status_code == 401
+    assert b.post("/api/auth/login", json={"email": "m@example.test", "password": "wrong password!!", "recovery_code": codes[1]}).status_code == 401
+    assert m.get("/api/auth/mfa").json()["recovery_codes_left"] == 9
+    assert m.post("/api/auth/mfa/recovery-codes", json={"password": "nope"}).status_code == 403
+    fresh = m.post("/api/auth/mfa/recovery-codes", json={"password": PW}).json()["recovery_codes"]
+    assert codes[1] not in fresh
+    assert Api(app).post("/api/auth/login", json={"email": "m@example.test", "password": PW, "recovery_code": codes[1]}).status_code == 401
+
+
+def test_mfa_required_for_selected_roles_only(owner, app):
+    m = make_user(owner, app, "m@example.test")
+    owner.put("/api/admin/settings/auth.mfa_roles", json={"value": ["member"]})
+    owner.put("/api/admin/settings/auth.mfa_policy", json={"value": "roles", "confirm_weaker": True})
+    assert m.get("/api/me").json()["mfa_enrolment_required"] is True
+    assert owner.get("/api/me").json()["mfa_enrolment_required"] is False  # owner's role is not listed
+    _enrol(m)
+    assert m.get("/api/me").json()["mfa_enrolment_required"] is False
+    assert m.post("/api/auth/mfa/disable", json={"password": PW}).status_code in (403, 409)  # required for them
+
+
+def test_admin_mfa_reset_needs_a_reason_ends_sessions_and_never_reveals_secrets(owner, app, st):
+    m = make_user(owner, app, "m@example.test")
+    _enrol(m)
+    assert owner.post(f"/api/admin/users/{m.user_id}/mfa-reset", json={"reason": ""}).status_code == 422
+    r = owner.post(f"/api/admin/users/{m.user_id}/mfa-reset", json={"reason": "Lost phone, verified in person"})
+    assert r.status_code == 200 and "secret" not in r.text and r.json()["sessions_ended"] >= 1
+    assert m.get("/api/me").status_code == 401
+    assert Api(app).login("m@example.test").status_code == 200  # password alone works again
+    me_id = owner.get("/api/me").json()["user"]["id"]
+    assert owner.post(f"/api/admin/users/{me_id}/mfa-reset", json={"reason": "my own"}).status_code == 409
+    from sqlalchemy import select
+    from semechka.models import AuditEvent
+    with st.db.session() as s:
+        ev = s.execute(select(AuditEvent).where(AuditEvent.action == "user.mfa_reset")).scalar_one()
+        assert ev.detail["reason"] == "Lost phone, verified in person"

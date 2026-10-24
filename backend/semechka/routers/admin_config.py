@@ -132,9 +132,10 @@ def put_setting(key: str, body: SetIn, ctx: Ctx = Depends(current)):
 def _guard_lockout(ctx: Ctx):
     """A setting change must never lock the acting administrator out of the settings they just used."""
     ctx.s.flush()
-    if ctx.st.settings.deployment(ctx.s, "auth.mfa_required_admins") and not ctx.user.totp_enabled and services.is_admin_like(ctx.principal):
+    if not ctx.user.totp_enabled and services.mfa_required(ctx.s, ctx.st, ctx.principal):
         ctx.s.rollback()
-        raise _err(409, "would_lock_out", "Turn on MFA for your own account before requiring it for administrators.")
+        raise _err(409, "would_lock_out", "Turn on multi-factor authentication for your own account first: this policy "
+                                          "would require it of you.")
 
 
 @router.delete("/settings/{key}")
@@ -320,7 +321,9 @@ def _model_out(m: Model, b: Backend | None, grants: list[ModelGrant], full_id: b
             "capabilities": m.capabilities or [], "meta": m.meta or {}, "available": m.available,
             "system_prompt_set": bool(m.system_prompt), "gen_limits": m.gen_limits or {}, "allow_tools": m.allow_tools,
             "external": bool(b and (b.external or (m.meta or {}).get("external"))),
-            "grants": [{"subject_type": g.subject_type, "subject_id": g.subject_id, "effect": g.effect} for g in grants]}
+            "grants": [{"subject_type": g.subject_type, "subject_id": g.subject_id, "effect": g.effect, "modes": g.modes}
+                       for g in grants],
+            "hidden": m.hidden, "sort": m.sort, "profile": m.profile or {}, "defaults": m.defaults or {}}
 
 
 def _model_query(q=None, tag=None, capability=None, backend=None, enabled=None, search_raw_id=False):
@@ -425,18 +428,26 @@ def set_grants(mid: str, body: GrantsIn, ctx: Ctx = Depends(require("admin.model
 
 
 def _clean_grants(ctx, grants):
+    """Rules: subject (everyone, role, team or person), allow/deny, and optionally the modes the rule covers
+    (chat, code, vision, image, video); no modes means every mode. One rule per subject."""
+    from .. import catalog_svc
     seen, clean = set(), []
     for g in grants:
-        t, i, e = g.get("subject_type"), g.get("subject_id"), g.get("effect")
-        if t not in ("role", "team", "user") or e not in ("allow", "deny"):
+        t, i, e, modes = g.get("subject_type"), g.get("subject_id"), g.get("effect"), g.get("modes")
+        if t not in ("everyone", "role", "team", "user") or e not in ("allow", "deny"):
             raise _err(422, "invalid", "Each rule needs a subject and allow/deny.")
-        exists = {"role": Role, "team": Team, "user": User}[t]
-        if ctx.s.get(exists, i) is None:
+        if t == "everyone":
+            i = "*"
+        elif ctx.s.get({"role": Role, "team": Team, "user": User}[t], i) is None:
             raise _err(422, "invalid", f"Unknown {t}.")
+        if modes is not None:
+            if not isinstance(modes, list) or not modes or any(m not in catalog_svc.GRANT_MODES for m in modes):
+                raise _err(422, "invalid", "Modes must be chosen from " + ", ".join(catalog_svc.GRANT_MODES) + ".")
+            modes = sorted(set(modes))
         if (t, i) in seen:
             continue
         seen.add((t, i))
-        clean.append({"subject_type": t, "subject_id": i, "effect": e})
+        clean.append({"subject_type": t, "subject_id": i, "effect": e, "modes": modes})
     return clean
 
 

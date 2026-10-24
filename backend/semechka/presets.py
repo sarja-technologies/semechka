@@ -12,8 +12,7 @@ PRESETS: dict[str, dict] = {
     "business": {
         "label": "Business",
         "description": "A team with invitations, 30-day history and a technical role for IT.",
-        "settings": {"signup.mode": "invite", "privacy.mode": "standard", "privacy.chat_retention_days": 30,
-                     "auth.mfa_required_admins": False},
+        "settings": {"signup.mode": "invite", "privacy.mode": "standard", "privacy.chat_retention_days": 30},
         "role_grants": {},
     },
     "private_enterprise": {

@@ -144,9 +144,19 @@ def _retention_longer(old, new):
     return rank(new) > rank(old)
 
 
+_MFA_RANK = {"off": 0, "optional": 1, "roles": 2, "admins": 2, "everyone": 3}
+
+
+def _theme():
+    from . import theme_svc  # imported lazily: theme_svc imports SettingError from here
+    return theme_svc
+
+
 _PRIVACY_ORDER = {"no_retention": 0, "standard": 1, "user_controlled": 1, "enterprise": 1}
 
 C = "Identity & Branding"
+TH = "Theme & Layout"
+UI = "Interface"
 N = "Layout & Navigation"
 M = "Modes"
 S_ = "Registration & Sign-in"
@@ -175,15 +185,61 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
     Def("brand.favicon_asset", C, "Favicon", "Uploaded favicon asset id.", "string", "",
         scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
-    Def("brand.theme_default", C, "Default theme", "Paper (light), Carbon (dark) or Graphite (dark grey).",
-        "enum", "paper", choices=["paper", "carbon", "graphite", "system"], scopes=["deployment", "user"],
+    Def("brand.theme_default", TH, "Default theme", "Light, Dark, Graphite, or the Custom theme built in the theme editor.",
+        "enum", "light", choices=["light", "dark", "graphite", "custom"], scopes=["deployment", "role", "team"],
         edit_perm="admin.branding", public=True),
-    Def("brand.accent_light", C, "Accent colour (light themes)",
-        "Primary action colour. Must reach 4.5:1 contrast on white and on the light-grey Paper surfaces.", "color", "#087771",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#FFFFFF", "#F7F7F5", "#F0F1EE")),
-    Def("brand.accent_dark", C, "Accent colour (dark themes)",
-        "Primary action colour. Must reach 4.5:1 contrast on the Carbon and Graphite surfaces.", "color", "#64BEB5",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#1A1E1F", "#222728", "#303637", "#394041")),
+    Def("theme.follow_system", TH, "Follow the device's light or dark setting",
+        "Light and Dark (and the two variants of Custom) switch with the operating system. Graphite is unaffected.",
+        "bool", True, edit_perm="admin.branding", public=True),
+    Def("theme.user_choice", TH, "Let people choose their own theme", "When off, everyone sees the default theme.",
+        "bool", True, edit_perm="admin.branding", public=True),
+    Def("theme.custom", TH, "Custom theme", "Every colour token for the light and dark variants. Edit it in the theme "
+        "editor; publishing checks contrast.", "json", None, edit_perm="admin.branding", public=True, widget="theme",
+        validator=lambda v: v if v is None else _theme().validate_custom(v)),
+    Def("theme.draft", TH, "Theme draft", "Unpublished work from the theme editor. Visible only in the editor's preview.",
+        "json", None, edit_perm="admin.branding", widget="theme"),
+    Def("theme.font", TH, "Interface font", "Fonts are self-hosted or the device's own; nothing is loaded from elsewhere.",
+        "enum", "plex", choices=["plex", "system", "humanist", "serif"], edit_perm="admin.branding", public=True),
+    Def("theme.font_size", TH, "Base text size (px)", "Message and interface text size.", "int", 14, min=13, max=18,
+        edit_perm="admin.branding", public=True),
+    Def("theme.custom_css", TH, "Custom CSS", "Applied to the chat interface only (never to administration pages or "
+        "sign-in recovery). No imports, remote URLs or scripting; uploaded branding images may be referenced.", "text", "",
+        edit_perm="admin.branding", public=True, widget="code", validator=lambda v: _theme().validate_css(v)),
+    Def("layout.user_align", TH, "Your messages", "Where a person's own messages sit in the conversation.", "enum", "right",
+        choices=["right", "left"], edit_perm="admin.branding", public=True),
+    Def("layout.message_width", TH, "Conversation width", "Maximum width of the conversation column.", "enum", "normal",
+        choices=["narrow", "normal", "wide"], edit_perm="admin.branding", public=True),
+    Def("layout.sidebar_width", TH, "Sidebar width (px)", "Default width; people can drag it wider or narrower.", "int", 272,
+        min=220, max=420, edit_perm="admin.branding", public=True),
+    # ---- header and identity placement ----
+    Def("brand.header_position", C, "Name and logo position", "Where the organisation's identity sits in the header.",
+        "enum", "left", choices=["left", "center", "right"], edit_perm="admin.branding", public=True),
+    Def("brand.header_content", C, "Header shows", "Logo, name, or both.", "enum", "both", choices=["both", "logo", "text"],
+        edit_perm="admin.branding", public=True),
+    Def("brand.header_text", C, "Header text", "Empty uses the application name.", "string", "", edit_perm="admin.branding",
+        public=True, validator=lambda v: _strlen(v, 0, 60)),
+    Def("brand.logo_dark_asset", C, "Logo for dark themes", "Optional. Used on Dark, Graphite and dark Custom.", "string", "",
+        edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
+    Def("brand.logo_height", C, "Logo height (px)", "", "int", 24, min=12, max=64, edit_perm="admin.branding", public=True),
+    Def("brand.header_height", C, "Header height (px)", "", "int", 52, min=40, max=88, edit_perm="admin.branding", public=True),
+    Def("brand.header_padding", C, "Header side padding (px)", "", "int", 16, min=0, max=48, edit_perm="admin.branding",
+        public=True),
+    Def("brand.logo_gap", C, "Space between logo and name (px)", "", "int", 8, min=0, max=32, edit_perm="admin.branding",
+        public=True),
+    Def("brand.header_text_size", C, "Header text size (px)", "", "int", 15, min=12, max=28, edit_perm="admin.branding",
+        public=True),
+    Def("brand.header_text_weight", C, "Header text weight", "", "enum", "600", choices=["400", "500", "600"],
+        edit_perm="admin.branding", public=True),
+    Def("brand.sidebar_brand", C, "Show the name in the sidebar", "Repeats the identity at the top of the sidebar when the "
+        "header identity is not on the left.", "bool", False, edit_perm="admin.branding", public=True),
+    Def("brand.login_title", C, "Sign-in heading", "Empty uses the application name.", "string", "",
+        edit_perm="admin.branding", public=True, validator=lambda v: _strlen(v, 0, 80)),
+    Def("brand.login_logo", C, "Show the logo on the sign-in page", "", "bool", True, edit_perm="admin.branding", public=True),
+    Def("brand.welcome_title", C, "Welcome heading", "Shown on a new, empty conversation. Empty uses a neutral default.",
+        "string", "", scopes=["deployment", "role", "team"], edit_perm="admin.branding", public=True,
+        validator=lambda v: _strlen(v, 0, 80)),
+    Def("brand.welcome_text", C, "Welcome text", "A line under the welcome heading.", "text", "",
+        scopes=["deployment", "role", "team"], edit_perm="admin.branding", public=True, validator=lambda v: _strlen(v, 0, 300)),
     Def("brand.radius", C, "Corner radius", "Control and card corner radius in pixels.", "int", 8,
         min=0, max=16, scopes=["deployment"], edit_perm="admin.branding", public=True),
     Def("brand.density", C, "Density", "Row height and spacing.", "enum", "comfortable",
@@ -193,7 +249,8 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.branding", public=True, validator=lambda v: _strlen(v, 0, 400)),
     Def("brand.support_url", C, "Support link", "Where the Help link points.", "string", "",
         scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_url_or_blank),
-    Def("brand.powered_by", C, "Show 'Powered by Semechka'", "Optional attribution in the footer.", "bool", False,
+    Def("brand.powered_by", C, "Show 'Powered by Semechka'", "Optional attribution in the footer. Semechka's licence "
+        "notices stay in the documentation and the About dialog either way.", "bool", False,
         scopes=["deployment"], edit_perm="admin.branding", public=True),
     Def("brand.signin_message", C, "Sign-in message", "Short text under the sign-in form.", "text", "",
         scopes=["deployment"], edit_perm="admin.branding", public=True, validator=lambda v: _strlen(v, 0, 300)),
@@ -219,7 +276,8 @@ DEFS: list[Def] = [
                      ("video", "video generation"), ("audio", "audio"), ("knowledge", "knowledge search"),
                      ("agents", "assistants (saved prompts; no tools)")]],
     # ---- composer ----
-    Def("chat.attachments", U, "Allow text-file attachments", "Text files are read in the browser and included in the message (no upload storage). Images are not supported in this release.", "bool", True,
+    Def("chat.attachments", U, "Allow attachments", "Images (for models that can see) and text files. Stored encrypted "
+        "with the conversation and removed with it.", "bool", True,
         scopes=["deployment", "role", "team"], merge="false_wins"),
     Def("chat.branching", U, "Message editing and branching", "Edit a message or regenerate to create branches.",
         "bool", True, scopes=["deployment", "role", "team"], merge="false_wins"),
@@ -260,11 +318,16 @@ DEFS: list[Def] = [
     Def("auth.idle_minutes", S_, "Idle timeout (minutes)", "0 disables idle timeout.", "int", 0, min=0, max=1440,
         scopes=["deployment"], edit_perm="admin.signup.edit",
         lowers_privacy=lambda o, n: (n == 0 and o != 0) or (o != 0 and n > o)),
-    Def("auth.mfa_required_admins", S_, "Require MFA for administrators",
-        "Anyone holding an admin permission must have TOTP set up before using admin features.", "bool", False,
-        scopes=["deployment"], edit_perm="admin.signup.edit", lowers_privacy=_lower_if_bool_true_to_false),
-    Def("auth.mfa_required_all", S_, "Require MFA for everyone", "", "bool", False, scopes=["deployment"],
-        edit_perm="admin.signup.edit", lowers_privacy=_lower_if_bool_true_to_false),
+    Def("auth.mfa_policy", S_, "Multi-factor authentication",
+        "off: not offered (factors people already set up keep working until they remove them). optional: anyone may "
+        "turn it on. admins: required for anyone holding an administration permission. roles: required for the roles "
+        "listed below. everyone: required for every account.", "enum", "optional",
+        choices=["off", "optional", "admins", "roles", "everyone"], edit_perm="admin.signup.edit", public=True,
+        aliases=["mfa", "2fa", "two-factor", "totp"], lowers_privacy=lambda o, n: _MFA_RANK[n] < _MFA_RANK[o],
+        effect="People who must use MFA and have not set it up can only reach their account page until they do. "
+               "Single sign-on accounts follow their identity provider's MFA."),
+    Def("auth.mfa_roles", S_, "Roles that must use MFA", "Used when the policy is 'roles'.", "list", [],
+        edit_perm="admin.signup.edit", lowers_privacy=lambda o, n: bool(set(o) - set(n))),
     Def("auth.allow_user_delete", S_, "Let people delete their own account", "", "bool", True,
         scopes=["deployment"], edit_perm="admin.signup.edit"),
     # ---- single sign-on (SSO slice) ----
@@ -386,9 +449,70 @@ DEFS: list[Def] = [
         "Put code in fenced blocks with the language named. State assumptions and say when you are unsure. "
         "You cannot run code or access files or the internet; do not claim to have tested anything.",
         edit_perm="admin.settings.edit", validator=lambda v: _strlen(v, 0, 4000)),
+    # ---- interface visibility (display only: every permission check stays in force when something is hidden) ----
+    *[Def(f"ui.{k}", UI, lbl, desc, "bool", dflt, scopes=["deployment", "role", "team"], edit_perm="admin.navigation",
+          public=False) for k, lbl, desc, dflt in [
+        ("sidebar", "Conversation sidebar", "The left panel with New conversation and history. People can still collapse it.", True),
+        ("search", "Conversation search", "The search field above the conversation history.", True),
+        ("folders", "Folders", "People can group their conversations into folders.", True),
+        ("pinning", "Pinned conversations", "People can pin conversations to the top of the sidebar.", True),
+        ("history_grouping", "Group history by date", "Today, Yesterday, Previous 7 days, Older.", True),
+        ("model_chooser", "Model chooser", "When hidden, everyone uses their default model.", True),
+        ("model_names", "Model names", "When hidden, replies are labelled with the application name instead of the model.", True),
+        ("model_meta", "Model technical details in the chooser",
+         "Provider, family and size. Each field also needs the matching technical-visibility permission.", False),
+        ("quantization", "Quantisation in model details", "Needs 'See quantisation' as well.", True),
+        ("context_size", "Context size in model details", "Needs 'See context window' as well.", True),
+        ("gen_params", "Generation settings in the composer", "Only for people allowed to change generation parameters.", True),
+        ("tool_indicators", "Source and tool indicators", "Shows which knowledge passages a reply used.", True),
+        ("image_gen", "Image generation in the composer", "Also needs the image mode and permission.", True),
+        ("video_gen", "Video generation in the composer", "Also needs the video mode and permission.", True),
+        ("file_upload", "File and image attachments", "Also needs the attachment permission.", True),
+        ("retention_notice", "Retention notice", "States how long conversations are kept, from the live policy.", False),
+        ("help_links", "Help links", "Help and support entries in the account menu.", True),
+        ("org_branding", "Organisation identity in the header", "Logo and name.", True),
+        ("mode_selector", "Mode selector in the composer", "Chat, image and video as a compact switch. When hidden, "
+         "chat only (image and video stay reachable for people who are allowed them through the API).", True),
+        ("technical_drawer", "Technical details panel", "For people who hold technical-visibility permissions.", True),
+    ]],
+    Def("ui.retention_notice_place", UI, "Where the retention notice appears", "", "enum", "composer",
+        choices=["composer", "header", "sidebar"], scopes=["deployment", "role", "team"], edit_perm="admin.navigation"),
+    # ---- default models (by role, team and person; each must also be usable by them) ----
+    *[Def(f"models.default.{op}", N, f"Default model: {lbl}", "Used when a person has not chosen one. A model they cannot "
+          "use is skipped.", "string", "", scopes=["deployment", "role", "team", "user"], edit_perm="admin.models.manage",
+          validator=lambda v: _strlen(v, 0, 32)) for op, lbl in [
+        ("chat", "chat"), ("vision", "image analysis"), ("code", "code"), ("image", "image generation"), ("video", "video generation")]],
+    Def("models.provider_icons", N, "Provider icons", "Uploaded icons that replace the lettermark for every model of a "
+        "provider (for example, your licensed copy of a vendor logo). Edited on the Models page.", "json", {},
+        edit_perm="admin.models.manage", validator=lambda v: _provider_icons(v)),
+    # ---- privacy additions ----
+    Def("privacy.user_delete_conversations", P, "People may delete their own conversations", "When off, conversations "
+        "are removed only by the retention policy.", "bool", True, scopes=["deployment", "role", "team"], merge="false_wins",
+        edit_perm="admin.policy.edit"),
+    Def("privacy.admin_content_access", P, "Administrator access to conversations",
+        "off: no administrator can read anyone's conversations through Semechka. audited: people holding the "
+        "'Read other people's conversations' permission (never included in any wildcard) may open one after stating a "
+        "reason; every access is written to the audit log and the owner can see it in their account.",
+        "enum", "off", choices=["off", "audited"], edit_perm="admin.policy.edit", public=True,
+        lowers_privacy=lambda o, n: n == "audited" and o != "audited",
+        effect="Changes what the 'How is this chat protected?' panel tells everyone."),
+    Def("privacy.audit_retention_days", P, "Audit log retention (days)", "-1 keeps the audit log forever. Pruned entries "
+        "leave an anchor so the remaining chain still verifies.", "int", -1, min=-1, max=3650, edit_perm="admin.policy.edit"),
+    Def("privacy.attachment_max_mb", P, "Largest attachment (MB)", "Images and text files people attach to messages.",
+        "int", 10, min=1, max=50, scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.policy.edit"),
 ]
 
 BY_ID: dict[str, Def] = {d.id: d for d in DEFS}
+
+
+def _provider_icons(v):
+    if not isinstance(v, dict) or len(v) > 100:
+        raise SettingError("Provider icons are a mapping of provider id to uploaded icon.")
+    for k, a in v.items():
+        if not isinstance(k, str) or len(k) > 40:
+            raise SettingError("Unknown provider.")
+        _asset_id(a)
+    return v
 
 
 def _strlen(v, lo, hi):

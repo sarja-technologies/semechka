@@ -10,7 +10,7 @@ from .openai_compat import _short
 
 _OPTS = {"temperature": "temperature", "top_p": "top_p", "top_k": "top_k", "min_p": "min_p", "seed": "seed",
          "max_tokens": "num_predict", "repeat_penalty": "repeat_penalty", "presence_penalty": "presence_penalty",
-         "frequency_penalty": "frequency_penalty"}
+         "frequency_penalty": "frequency_penalty", "ctx": "num_ctx"}
 
 
 class OllamaAdapter(Adapter):

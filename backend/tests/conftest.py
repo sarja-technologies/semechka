@@ -3,12 +3,10 @@ from __future__ import annotations
 import socket
 import threading
 import time
-from pathlib import Path
 
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
-
 from semechka.app import create_app
 from semechka.config import Config
 
@@ -144,3 +142,32 @@ def make_user(owner: Api, app, email, role="member", teams=(), name=None):
     assert c.login(email).status_code == 200
     c.user_id = r.json()["id"]
     return c
+
+
+# ---- Sarness job-protocol double (image/video) ----------------------------------------------------------
+@pytest.fixture(scope="session")
+def sarness_url():
+    from . import fake_sarness as fs
+    srv = Server(fs.app, _free_port())
+    srv.start()
+    yield f"http://127.0.0.1:{srv.port}"
+    srv.stop()
+
+
+@pytest.fixture
+def mo(app, st, sarness_url):
+    """Owner of an install whose only backend is the Sarness double, with chat + image + video models enabled."""
+    from . import fake_sarness as fs
+    fs.reset()
+    api = Api(app)
+    from semechka.routers.setup import ensure_setup_token
+    token = ensure_setup_token(st)
+    r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
+        "owner": {"email": "owner@example.test", "password": PW, "display_name": "Olga Owner"}, "preset": "business",
+        "settings": {"modes.image.enabled": True, "modes.video.enabled": True, "privacy.chat_retention_days": 30},
+        "backend": {"adapter": "sarness", "base_url": sarness_url, "api_key": fs.TOKEN},
+        "enable_models": ["local:fake-chat", "image:fake-turbo", "video:fake-clip"], "smoke_model": "local:fake-chat"})
+    assert r.status_code == 200, r.text
+    assert r.json()["models_enabled"] == 3 and r.json()["smoke"]["ok"]
+    api.csrf = api.get("/api/me").json()["csrf"]
+    return api

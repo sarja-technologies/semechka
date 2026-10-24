@@ -19,9 +19,10 @@ from .base import AdapterError, DiscoveredModel
 from .openai_compat import _short
 
 _PATH = re.compile(r"(?:/[\w.@+\-]+){3,}")
-_IMAGE_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "steps", "guidance", "seed", "scheduler")
+_IMAGE_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "steps", "guidance", "seed", "scheduler",
+               "reference_image", "denoise")
 _VIDEO_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "frames", "fps", "steps", "guidance", "seed",
-               "flow_shift")
+               "flow_shift", "start_image")
 
 
 def clean_error(text) -> str:
@@ -82,6 +83,19 @@ class SarnessMediaMixin:
         simple = {k: params[k] for k in keys if params.get(k) is not None}
         r = await self._call("POST", "/v1/jobs", json={"kind": kind, "simple": simple, "client_key": client_key,
                                                       "title": f"semechka {kind}"})
+        return r.json()["id"]
+
+    async def media_upload(self, data: bytes, mime: str, name: str) -> str:
+        """Hand a source image to the engine (image editing, image-to-video). Returns the engine's file id.
+        The engine keeps uploaded files in its own storage; it has no endpoint to delete them."""
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=10)) as c:
+                r = await c.post(self.base_url + "/v1/uploads", headers=_h(self.api_key),
+                                 files={"file": (name, data, mime)})
+        except httpx.HTTPError as e:
+            raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
+        if r.status_code >= 400:
+            raise AdapterError(f"Sarness refused the source image (HTTP {r.status_code}).", status=422, kind="rejected")
         return r.json()["id"]
 
     async def media_status(self, remote_id: str) -> dict:

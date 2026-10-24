@@ -31,6 +31,8 @@ class MediaJob(Base):
     last_ok: Mapped[float] = mapped_column(Float, default=now)  # last time the backend answered a status poll
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[float | None] = mapped_column(Float, index=True)  # retention: prompt and parameters go with it
+    conversation_id: Mapped[str | None] = mapped_column(String(32))  # set when the job was started from a conversation
+    message_id: Mapped[str | None] = mapped_column(String(32))  # the assistant message that shows the result
 
 
 class MediaAsset(Base):

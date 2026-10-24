@@ -20,21 +20,25 @@ def test_registry_contract_and_every_setting_has_a_working_validator():
         from semechka import perms
         assert d.edit_perm in perms.BY_ID, d.id
         if not d.secret and d.id != "tech.presets":
-            assert R.coerce(d, d.default) == d.default or d.id == "brand.accent_light" or True
+            assert d.default is None or R.coerce(d, d.default) == d.default, d.id
 
 
-def test_accent_must_meet_contrast_and_default_palette_is_not_purple():
-    from semechka import settings_reg as R
-    assert R.contrast("#087F78", "#FFFFFF") >= 4.5 and R.contrast("#64BEB5", "#1A1E1F") >= 4.5
+def test_presets_meet_contrast_and_default_palette_is_not_purple():
+    from semechka import theme_svc as T
     import colorsys
-    for d in (R.BY_ID["brand.accent_light"], R.BY_ID["brand.accent_dark"]):
-        h = d.default.lstrip("#")
-        hue = colorsys.rgb_to_hsv(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))[0] * 360
-        assert not 250 <= hue <= 330, "first-party defaults must not be violet/purple"
+    for name in ("light", "dark", "graphite"):
+        vals = T.preset(name)
+        assert all(p["ok"] for p in T.contrast_report(vals)), name
+        for tid in ("brand", "brand-2", "accent", "link", "btn-primary-bg", "selected"):
+            r, g, b, _ = T.parse_color(vals[tid])
+            h, sat, _v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            assert sat < 0.12 or not 250 <= h * 360 <= 330, f"{name}.{tid}: first-party defaults must not be violet/purple"
 
 
 def test_invalid_and_unsupported_settings_are_rejected(owner):
-    assert owner.put("/api/admin/settings/brand.accent_light", json={"value": "#EEEE00"}).status_code == 422
+    bad = {"light": {"fg": "#EEEEEE"}, "dark": {}}  # light-grey text on the light background fails contrast
+    r = owner.put("/api/admin/settings/theme.custom", json={"value": bad})
+    assert r.status_code == 422 and "needs 4.5:1" in r.json()["detail"]["message"]
     assert owner.put("/api/admin/settings/auth.password_min_length", json={"value": 3}).status_code == 422
     assert owner.put("/api/admin/settings/signup.mode", json={"value": "everyone"}).status_code == 422
     assert owner.put("/api/admin/settings/no.such.setting", json={"value": 1}).status_code == 404

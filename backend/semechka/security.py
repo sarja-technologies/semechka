@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import base64
 import hashlib
 import hmac
@@ -72,6 +73,16 @@ class RateLimiter:
 
 
 # ---- TOTP (RFC 6238, SHA-1, 6 digits, 30 s) ---------------------------------------------------------
+def new_recovery_codes(n: int = 10) -> list[str]:
+    """One-time recovery codes: 10 groups of 4+4 characters from an unambiguous alphabet. Only hashes are stored."""
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return ["-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)) for _ in range(n)]
+
+
+def recovery_hash(code: str) -> str:
+    return hashlib.sha256(("semechka-recovery:" + code.strip().lower().replace(" ", "")).encode()).hexdigest()
+
+
 def new_totp_secret() -> str:
     return base64.b32encode(hashlib.sha256(str(time.time_ns()).encode() + __import__("os").urandom(32)).digest()[:20]
                             ).decode().rstrip("=")

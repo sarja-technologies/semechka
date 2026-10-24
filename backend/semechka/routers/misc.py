@@ -31,6 +31,11 @@ def _sniff(data: bytes):
 
 @router.post("/admin/assets")
 async def upload_asset(file: UploadFile = File(...), ctx: Ctx = Depends(require("admin.branding"))):
+    return await save_image_asset(ctx, file)
+
+
+async def save_image_asset(ctx: Ctx, file: UploadFile) -> dict:
+    """Validated public image (logos, favicons, model icons): type from the bytes, scripted SVG refused, 512 KB."""
     data = await file.read(_MAX_ASSET + 1)
     if len(data) > _MAX_ASSET:
         raise HTTPException(413, {"code": "too_large", "message": "Images are limited to 512 KB."})

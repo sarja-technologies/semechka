@@ -16,10 +16,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import delete, select
 
-from . import __version__, audit, media_svc, services
+from . import __version__, attachments_svc, audit, media_svc, services
 from .config import Config
 from .models import AuditEvent, Conversation, UsageEvent
-from .routers import admin_config, admin_people, assistants, auth, chat, knowledge, me, media, misc, queue, setup, sso  # sso: OIDC single sign-on
+from .routers import admin_config, admin_content, admin_people, assistants, auth, catalog, chat, knowledge, me, media, misc, queue, setup, sso, theme  # sso: OIDC single sign-on
 from .state import AppState
 
 log = logging.getLogger("semechka")
@@ -83,7 +83,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, misc.router, sso.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, theme.router, misc.router, sso.router):
         app.include_router(r)
 
     web = cfg.web_dir
@@ -117,7 +117,8 @@ async def _sweeper(st: AppState):
     """Retention: delete expired conversations and aged usage/audit rows."""
     while True:
         try:
-            await asyncio.to_thread(sweep_once, st)
+            r = await asyncio.to_thread(sweep_once, st)
+            await chat.cancel_jobs(st, r.get("cancel_jobs") or [])
         except Exception:  # noqa: BLE001
             log.exception("retention sweep failed")
         await asyncio.sleep(300)
@@ -127,12 +128,17 @@ def sweep_once(st: AppState) -> dict:
     now = time.time()
     with st.db.session() as s:
         expired = s.execute(select(Conversation).where(Conversation.expires_at != None, Conversation.expires_at < now)).scalars().all()  # noqa: E711
-        for c in expired:
+        running: list[str] = []
+        for c in expired:  # with the conversation go its attachments and the media it produced
+            attachments_svc.delete_for_conversation(st, s, c.user_id, c.id)
+            running += media_svc.delete_for_conversation(st, s, c.id)
             s.delete(c)
+        n_att = attachments_svc.sweep(st, s)
         ud = st.settings.deployment(s, "privacy.usage_retention_days")
         n_usage = s.execute(delete(UsageEvent).where(UsageEvent.ts < now - ud * 86400)).rowcount
         n = len(expired)
         if n:
             audit.record(s, "", "retention.sweep", "", {"conversations_deleted": n})
     media_svc.sweep(st)  # media block: asset and job retention
-    return {"conversations": n, "usage_rows": n_usage}
+    # jobs of expired conversations that are still running hold no content any more; the caller cancels them
+    return {"conversations": n, "usage_rows": n_usage, "attachments": n_att, "cancel_jobs": running}

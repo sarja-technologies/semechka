@@ -75,7 +75,7 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
 
     async def chat_stream(self, model, messages, params):
         allowed = ("temperature", "top_p", "top_k", "min_p", "repeat_penalty", "presence_penalty",
-                   "frequency_penalty", "max_tokens", "seed")
+                   "frequency_penalty", "max_tokens", "seed", "ctx")  # ctx: context window the engine loads the model with
         body = {"model_ref": model, "messages": messages,
                 "params": {k: params[k] for k in allowed if params.get(k) is not None}}
         if isinstance(params.get("thinking"), bool):

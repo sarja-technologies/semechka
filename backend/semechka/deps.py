@@ -120,10 +120,7 @@ def require(perm: str) -> Callable:
 
 
 def mfa_required_for(ctx: Ctx) -> bool:
-    st, s = ctx.st, ctx.s
-    if st.settings.deployment(s, "auth.mfa_required_all"):
-        return True
-    return bool(st.settings.deployment(s, "auth.mfa_required_admins") and services.is_admin_like(ctx.principal))
+    return services.mfa_required(ctx.s, ctx.st, ctx.principal)
 
 
 def audit_ctx(ctx: Ctx, action: str, target: str = "", detail: dict | None = None):

@@ -33,6 +33,7 @@ class User(Base):
     created_at: Mapped[float] = mapped_column(Float, default=now)
     last_login_at: Mapped[float | None] = mapped_column(Float)
     prefs: Mapped[dict] = mapped_column(JSON, default=dict)
+    mfa_recovery: Mapped[list | None] = mapped_column(JSON)  # SHA-256 hashes of unused one-time recovery codes
     roles: Mapped[list["UserRole"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     teams: Mapped[list["TeamMember"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
 
@@ -157,6 +158,12 @@ class Model(Base):
     gen_limits: Mapped[dict] = mapped_column(JSON, default=dict)  # e.g. {"max_tokens": 2048}
     allow_tools: Mapped[bool] = mapped_column(Boolean, default=False)
     available: Mapped[bool] = mapped_column(Boolean, default=True)  # last discovery saw it
+    # Administrator-curated metadata (provider, family, parameters, quantisation, context, description, icon ...).
+    # Overrides what discovery reported in `meta`; an absent key means "not known", never a guess.
+    profile: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    sort: Mapped[int] = mapped_column(Integer, default=0)  # administrator's order; never re-sorted alphabetically
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # usable by API clients with access, not listed in choosers
+    defaults: Mapped[dict | None] = mapped_column(JSON, default=dict)  # default generation settings for this model
     created_at: Mapped[float] = mapped_column(Float, default=now)
     __table_args__ = (UniqueConstraint("backend_id", "real_id"),)
 
@@ -165,9 +172,10 @@ class ModelGrant(Base):
     __tablename__ = "model_grants"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     model_id: Mapped[str] = mapped_column(ForeignKey("models.id", ondelete="CASCADE"), index=True)
-    subject_type: Mapped[str] = mapped_column(String(8))  # role|team|user
-    subject_id: Mapped[str] = mapped_column(String(48))
+    subject_type: Mapped[str] = mapped_column(String(8))  # role|team|user|everyone
+    subject_id: Mapped[str] = mapped_column(String(48))  # '*' for everyone
     effect: Mapped[str] = mapped_column(String(8))  # allow|deny
+    modes: Mapped[list | None] = mapped_column(JSON)  # None: every mode the model supports; else only these modes
     __table_args__ = (UniqueConstraint("model_id", "subject_type", "subject_id"),)
 
 
@@ -179,6 +187,8 @@ class Conversation(Base):
     model_id: Mapped[str | None] = mapped_column(String(32))
     mode: Mapped[str] = mapped_column(String(16), default="chat")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder_id: Mapped[str | None] = mapped_column(String(32))
     active_leaf: Mapped[str | None] = mapped_column(String(32))
     retention_note: Mapped[str] = mapped_column(String(200), default="")
     expires_at: Mapped[float | None] = mapped_column(Float, index=True)
@@ -196,8 +206,58 @@ class Message(Base):
     content_enc: Mapped[str] = mapped_column(Text)
     model_id: Mapped[str | None] = mapped_column(String(32))
     stats: Mapped[dict] = mapped_column(JSON, default=dict)  # full measured stats; filtered on read by permission
-    status: Mapped[str] = mapped_column(String(16), default="complete")  # complete|stopped|error
+    status: Mapped[str] = mapped_column(String(16), default="complete")  # complete|stopped|error|pending
+    # text | image | video. For image/video the encrypted content is the prompt and `meta.job_id` links the result.
+    kind: Mapped[str] = mapped_column(String(12), default="text")
+    # Non-content metadata only (attachment ids, job id, how many earlier turns were left out). Never message text.
+    meta: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class ConversationFolder(Base):
+    """A person's own grouping of conversations. The name is encrypted like titles."""
+    __tablename__ = "conversation_folders"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: uid("f_"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name_enc: Mapped[str] = mapped_column(Text)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class ChatAttachment(Base):
+    """A file a person attached to a message. Bytes are encrypted under data_dir/attachments/<user_id>/."""
+    __tablename__ = "chat_attachments"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: uid("at_"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(32), index=True)  # set when first sent
+    name_enc: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(8))  # image | text
+    mime: Mapped[str] = mapped_column(String(64))
+    size: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[float] = mapped_column(Float, default=now)
+    expires_at: Mapped[float | None] = mapped_column(Float, index=True)
+
+
+class ModelGroup(Base):
+    """An administrator-defined grouping for the model chooser. Classification only: it never grants access."""
+    __tablename__ = "model_groups"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: uid("mg_"))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    collapsed: Mapped[bool] = mapped_column(Boolean, default=False)  # shown collapsed in the chooser
+    # Who sees this heading in the chooser (display only). Empty: everyone who can use at least one member.
+    audience: Mapped[list | None] = mapped_column(JSON, default=list)  # [{"type": "role"|"team"|"user", "id": ...}]
+    created_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class ModelGroupMember(Base):
+    __tablename__ = "model_group_members"
+    group_id: Mapped[str] = mapped_column(ForeignKey("model_groups.id", ondelete="CASCADE"), primary_key=True)
+    model_id: Mapped[str] = mapped_column(ForeignKey("models.id", ondelete="CASCADE"), primary_key=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class UsageEvent(Base):

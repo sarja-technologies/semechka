@@ -21,7 +21,7 @@ STATE: dict = {}
 
 def reset():
     STATE.clear()
-    STATE.update(jobs={}, by_key={}, files={}, discards=[], submissions=[], n=0, reject_files=False)
+    STATE.update(jobs={}, by_key={}, files={}, discards=[], submissions=[], n=0, reject_files=False, uploads={})
 
 
 reset()
@@ -48,12 +48,12 @@ def make_mp4() -> bytes:
 MODELS = [
     {"id": "fake-turbo", "name": "Fake Turbo", "category": "image", "family": "fakediffusion", "supported": True,
      "license": "Apache-2.0", "description": "Test image model.", "loaded": False, "vram_mb": 1000, "size": 123,
-     "capabilities": {"modes": ["txt2img"], "negative_prompt": True, "schedulers": ["euler", "ddim"]},
+     "capabilities": {"modes": ["txt2img", "img2img"], "negative_prompt": True, "schedulers": ["euler", "ddim"]},
      "defaults": {"steps": 4, "guidance": 0.0, "width": 512, "height": 512},
      "limits": {"steps": [1, 8], "guidance": [0, 2], "min_side": 256, "max_side": 768, "multiple": 8}},
     {"id": "fake-clip", "name": "Fake Clip", "category": "video", "family": "fakevideo", "supported": True,
      "license": "Apache-2.0", "description": "Test video model.", "loaded": False, "vram_mb": 2000, "size": 456,
-     "capabilities": {"modes": ["t2v"], "negative_prompt": True, "audio": False},
+     "capabilities": {"modes": ["t2v", "i2v"], "negative_prompt": True, "audio": False},
      "defaults": {"steps": 20, "guidance": 4.0, "width": 512, "height": 320, "frames": 17, "fps": 16},
      "limits": {"steps": [4, 40], "guidance": [1, 8], "frames": [5, 49], "frame_step": 4, "fps": [8, 24],
                 "resolutions": [[512, 320], [320, 512]], "multiple": 32}},
@@ -93,6 +93,16 @@ async def completions(request: Request):
 @app.get("/v1/models", dependencies=[Depends(auth)])
 def models():
     return MODELS
+
+
+@app.post("/v1/uploads", dependencies=[Depends(auth)])
+async def upload(request: Request):
+    form = await request.form()
+    f = form["file"]
+    data = await f.read()
+    uid = f"up_{len(STATE['uploads']) + 1:04d}"
+    STATE["uploads"][uid] = data
+    return {"id": uid, "name": f.filename, "size": len(data)}
 
 
 @app.post("/v1/jobs", dependencies=[Depends(auth)])

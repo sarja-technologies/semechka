@@ -34,4 +34,4 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.setuptools.package-data]
-semechka = ["web/**/*"]
+semechka = ["web/**/*", "theme/*.json"]

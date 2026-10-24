@@ -109,11 +109,11 @@ def test_model_access_is_enforced_for_picker_and_direct_api(owner, app):
 def test_mode_disabled_for_team_hides_nav_and_blocks_api(owner, app):
     team = owner.post("/api/admin/teams", json={"name": "Finance"}).json()["id"]
     f = make_user(owner, app, "fin@example.test", teams=[team])
-    assert any(n["id"] == "chat" for n in f.get("/api/me").json()["ui"]["nav"])
+    assert f.get("/api/me").json()["ui"]["operations"]["text"]["enabled"] is True
     r = owner.put("/api/admin/settings/modes.chat.enabled", json={"value": False, "scope_type": "team", "scope_id": team})
     assert r.status_code == 200
     me = f.get("/api/me").json()
-    assert all(n["id"] != "chat" for n in me["ui"]["nav"])
+    assert me["ui"]["operations"]["text"]["enabled"] is False
     assert f.get("/api/chat/models").status_code == 403
     assert f.post("/api/chat/conversations", json={}).status_code == 403
     assert f.get("/api/chat/conversations").status_code == 403
@@ -127,8 +127,8 @@ def test_unsupported_modes_report_truthfully(owner, app):
     owner.put("/api/admin/settings/modes.video.enabled", json={"value": True})
     owner.put("/api/admin/roles/member", json={"label": "Member", "description": "", "rank": 100, "grants": ["mode.chat", "chat.attach", "chat.export", "ops.jobs.cancel_own", "mode.video"], "denies": []})
     me = m.get("/api/me").json()
-    video = next(n for n in me["ui"]["nav"] if n["id"] == "video")
-    assert video["available"] is False and "No connected inference backend can generate video" in video["reason"]
+    video = me["ui"]["operations"]["video"]
+    assert video["enabled"] is False and "No connected inference backend can generate video" in video["reason"]
     audio_state = me["ui"]["modes"]["audio"]
     assert audio_state["code"] in ("disabled", "forbidden", "unsupported")
     assert m.get("/api/chat/models", params={"mode": "video"}).status_code == 501

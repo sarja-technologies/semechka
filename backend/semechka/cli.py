@@ -247,6 +247,36 @@ def cmd_uninstall(a, cfg: Config):
         print(f"Your data in {cfg.data_dir} was kept. Re-run with --purge-data to delete it.")
 
 
+def cmd_migrate(a, cfg: Config):
+    """Show the data schema, or move it to another version. Downgrades must run with the NEWER program, before the
+    older program is reinstalled; stop the service first."""
+    from .db import Database
+    if not (cfg.data_dir / "semechka.db").exists() and not cfg.database_url:
+        raise SystemExit(f"No database in {cfg.data_dir}.")
+    db = Database(cfg.db_url)
+    with db.engine.connect() as c:
+        have = migrations.current_version(c)
+    print(f"Program {__version__} understands schema 1..{migrations.SCHEMA_VERSION}; the data is at schema {have}.")
+    if a.to is None:
+        for v, step in sorted(migrations.MIGRATIONS.items()):
+            print(f"  {v}: {step.description}{'  (applied)' if have and v <= have else ''}")
+        return
+    if a.to > migrations.SCHEMA_VERSION:
+        raise SystemExit(f"This program cannot migrate past schema {migrations.SCHEMA_VERSION}.")
+    if have is not None and a.to < have:
+        if not a.yes:
+            raise SystemExit("A downgrade removes data that only the newer release uses (listed above for each step). "
+                             "Take a backup first (`semechka backup`), stop the service, then re-run with --yes.")
+        for line in migrations.downgrade(db, a.to, cfg.data_dir):
+            print("  " + line)
+    else:
+        db.create_all()
+        for line in migrations.apply(db, cfg.data_dir):
+            print("  " + line)
+    with db.engine.connect() as c:
+        print(f"Data is now at schema {migrations.current_version(c)}.")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="semechka", description="Semechka: a configurable, private AI platform for your own infrastructure.")
     ap.add_argument("--version", action="version", version=__version__)
@@ -265,6 +295,10 @@ def main(argv=None):
     r.add_argument("--force", action="store_true")
     r.set_defaults(fn=cmd_restore)
     sub.add_parser("update", help="how to update safely").set_defaults(fn=cmd_update)
+    mg = sub.add_parser("migrate", help="show or change the data schema version (downgrade before a program rollback)")
+    mg.add_argument("--to", type=int)
+    mg.add_argument("--yes", action="store_true")
+    mg.set_defaults(fn=cmd_migrate)
     u = sub.add_parser("uninstall", help="remove, keeping data unless told otherwise")
     u.add_argument("--purge-data", action="store_true")
     u.set_defaults(fn=cmd_uninstall)

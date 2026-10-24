@@ -46,24 +46,32 @@ def principal_for_role(s, role_id: str) -> perms.Principal:
 
 # ---- models ---------------------------------------------------------------------------------------
 def subject_keys(p: perms.Principal) -> set[tuple[str, str]]:
-    return {("user", p.user_id)} | {("role", r) for r in p.role_ids} | {("team", t) for t in p.team_ids}
+    from . import catalog_svc
+    return catalog_svc.subject_keys(p)
 
 
-def model_access(s, p: perms.Principal, m: Model, backend: Backend, st, mode: str | None = None) -> tuple[bool, str]:
-    """(allowed, reason). Deny always wins over allow; no grant means no access."""
+# Which grant mode governs each product mode. Knowledge and assistants run on chat models.
+GRANT_MODE = {"chat": "chat", "knowledge": "chat", "agents": "chat", "code": "code", "image": "image", "video": "video",
+              "audio": "audio", "vision": "vision"}
+
+
+def model_access(s, p: perms.Principal, m: Model, backend: Backend, st, mode: str | None = None,
+                 grants: list[ModelGrant] | None = None) -> tuple[bool, str]:
+    """(allowed, reason). `mode` is a product mode or 'vision' (chat with an image). Deny always wins over allow; no
+    grant means no access; a grant limited to other modes does not apply."""
+    from . import catalog_svc
     if not m.enabled or not m.available or not backend.enabled:
         return False, "This model is not available."
     mode = mode or "chat"
-    cap = MODE_CAPABILITY[mode]
-    if cap not in (m.capabilities or []):
-        return False, f"This model does not support {mode}."
-    grants = s.execute(select(ModelGrant).where(ModelGrant.model_id == m.id)).scalars().all()
-    keys = subject_keys(p)
-    mine = [g for g in grants if (g.subject_type, g.subject_id) in keys]
-    if any(g.effect == "deny" for g in mine):
-        return False, "Your group does not have access to this model."
-    if not any(g.effect == "allow" for g in mine):
-        return False, "Your group does not have access to this model."
+    caps = catalog_svc.capabilities(m)
+    need = "vision" if mode == "vision" else MODE_CAPABILITY[mode]
+    if need not in caps or (mode == "vision" and "chat" not in caps):
+        return False, "This model cannot read images." if mode == "vision" else f"This model does not support {mode}."
+    if grants is None:
+        grants = list(s.execute(select(ModelGrant).where(ModelGrant.model_id == m.id)).scalars())
+    ok, why = catalog_svc.decide(grants, p, GRANT_MODE[mode])
+    if not ok:
+        return False, why
     if is_external(m, backend) and not st.settings.deployment(s, "privacy.external_egress"):
         return False, "This model runs on an external service, which your organisation has turned off."
     return True, ""
@@ -73,12 +81,17 @@ def is_external(m: Model, backend: Backend) -> bool:
     return bool(backend.external or (m.meta or {}).get("external"))
 
 
-def accessible_models(s, p: perms.Principal, st, mode: str = "chat") -> list[tuple[Model, Backend]]:
-    out = []
+def accessible_models(s, p: perms.Principal, st, mode: str = "chat", *, include_hidden: bool = True) -> list[tuple[Model, Backend]]:
+    """Models this person may use for `mode`, in the administrator's order."""
+    from . import catalog_svc
     backends = {b.id: b for b in s.execute(select(Backend)).scalars()}
-    for m in s.execute(select(Model).order_by(Model.pinned.desc(), Model.alias)).scalars():
+    by_model = catalog_svc.grants_by_model(s)
+    out = []
+    for m in catalog_svc.ordered_models(s):
+        if m.hidden and not include_hidden:
+            continue
         b = backends.get(m.backend_id)
-        if b and model_access(s, p, m, b, st, mode)[0]:
+        if b and model_access(s, p, m, b, st, mode, by_model.get(m.id, []))[0]:
             out.append((m, b))
     return out
 
@@ -159,6 +172,22 @@ def messages_today(s, user_id: str) -> int:
         UsageEvent.user_id == user_id, UsageEvent.ts >= since, UsageEvent.kind == "chat")).scalar() or 0
 
 
+def mfa_policy(s, st) -> str:
+    return st.settings.deployment(s, "auth.mfa_policy")
+
+
+def mfa_required(s, st, p: perms.Principal) -> bool:
+    """Whether this person must have a second factor, from the deployment's MFA policy."""
+    policy = mfa_policy(s, st)
+    if policy == "everyone":
+        return True
+    if policy == "admins":
+        return is_admin_like(p)
+    if policy == "roles":
+        return bool(set(p.role_ids) & set(st.settings.deployment(s, "auth.mfa_roles") or []))
+    return False
+
+
 def is_admin_like(p: perms.Principal) -> bool:
     return any(x.id.startswith("admin.") and p.can(x.id) for x in perms.REGISTRY)
 
@@ -172,3 +201,17 @@ def display_id(real_id: str) -> str:
     if "/" in real_id and (real_id.startswith(("/", "~")) or "\\" in real_id or real_id.count("/") > 2):
         return real_id.replace("\\", "/").rsplit("/", 1)[-1]
     return real_id
+
+
+def purge_user_files(st, user_id: str) -> None:
+    """Remove a deleted person's encrypted files at once (attachments and generated media). Their database rows go by
+    cascade; without this the files would linger until the next retention sweep."""
+    import shutil
+    for sub in ("attachments", "assets"):
+        d = st.cfg.data_dir / sub / user_id
+        if d.is_dir() and d.parent == st.cfg.data_dir / sub:
+            shutil.rmtree(d, ignore_errors=True)
+    for store in ("attachment_mem", "media_mem"):
+        mem = st.__dict__.get(store) or {}
+        for k in [k for k, v in mem.items() if v.get("user_id") == user_id]:
+            mem.pop(k, None)
