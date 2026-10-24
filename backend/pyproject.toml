@@ -1,6 +1,6 @@
 [project]
 name = "semechka"
-version = "0.1.0"
+version = "0.2.0"
 description = "Semechka — a configurable, private AI platform for your own infrastructure."
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

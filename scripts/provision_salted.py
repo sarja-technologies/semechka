@@ -30,6 +30,10 @@ MODEL_PLAN = [  # engine id fragment, alias, tags, audience, generation defaults
     ("qwen3-4b-instruct", "Balanced", ["general"], "everyone", {}),
     ("gpt-oss-120b", "Large", ["large", "reasoning"], "staff", {}),
     ("qwen3-coder-next", "Coder", ["code", "large"], "staff", {}),
+    # media models (enabled only if the engine has them): small and fast ones, so a test run does not occupy the GPU for long
+    ("sdxl-turbo", "Sketch", ["image", "fast"], "everyone", {}),
+    ("z-image-turbo", "Studio", ["image"], "everyone", {}),
+    ("wan2.2-ti2v-5b", "Clip", ["video", "small"], "staff", {}),
 ]
 STAFF_ROLES = ["owner", "platform_admin", "org_admin", "model_operator", "team_manager", "analyst"]
 
@@ -37,10 +41,10 @@ ACCOUNTS = [  # local part, display name, role, teams, override (grants, denies)
     ("admin", "Salted Platform Admin", "platform_admin", [], ([], [])),
     ("operator", "Salted Model Operator", "model_operator", [], ([], [])),
     ("manager", "Salted Team Manager", "team_manager", ["Research"], ([], [])),
-    ("analyst", "Salted Analyst", "analyst", ["Research"], ([], [])),
-    ("member", "Salted Member", "member", ["Research"], ([], [])),
+    ("analyst", "Salted Analyst", "analyst", ["Research", "Creative"], ([], [])),
+    ("member", "Salted Member", "member", ["Research", "Creative"], ([], [])),
     ("support", "Salted Support Agent", "member", ["Support"], ([], [])),
-    ("technical", "Salted Technical Reader", "member", [], (["tech.*"], [])),
+    ("technical", "Salted Technical Reader", "member", ["Creative"], (["tech.*"], [])),
     ("restricted", "Salted Restricted User", "member", [], ([], ["tech.*", "chat.attach", "chat.export"])),
     ("guest", "Salted Guest", "guest", [], ([], [])),
 ]
@@ -170,9 +174,13 @@ def main() -> int:
         # The role id is derived from the label; make sure the plan's id exists
         assert "analyst" in roles, list(roles)
     teams = {t["name"]: t for t in api.call("GET", "/api/admin/teams")}
-    for name, grants, denies in (("Research", [], []), ("Support", [], ["chat.export"])):
+    for name, grants, denies in (("Research", ["mode.knowledge", "mode.agents", "mode.code"], []),
+                                 ("Creative", ["mode.image", "mode.video"], []),
+                                 ("Support", [], ["chat.export"])):
         if name not in teams:
             api.call("POST", "/api/admin/teams", {"name": name, "grants": grants, "denies": denies})
+        else:
+            api.call("PUT", f"/api/admin/teams/{teams[name]['id']}", {"name": name, "grants": grants, "denies": denies})
     teams = {t["name"]: t for t in api.call("GET", "/api/admin/teams")}
 
     # ---- 3. accounts and per-user overrides ----------------------------------------------------------
@@ -186,6 +194,9 @@ def main() -> int:
             api.call("POST", "/api/admin/users", {"email": email, "display_name": display, "password": creds[email],
                                                    "role_id": role, "team_ids": [teams[t]["id"] for t in team_names]})
             users = {u["email"]: u for u in api.call("GET", "/api/admin/users?limit=200").get("items", [])}
+        else:
+            api.call("PATCH", f"/api/admin/users/{users[email]['id']}",
+                     {"role_ids": [role], "team_ids": [teams[t]["id"] for t in team_names]})
         if og or od:
             api.call("PUT", f"/api/admin/users/{users[email]['id']}/override", {"grants": og, "denies": od})
     save_credentials(cred_path, creds, base)
