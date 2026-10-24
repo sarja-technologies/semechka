@@ -18,7 +18,8 @@
     catch (e) { error = errText(e); jobs = []; }
     finally { loading = false; }
   }
-  onMount(load);
+  // without picture or video access the server refuses the list too, so say so instead of asking
+  onMount(() => { if (ops.image?.enabled || ops.video?.enabled) load(); else { loading = false; error = 'Pictures and video are not available to you, so there is nothing to show here.'; } });
   const items = $derived(jobs.flatMap((j) => (j.assets ?? []).map((a: any) => ({ j, a }))));
   const running = $derived(jobs.filter((j) => j.status === 'queued' || j.status === 'running').length);
   async function remove() {

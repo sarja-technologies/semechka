@@ -19,7 +19,8 @@
   let backends = $state<any[]>([]); let roles = $state<Opt[]>([]); let teams = $state<Opt[]>([]); let users = $state<Opt[]>([]);
   let picked = $state<Set<string>>(new Set()); let allMatching = $state(false);
   async function load() { loading = true; error = ''; try { const r = await get('/api/admin/models' + qs({ q, tag, capability, backend, enabled, page: pg, per_page: per })); rows = r.items; total = r.total; } catch (e) { error = errMsg(e); } loading = false; }
-  onMount(async () => { load(); roles = await loadRoles(); teams = await loadTeams(); loadUsers().then((u) => (users = u)).catch(() => {}); try { backends = await get('/api/admin/backends'); } catch { /* no backend permission */ } });
+  // the access editor's lists need people-management permissions a model operator may not hold: missing lists stay empty
+  onMount(() => { load(); if (!can('admin.users.view')) { get('/api/admin/backends').then((b) => (backends = b)).catch(() => {}); return; } loadRoles().then((r) => (roles = r)).catch(() => {}); loadTeams().then((t) => (teams = t)).catch(() => {}); loadUsers().then((u) => (users = u)).catch(() => {}); get('/api/admin/backends').then((b) => (backends = b)).catch(() => {}); });
   let t: any; const filt = () => { clearTimeout(t); t = setTimeout(() => { pg = 1; picked = new Set(); allMatching = false; load(); }, 250); };
   const pageAll = $derived(rows.length > 0 && rows.every((r) => picked.has(r.id)));
   const togglePage = () => { picked = pageAll ? new Set() : new Set(rows.map((r) => r.id)); allMatching = false; };

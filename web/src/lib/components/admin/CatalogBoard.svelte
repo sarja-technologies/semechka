@@ -8,6 +8,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ModelIcon from '$lib/components/chat/ModelIcon.svelte';
+  import { can } from '$lib/session.svelte';
   import State from './State.svelte';
   import GrantsEditor from './GrantsEditor.svelte';
   import { errMsg } from './util';
@@ -21,8 +22,10 @@
   }
   onMount(() => {
     load();
-    loadRoles().then((r) => (roles = r)).catch(() => {}); loadTeams().then((r) => (teams = r)).catch(() => {});
-    loadUsers().then((u) => (users = u)).catch(() => {}); get('/api/admin/backends').then((b) => (backends = b)).catch(() => {});
+    if (can('admin.users.view')) { // the lists of roles, teams and people need admin.users.view
+      loadRoles().then((r) => (roles = r)).catch(() => {}); loadTeams().then((r) => (teams = r)).catch(() => {});
+      loadUsers().then((u) => (users = u)).catch(() => {});
+    } get('/api/admin/backends').then((b) => (backends = b)).catch(() => {});
   });
   const byId = $derived(new Map<string, any>((cat?.models ?? []).map((m: any) => [m.id, m])));
   const shown = $derived((cat?.models ?? []).filter((m: any) => !q || `${m.alias} ${m.profile.provider_label ?? ''} ${m.profile.family ?? ''}`.toLowerCase().includes(q.toLowerCase())));

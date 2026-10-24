@@ -302,7 +302,11 @@ TECH_FIELDS = [  # profile/meta field -> the technical-visibility permission tha
 
 def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, restricted: bool, usable: bool) -> dict:
     p, meta = ctx.principal, m.meta or {}
-    real = meta.get("engine_name") or services.display_id(m.real_id)
+    # the engine's own name; failing that the identifier, which only tech.model.id may see
+    real = meta.get("engine_name") or (services.display_id(m.real_id) if p.can("tech.model.id") else m.alias)
+    quant = meta.get("quantization")
+    if quant and not p.can("tech.model.quant") and real.endswith(f" · {quant}"):  # the name, without the technical part
+        real = real[: -len(f" · {quant}")]
     names = opts["names"]
     # an alias still equal to the one made from the identifier at discovery was never chosen by anyone: show the
     # engine's own name instead of a raw identifier (display only; the stored alias and identifier are untouched)

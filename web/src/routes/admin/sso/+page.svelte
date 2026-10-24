@@ -12,12 +12,13 @@
   let roles = $state<Opt[]>([]); let open = $state(false); let cur = $state<any>(null); let f = $state<any>({}); let err = $state('');
   let mapText = $state(''); let domainText = $state('');
   let result = $state<Record<string, any>>({}); let delT = $state<any>(null); let delOpen = $state(false);
-  let localLogin = $state(true); let policyBusy = $state(false);
+  let localLogin = $state<boolean | null>(true); let policyBusy = $state(false);
   const isOwner = $derived(!!app.me?.roles?.some((r: any) => r.id === 'owner'));
   const blank = () => ({ name: '', issuer: '', client_id: '', client_secret: '', scopes: 'openid email profile', email_claim: 'email', name_claim: 'name', groups_claim: 'groups', default_role: 'member', require_approval: false, jit_create: true, assume_email_verified: false, allow_private_network: false, enabled: false });
   async function load() {
     loading = true;
-    try { rows = await get('/api/admin/sso/providers'); localLogin = (await get('/api/admin/settings/sso.local_login/effective').catch(() => ({ value: true }))).value !== false; error = ''; }
+    try { rows = await get('/api/admin/sso/providers'); // the stored value itself (null when this person may not read settings: never guessed)
+      localLogin = await get('/api/admin/settings?q=sso.local_login').then((r) => r.settings.find((x: any) => x.id === 'sso.local_login')?.value !== false).catch(() => null); error = ''; }
     catch (e) { error = errMsg(e); }
     loading = false;
   }
@@ -64,9 +65,9 @@
   {#snippet actions()}<button class="btn primary" onclick={() => edit(null)}>Add provider</button>{/snippet}
   <State {loading} {error} retry={load} empty={!loading && !error && !rows.length ? 'No provider yet. Add one, test discovery, then enable it.' : ''} />
   {#if rows.length}
-    <section class="panel" style="margin-bottom:16px"><div class="panel-h"><h2 style="font-size:16px">Password sign-in</h2><span class="chip {localLogin ? '' : 'warn'}">{localLogin ? 'Allowed for everyone' : 'Owners only'}</span></div><div class="panel-b">
+    <section class="panel" style="margin-bottom:16px"><div class="panel-h"><h2 style="font-size:16px">Password sign-in</h2><span class="chip {localLogin === false ? 'warn' : ''}">{localLogin === null ? 'Could not read the current setting' : localLogin ? 'Allowed for everyone' : 'Owners only'}</span></div><div class="panel-b">
       <p class="small">When off and at least one provider is enabled, only owners can still sign in with a password. That is the way back in if the provider breaks, so keep an owner account with a password and test it first.</p>
-      <button class="btn" disabled={policyBusy} onclick={() => setPolicy(!localLogin)}>{localLogin ? 'Require single sign-on' : 'Allow passwords for everyone'}</button>
+      <button class="btn" disabled={policyBusy || localLogin === null} onclick={() => setPolicy(!localLogin)}>{localLogin ? 'Require single sign-on' : 'Allow passwords for everyone'}</button>
     </div></section>
   {/if}
   <div class="stack">{#each rows as p (p.id)}

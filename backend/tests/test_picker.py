@@ -85,6 +85,7 @@ def test_member_sees_only_offered_models_without_technical_details(mo, st, app):
     assert [m["alias"] for m in cat["models"]] == ["fake-chat"]
     chat = cat["models"][0]
     assert chat["details"] == {"reasoning": True} and "real_id" not in chat and "state" not in chat
+    assert chat["label"] == "Fake chat" and chat["sub"] is None  # the engine's name, without its quantisation
     assert cat["unusable"] == [] and cat["status"] is False
 
 
@@ -179,3 +180,14 @@ def test_enter_sends_and_prompt_history_follow_the_setting_until_a_person_choose
     assert comp()["enter_sends"] is True and comp()["prompt_history"] is True
     assert mo.patch("/api/me", json={"enter_sends": None}).status_code == 200  # back to the setting
     assert comp()["enter_sends"] is False and comp()["prompt_history"] is True
+
+
+def test_real_names_never_fall_back_to_an_identifier_for_people_without_tech_model_id(mo, st, app):
+    member = make_user(mo, app, "m3@example.test")
+    assert mo.put("/api/admin/settings/models.display.names", json={"value": "real"}).status_code == 200
+    with st.db.session() as s:
+        m = s.execute(select(Model).where(Model.real_id == "local:fake-chat")).scalar_one()
+        m.meta = {k: v for k, v in m.meta.items() if k != "engine_name"}  # an engine that reports no display name
+    assert by_alias(picker(member))["fake-chat"]["label"] == "fake-chat"
+    assert "local:" not in str(picker(member))
+    assert by_alias(picker(mo))["fake-chat"]["label"] == "local:fake-chat"  # the owner holds tech.model.id

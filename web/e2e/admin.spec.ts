@@ -9,8 +9,8 @@ import { apiClient } from './global-setup';
 
 test.describe.configure({ mode: 'serial' });
 
-const ADMIN_ROUTES = ['', '/branding', '/navigation', '/people', '/invites', '/teams', '/roles', '/visibility', '/models', '/backends', '/system', '/registration', '/privacy',
-  '/quotas', '/email', '/access', '/settings', '/history', '/transfer', '/audit'];
+const ADMIN_ROUTES = ['', '/branding', '/theme', '/interface', '/content', '/navigation', '/people', '/invites', '/teams', '/roles', '/visibility', '/models', '/backends',
+  '/sso', '/system', '/queue', '/registration', '/privacy', '/quotas', '/email', '/access', '/settings', '/history', '/transfer', '/audit'];
 
 /** Fail on anything a person would experience as broken: console errors and failed API calls. */
 function watch(page: Page) {

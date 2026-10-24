@@ -108,7 +108,7 @@
       {/if}
       {#if s?.worker}
         <div class="stat"><span class="k">Pictures and video</span>
-          <span class="v">{s.worker.busy ? 'Working' : s.worker.alive ? 'Idle' : 'Not running'}{#if s.worker.model_refs?.length} · holding {s.worker.model_refs.map((r: any, i: number) => r?.alias ?? s.worker.loaded[i]).join(', ')}{/if}</span></div>
+          <span class="v">{s.worker.busy ? 'Working' : s.worker.alive ? 'Idle' : 'Not running'}{#if s.worker.model_refs?.length}{' · holding'} {s.worker.model_refs.map((r: any, i: number) => r?.alias ?? s.worker.loaded[i]).join(', ')}{/if}</span></div>
       {/if}
       {#if s?.jobs}
         <div class="stat"><span class="k">Engine jobs</span>
