@@ -19,7 +19,7 @@ from ..state import AppState
 
 router = APIRouter(prefix="/api/chat")
 
-PARAM_KEYS = ("temperature", "top_p", "top_k", "min_p", "max_tokens", "seed", "repeat_penalty")
+PARAM_KEYS = ("temperature", "top_p", "top_k", "min_p", "max_tokens", "seed", "repeat_penalty", "thinking")
 
 
 def _need_mode(ctx: Ctx, mode: str = "chat"):

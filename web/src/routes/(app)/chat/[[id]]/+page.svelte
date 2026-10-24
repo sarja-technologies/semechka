@@ -332,7 +332,7 @@
       {:else}<p class="small muted" style="margin-top:12px">Details appear here after the model replies.</p>{/if}
       {#if resources}
         <h3 class="small" style="margin:16px 0 4px">Live resources</h3>
-        {#each resources.gpus ?? [] as g}<dl class="kv"><dt>GPU</dt><dd>{g.name}</dd><dt>VRAM</dt><dd>{g.vram_used_mb} / {g.vram_total_mb} MiB</dd><dt>Load</dt><dd>{g.utilization_pct}%</dd><dt>Temperature</dt><dd>{g.temperature_c} °C</dd></dl>{/each}
+        {#each resources.gpus ?? [] as g}<dl class="kv"><dt>GPU</dt><dd>{g.name}</dd><dt>{g.unified_memory ? 'Memory' : 'VRAM'}</dt><dd>{g.unified_memory ? 'Unified with system RAM' : `${g.vram_used_mb} / ${g.vram_total_mb} MiB`}</dd><dt>Load</dt><dd>{g.utilization_pct}%</dd><dt>Temperature</dt><dd>{g.temperature_c} °C</dd></dl>{/each}
         {#if resources.gpus === null}<p class="small muted">{resources.gpu_note}</p>{/if}
         {#if resources.host}<dl class="kv"><dt>CPU threads</dt><dd>{resources.host.cpu_count}</dd><dt>Memory free</dt><dd>{resources.host.memory_available_mb} / {resources.host.memory_total_mb} MiB</dd></dl>{/if}
       {/if}

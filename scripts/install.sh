@@ -23,6 +23,7 @@ ok() { printf '  [ ok ] %s\n' "$*"; }; warn() { printf '  [warn] %s\n' "$*"; }; 
 FAIL=0
 case "$NAME" in ""|[a-z0-9-]*) ;; *) echo "--name must be lowercase letters, digits and dashes" >&2; exit 2;; esac
 SUFFIX=""; [ -n "$NAME" ] && SUFFIX="-$NAME"
+PROBE="${HOST:-127.0.0.1}"; [ "$PROBE" = "0.0.0.0" ] && PROBE=127.0.0.1
 echo "Semechka installer — preflight"
 
 [ "$(uname -s)" = "Linux" ] && ok "Linux $(uname -m)" || bad "Linux is required (found $(uname -s))"
@@ -49,7 +50,7 @@ portbusy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && return 0 || return
 portbusy "$PORT" && bad "port $PORT is already in use (use --port)" || ok "port $PORT is free"
 for e in "8742 Sarness Engine" "11434 Ollama" "8080 llama.cpp server" "8000 vLLM"; do set -- $e; p=$1; shift
   portbusy "$p" && ok "found $* on 127.0.0.1:$p" || true; done
-ok "network exposure: loopback only (change later in Settings → Network exposure)"
+if [ -n "$HOST" ] && [ "$HOST" != "127.0.0.1" ]; then ok "network exposure: binding to $HOST (chosen with --host)"; else ok "network exposure: loopback only (change later in Settings → Network exposure)"; fi
 warn "TLS: Semechka serves HTTP. Put a reverse proxy with HTTPS in front before exposing it beyond a trusted network."
 
 WHEEL=$(ls "$HERE"/semechka-*.whl 2>/dev/null | head -1 || true)
@@ -83,6 +84,7 @@ ${HOST:+Environment=SEMECHKA_HOST=$HOST
 }ExecStart=$PREFIX/venv/bin/semechka serve
 Restart=on-failure
 NoNewPrivileges=true
+UMask=0077
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=$DATA
@@ -93,15 +95,15 @@ WantedBy=default.target
 UNIT
   systemctl --user daemon-reload && systemctl --user enable --now semechka$SUFFIX.service
   ok "service enabled (systemctl --user status semechka$SUFFIX)"
-  for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
+  for _ in $(seq 1 30); do curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
 else
   warn "no systemd user session: start it with  SEMECHKA_DATA_DIR=$DATA semechka serve --port $PORT"
 fi
 
 echo
-if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+if curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1; then
   echo "Semechka is running."
-  echo "  Open:         http://127.0.0.1:$PORT"
+  echo "  Open:         http://$PROBE:$PORT"
   echo "  Setup token:  $(cat "$DATA/setup-token" 2>/dev/null || echo '(not created yet)')   (one time; file: $DATA/setup-token)"
   echo "  Next:         the browser wizard creates the owner account, connects a model backend and sets privacy defaults."
 else

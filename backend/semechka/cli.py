@@ -65,7 +65,10 @@ def cmd_serve(a, cfg: Config):
             if (cand / "index.html").exists():
                 cfg.web_dir = cand
                 break
+    os.umask(0o077)  # database, uploads and backups are never group/world readable
     app = create_app(cfg)
+    for f in cfg.data_dir.glob("semechka.db*"):
+        os.chmod(f, 0o600)
     print(f"Semechka {__version__}")
     print(f"  Local:   http://127.0.0.1:{cfg.port}")
     if cfg.host not in ("127.0.0.1", "localhost", "::1"):

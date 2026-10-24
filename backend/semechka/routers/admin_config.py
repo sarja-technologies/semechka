@@ -380,9 +380,14 @@ def patch_model(mid: str, body: ModelPatch, ctx: Ctx = Depends(require("admin.mo
     if body.system_prompt is not None:
         m.system_prompt = body.system_prompt
     if body.gen_limits is not None:
-        allowed = {"max_tokens": int, "temperature": float, "top_p": float, "top_k": int}
+        allowed = {"max_tokens": int, "temperature": float, "top_p": float, "top_k": int, "thinking": bool}
         clean = {}
         for k, v in body.gen_limits.items():
+            if k == "thinking":  # on/off default for reasoning models (honoured by engines that support it)
+                if not isinstance(v, bool):
+                    raise _err(422, "invalid", "'thinking' must be true or false.")
+                clean[k] = v
+                continue
             if k not in allowed or isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise _err(422, "invalid", f"'{k}' is not a valid generation limit.")
             clean[k] = allowed[k](v)

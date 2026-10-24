@@ -119,7 +119,7 @@
       <dt>Listening on</dt><dd>{hw.bind.host}:{hw.bind.port}</dd>
     </dl>
     <h2 style="font-size:16px;margin-bottom:8px">Accelerators</h2>
-    {#if hw.gpus?.length}<ul class="plain">{#each hw.gpus as g}<li><span class="mono">{g.name}</span>, {g.vram_total_mb} MiB VRAM, driver {g.driver}</li>{/each}</ul>
+    {#if hw.gpus?.length}<ul class="plain">{#each hw.gpus as g}<li><span class="mono">{g.name}</span>, {g.unified_memory ? 'unified memory shared with system RAM' : `${g.vram_total_mb} MiB VRAM`}, driver {g.driver}</li>{/each}</ul>
     {:else}<p class="small muted">{hw.gpu_note || 'No GPU detected.'} Models can still run on CPU if your inference engine supports it.</p>{/if}
     <h2 style="font-size:16px;margin:16px 0 8px">Inference engines found on this machine</h2>
     {#if hw.backends.length}<ul class="plain">{#each hw.backends as b}<li>{b.label} at <span class="mono">{b.base_url}</span> <span class="chip {b.reachable ? 'ok' : 'warn'}">{b.reachable ? 'responding' : b.detail}</span></li>{/each}</ul>

@@ -76,6 +76,8 @@ class SarnessAdapter(Adapter):
                    "frequency_penalty", "max_tokens", "seed")
         body = {"model_ref": model, "messages": messages,
                 "params": {k: params[k] for k in allowed if params.get(k) is not None}}
+        if isinstance(params.get("thinking"), bool):
+            body["params"]["thinking"] = params["thinking"]  # reasoning on/off; the engine ignores it for models without it
         finish = usage = timings = None
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=10)) as c:

@@ -21,8 +21,9 @@
       <section class="panel"><div class="panel-h"><h3>Accelerators</h3></div><div class="panel-b">
         {#if s.gpus === null}<p class="muted">Unavailable. {s.gpu_note}</p>
         {:else}{#each s.gpus as g}<div style="margin-bottom:12px"><strong>{g.name}</strong> <span class="mono tiny muted">driver {g.driver}</span>
-          <div class="bar" role="img" aria-label="VRAM {pct(g.vram_used_mb, g.vram_total_mb)} percent used"><span style="width:{pct(g.vram_used_mb, g.vram_total_mb)}%"></span></div>
-          <p class="small" style="margin:4px 0 0">VRAM {g.vram_used_mb} of {g.vram_total_mb} MiB · utilisation {g.utilization_pct ?? 'n/a'}% · {g.temperature_c ?? 'n/a'} °C</p></div>{/each}{/if}</div></section>
+          {#if g.unified_memory}<p class="small" style="margin:4px 0 0">Unified memory: this accelerator shares the system RAM shown under Host, so the driver reports no separate VRAM · utilisation {g.utilization_pct ?? 'n/a'}% · {g.temperature_c ?? 'n/a'} °C</p>
+          {:else}<div class="bar" role="img" aria-label="VRAM {pct(g.vram_used_mb, g.vram_total_mb)} percent used"><span style="width:{pct(g.vram_used_mb, g.vram_total_mb)}%"></span></div>
+          <p class="small" style="margin:4px 0 0">VRAM {g.vram_used_mb} of {g.vram_total_mb} MiB · utilisation {g.utilization_pct ?? 'n/a'}% · {g.temperature_c ?? 'n/a'} °C</p>{/if}</div>{/each}{/if}</div></section>
     </div>
     <h2 style="margin:24px 0 8px">Backends</h2>
     {#if !s.backends.length}<p class="muted">No backend configured. <a href="/admin/backends">Add one</a>.</p>{/if}

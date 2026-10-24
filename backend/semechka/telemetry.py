@@ -31,6 +31,18 @@ def host() -> dict:
             if l.lower().startswith("model name"):
                 model = l.split(":", 1)[1].strip()
                 break
+    if not model and (exe := shutil.which("lscpu")):  # aarch64 has no "model name" in /proc/cpuinfo
+        try:
+            r = subprocess.run([exe], capture_output=True, text=True, timeout=3, env={**os.environ, "LC_ALL": "C"})
+            names = []
+            for l in r.stdout.splitlines():
+                if l.strip().startswith("Model name:"):
+                    n = l.split(":", 1)[1].strip()
+                    if n and n not in names:
+                        names.append(n)
+            model = " + ".join(names) or None
+        except (OSError, subprocess.SubprocessError):
+            pass
     out["cpu_model"] = model
     return out
 
@@ -63,8 +75,12 @@ def gpus() -> list[dict] | None:
                     return float(x)
                 except ValueError:
                     return None
-            out.append({"index": int(p[0]), "name": p[1], "vram_total_mb": num(p[2]), "vram_used_mb": num(p[3]),
-                        "utilization_pct": num(p[4]), "temperature_c": num(p[5]), "driver": p[6]})
+            g = {"index": int(p[0]), "name": p[1], "vram_total_mb": num(p[2]), "vram_used_mb": num(p[3]),
+                 "utilization_pct": num(p[4]), "temperature_c": num(p[5]), "driver": p[6]}
+            # Grace-class (aarch64) parts share system RAM with the CPU and nvidia-smi reports memory as [N/A]:
+            # say so instead of inventing a VRAM figure.
+            g["unified_memory"] = g["vram_total_mb"] is None and platform.machine() in ("aarch64", "arm64")
+            out.append(g)
         return out
     except (OSError, subprocess.SubprocessError):
         return None
