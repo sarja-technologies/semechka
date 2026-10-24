@@ -67,9 +67,9 @@
 <svelte:window onpointerdown={outside} />
 <div class="mc" data-mc={uid}>
   <button bind:this={btn} type="button" class="trigger" {disabled} onclick={() => (open ? hide() : show())} aria-haspopup="listbox" aria-expanded={open}
-    aria-label={`${label}: ${current?.alias ?? 'none chosen'}`} title={current ? line(current) || current.alias : 'Choose a model'}>
+    title={current ? line(current) || current.alias : 'Choose a model'}>
     {#if current}<ModelIcon icon={current.profile?.icon} label={current.alias} size={18} />{/if}
-    <span class="name">{current?.alias ?? (count ? 'Choose a model' : 'No model available')}</span>
+    <span class="sr-only">{label}: </span><span class="name">{current?.alias ?? (count ? 'Choose a model' : 'No model available')}</span>
     <Icon name="chevdown" size={14} />
   </button>
   {#if open}
@@ -149,4 +149,5 @@
     .trigger { max-width: 180px; }
   }
   @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+  @media (pointer: coarse) { .trigger { height: 40px; } }
 </style>

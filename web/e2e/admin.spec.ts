@@ -59,7 +59,7 @@ test('access follows the role: an operator sees only operating pages, and the AP
   await expect(page).toHaveURL(/\/chat|\/usage|\/admin/);
   await page.goto('/admin');
   const nav = page.locator('nav#anav');
-  await expect(nav.getByRole('link', { name: 'Models & Aliases' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Backends' })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Roles & Permissions' })).toHaveCount(0);
   await expect(nav.getByRole('link', { name: 'Import / Export' })).toHaveCount(0);
@@ -214,11 +214,11 @@ test.describe('branding and themes', () => {
   test('a new name, accent and logo show up for other people, and revert cleanly', async ({ as }, info) => {
     const owner = await as('owner');
     await owner.goto('/admin/branding');
-    const name = owner.locator('article.set', { hasText: 'Application name' });
+    const name = owner.locator('#set-brand-app_name');
     await name.getByLabel('Application name').fill('Harbour Labs AI');
     await name.getByRole('button', { name: 'Save' }).click();
     // typing in the next field while the first save is still reloading the list must not lose what is typed
-    const tab = owner.locator('article.set', { hasText: 'Browser tab title' });
+    const tab = owner.locator('#set-brand-tab_title');
     await tab.getByLabel('Browser tab title').fill('Harbour');
     await tab.getByRole('button', { name: 'Save' }).click();
     // a tiny real PNG
@@ -226,14 +226,14 @@ test.describe('branding and themes', () => {
     const png = path.join(info.outputDir, 'logo.png');
     writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
     await owner.locator('input[type=file]').first().setInputFiles(png);
-    await expect(owner.getByAltText('Current logo')).toBeVisible();
-    await owner.locator('input[type=file]').nth(1).setInputFiles(png); // favicon
-    await expect(owner.getByAltText('Current favicon')).toBeVisible();
+    await expect(owner.getByRole('img', { name: 'Current logo', exact: true })).toBeVisible();
+    await owner.locator('input[type=file]').nth(2).setInputFiles(png); // favicon (the second slot is the logo for dark themes)
+    await expect(owner.getByRole('img', { name: 'Current favicon', exact: true })).toBeVisible();
 
     const member = await as('member');
     await member.goto('/chat');
     await expect(member).toHaveTitle('Harbour');
-    await expect(member.locator('.rail img[alt="Harbour Labs AI"]')).toBeVisible();
+    await expect(member.getByRole('link', { name: 'Harbour Labs AI: home' }).locator('img')).toBeVisible();
     await expect(member.locator('link[rel=icon]')).toHaveAttribute('href', /^\/api\/assets\/[0-9a-f]{24}\.png$/);
     const ico = await member.request.get(await member.locator('link[rel=icon]').getAttribute('href') as string);
     expect(ico.status()).toBe(200);
@@ -252,37 +252,46 @@ test.describe('branding and themes', () => {
     await setSetting('brand.tab_title', 'Banana AI');
   });
 
-  test('Paper, Carbon and Graphite switch live, persist across reload, and carry the accent colour', async ({ as }) => {
+  test('Light, Dark and Graphite switch live from the account menu and persist across reload', async ({ as }) => {
     const page = await as('member');
     await page.goto('/chat');
-    for (const t of ['carbon', 'graphite', 'paper']) {
-      await page.getByRole('button', { name: /Max Member/ }).click();
-      await page.getByLabel('Theme').selectOption(t);
+    for (const t of ['dark', 'graphite', 'light']) {
+      await page.getByRole('button', { name: /^Account: Max Member/ }).click();
+      await page.getByRole('menuitemradio', { name: t[0].toUpperCase() + t.slice(1), exact: true }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', t);
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute('data-theme', t);
       const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-      if (t !== 'paper') expect(bg).not.toBe('rgb(247, 247, 245)');
+      if (t !== 'light') expect(bg).not.toBe('rgb(247, 247, 245)');
       await shot(page, `theme-${t}-1280`);
     }
   });
 
-  test('colour that fails contrast is refused by the server', async ({ as }) => {
-    const page = await as('owner');
-    await page.goto('/admin/branding');
-    const row = page.locator('article.set', { hasText: 'Accent colour (light themes)' });
-    await row.locator('input.mono, input[type=text]').first().fill('#CCCCCC');
-    await row.getByRole('button', { name: 'Save' }).click();
-    await expect(row.getByRole('alert')).toContainText(/contrast/i);
+  test('a Custom theme that fails contrast is refused by the server, by publish and by a direct settings write', async () => {
+    const a = await apiAs('owner');
+    const bad = { custom: { name: 'Too pale', light: { link: '#CCCCCC' }, dark: {} } };
+    // a draft may be unfinished, so it is saved and its report shows the failure
+    const draft = await a.put('/api/admin/theme/draft', { bundle: bad });
+    expect(draft.status()).toBe(200);
+    expect((await draft.json()).contrast.light.some((p: any) => p.fg === 'link' && !p.ok)).toBe(true);
+    const pub = await a.post('/api/admin/theme/publish', {});
+    expect(pub.status()).toBeGreaterThanOrEqual(400);
+    expect(await pub.text()).toMatch(/needs 4\.5:1/);
+    const direct = await a.put('/api/admin/settings/theme.custom', { value: bad.custom, confirm_weaker: true });
+    expect(direct.status()).toBeGreaterThanOrEqual(400);
+    expect((await (await a.get('/api/me')).json()).ui.theme.custom ?? null).toBeNull();
+    await a.del('/api/admin/theme/draft');
+    await a.dispose();
   });
 });
 
 test('models: an alias change shows up in chat; disabling a model removes it for people', async ({ as }) => {
   const owner = await as('owner');
   await owner.goto('/admin/models');
-  await owner.getByRole('row', { name: /Second Assistant/ }).getByRole('button', { name: /Edit/ }).click();
-  await owner.getByLabel('Alias (what people see)').fill('Harbour Helper');
-  await owner.getByRole('button', { name: /^Save/ }).click();
+  await owner.locator('li.mrow', { has: owner.getByRole('checkbox', { name: 'Select Second Assistant', exact: true }) }).getByRole('button', { name: 'Edit', exact: true }).click();
+  await owner.getByRole('dialog').getByLabel('Name people see').fill('Harbour Helper');
+  await owner.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(owner.getByRole('dialog')).toHaveCount(0);
   const member = await apiAs('member');
   const names = (await (await member.get('/api/chat/models')).json()).map((m: any) => m.alias);
   expect(names).toContain('Harbour Helper');

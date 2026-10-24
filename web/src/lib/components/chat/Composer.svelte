@@ -162,12 +162,15 @@
     return { modelId, modelLabel: model?.alias ?? 'Assistant', operation: op, media: op !== 'text' ? mediaParams() : undefined };
   }
   export function modelFor(o: Operation) { return chosen[o] ?? catalog(o)?.default ?? ''; }
+  // Typing is never blocked while the model list loads; Enter pressed meanwhile sends as soon as a model is known.
+  let pending = $state(false);
   function key(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!cat && text.trim()) pending = true; else send(); }
   }
+  $effect(() => { if (pending && cat) untrack(() => { pending = false; send(); }); });
   const canEph = $derived(!!ui.composer.ephemeral);
   const fresh = $derived(!thread.id && !thread.messages.length && !busy);
-  const placeholder = $derived(!cat ? 'Loading…' : cat.error ? cat.error : !cat.models.length ? 'No model is available to you for this'
+  const placeholder = $derived(!cat ? 'Message' : cat.error ? cat.error : !cat.models.length ? 'No model is available to you for this'
     : op === 'image' ? (hasImage ? 'Describe the change to the picture' : 'Describe the picture') : op === 'video' ? (hasImage ? 'Describe the motion' : 'Describe the video')
     : workspace === 'code' ? 'Ask about code, or paste some' : 'Message');
   const retention = $derived(ui.retention?.show && ui.retention.place === 'composer' ? (thread.ephemeral ? 'This conversation is not saved.' : ui.retention.text) : '');
@@ -196,10 +199,10 @@
     <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model?.alias} {op === 'image' ? 'cannot edit pictures' : 'cannot animate a picture'}. Remove the picture or choose another model.</p>
   {/if}
 
-  <div class="box">
+  <div class="box" data-focus-ring>
     <label class="sr-only" for="msg">Message</label>
     <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={autosize} onpaste={paste} {placeholder}
-      disabled={!cat || !!cat.error || !cat.models?.length} aria-describedby="composer-help"></textarea>
+      disabled={!!cat && (!!cat.error || !cat.models?.length)} aria-describedby="composer-help"></textarea>
     <div class="bar">
       {#if canAttach}
         <label class="btn ghost icon sm" title="Attach files or pictures" aria-label="Attach files or pictures">
@@ -268,7 +271,8 @@
   .composer { width: 100%; display: grid; gap: 6px; }
   .box { background: var(--composer-bg); border: 1px solid var(--border-strong); border-radius: calc(var(--radius) + 4px); padding: 8px 8px 6px 12px; display: grid; gap: 4px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  .box:focus-within { border-color: var(--fg-muted); }
+  /* the field has no ring of its own; the whole box carries a 2px accent ring while it has focus */
+  .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   textarea { all: unset; box-sizing: border-box; width: 100%; min-height: 28px; max-height: 240px; overflow-y: auto; padding: 4px 0; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
   textarea::placeholder { color: var(--fg-muted); }
   textarea:disabled { cursor: not-allowed; }
@@ -300,4 +304,10 @@
     .sl { display: none; } .send { width: 36px; padding: 0; }
     .foot :global(.ctx) { width: 100%; }
   }
+  @media (pointer: coarse) {
+    textarea { min-height: 40px; padding: 8px 0; }
+    .send { min-height: 40px; } .opb { height: 40px; }
+    .linkish { display: inline-flex; align-items: center; min-height: 40px; }
+  }
+  @media (pointer: coarse) and (max-width: 719px) { .send { width: 40px; } }
 </style>

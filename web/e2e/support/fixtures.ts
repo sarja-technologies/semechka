@@ -34,3 +34,23 @@ export async function noHorizontalScroll(page: Page) {
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(over, 'page scrolls sideways').toBeLessThanOrEqual(1);
 }
+
+/** The composer's model chooser (a listbox in a popover). */
+export const modelButton = (page: Page) => page.getByRole('button', { name: /^Model: / });
+export async function modelOptions(page: Page): Promise<string[]> {
+  await modelButton(page).click();
+  const names = await page.getByRole('listbox', { name: 'Models' }).getByRole('option').locator('.al').allInnerTexts();
+  await page.keyboard.press('Escape');
+  return [...new Set(names.map((n) => n.trim()))];
+}
+export async function chooseModel(page: Page, name: string) {
+  await modelButton(page).click();
+  await page.getByRole('listbox', { name: 'Models' }).getByRole('option', { name: new RegExp(name) }).first().click();
+  await expect(modelButton(page)).toHaveAccessibleName(`Model: ${name}`);
+}
+/** The signed-in shell is ready when the conversation sidebar and the account button are there. */
+export const appReady = (page: Page) => expect(page.getByRole('button', { name: /^Account: / })).toBeVisible();
+export async function signOut(page: Page) {
+  await page.getByRole('button', { name: /^Account: / }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+}

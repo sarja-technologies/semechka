@@ -1,14 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect } from './support/fixtures';
+import { test, expect, appReady } from './support/fixtures';
 import { apiAs, setSetting } from './support/api';
 import path from 'node:path';
 import { DIRS, URLS } from './support/env';
 
 
-const THEMES = ['paper', 'carbon', 'graphite'] as const;
-const MEMBER_ROUTES = ['/chat', '/usage', '/help', '/account', '/unavailable/image'];
-const ADMIN_ROUTES = ['/admin', '/admin/branding', '/admin/navigation', '/admin/people', '/admin/invites', '/admin/teams', '/admin/roles', '/admin/visibility', '/admin/models',
+const THEMES = ['light', 'dark', 'graphite'] as const;
+const MEMBER_ROUTES = ['/chat', '/library', '/usage', '/help', '/account', '/unavailable/image'];
+const ADMIN_ROUTES = ['/admin', '/admin/branding', '/admin/theme', '/admin/interface', '/admin/content', '/admin/navigation', '/admin/people', '/admin/invites', '/admin/teams', '/admin/roles', '/admin/visibility', '/admin/models',
   '/admin/backends', '/admin/system', '/admin/registration', '/admin/privacy', '/admin/quotas', '/admin/email', '/admin/access', '/admin/settings', '/admin/history', '/admin/transfer', '/admin/audit'];
 const PUBLIC_ROUTES = ['/login', '/signup', '/forgot'];
 
@@ -25,7 +25,7 @@ async function setTheme(role: 'member' | 'owner', theme: string) {
   await a.dispose();
 }
 
-test.afterAll(async () => { await setTheme('member', 'paper'); await setTheme('owner', 'paper'); });
+test.afterAll(async () => { await setTheme('member', 'light'); await setTheme('owner', 'light'); });
 
 test.describe('axe: no violations of WCAG 2.2 A/AA on any route, in all three themes', () => {
   for (const theme of THEMES) {
@@ -63,14 +63,20 @@ test.describe('axe: no violations of WCAG 2.2 A/AA on any route, in all three th
     });
 
     test(`${theme}: sign-in, sign-up and recovery`, async ({ page }) => {
+      // with "follow the device" on, a Dark default shows Light on a light-mode browser, so it is off for this check
+      const follow = await setSetting('theme.follow_system', false);
       const before = await setSetting('brand.theme_default', theme);
       const found: string[] = [];
-      for (const r of PUBLIC_ROUTES) {
-        await page.goto(r);
-        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-        found.push(...(await axe(page)).map((v) => `${r}: ${v}`));
+      try {
+        for (const r of PUBLIC_ROUTES) {
+          await page.goto(r);
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+          found.push(...(await axe(page)).map((v) => `${r}: ${v}`));
+        }
+      } finally {
+        await setSetting('brand.theme_default', before ?? 'light');
+        await setSetting('theme.follow_system', follow ?? true);
       }
-      await setSetting('brand.theme_default', before ?? 'paper');
       expect(found).toEqual([]);
     });
   }
@@ -91,7 +97,7 @@ test.describe('keyboard only', () => {
   test('skip link is the first stop, becomes visible, and moves focus into the page', async ({ as }) => {
     const page = await as('member');
     await page.goto('/usage');
-    await expect(page.getByRole('navigation', { name: 'Modes' })).toBeVisible(); // wait until the app is interactive
+    await appReady(page); // wait until the app is interactive
     await page.keyboard.press('Tab');
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await expect(skip).toBeFocused();
@@ -154,7 +160,10 @@ test.describe('keyboard only', () => {
           const ring = (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2) || /rgb/.test(cs.boxShadow) && cs.boxShadow !== 'none';
           const label = el.closest('label');
           const labelRing = label && getComputedStyle(label).boxShadow !== 'none';
-          return { ok: hidden ? true : ring || !!labelRing, name: `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30)}"` };
+          // a borderless field inside a box (composer, sidebar search) hands its ring to the box: a spread ring while focused
+          const wrap = el.closest<HTMLElement>('[data-focus-ring]');
+          const wrapRing = !!wrap && wrap.matches(':focus-within') && /0px 0px 0px [1-9]/.test(getComputedStyle(wrap).boxShadow);
+          return { ok: hidden ? true : ring || !!labelRing || wrapRing, name: `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30)}"` };
         });
         if (info && !info.ok) missing.push(`${r}: ${info.name}`);
       }

@@ -19,10 +19,12 @@ export const THEME_LABELS: Record<string, string> = { light: 'Light', dark: 'Dar
 
 const prefersDark = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches;
 
-/** Which concrete token set to show: a choice, possibly 'system', resolved against the device and the bundle. */
-export function resolve(choice: string | undefined, b: ThemeBundle): { name: ThemeName; variant: 'light' | 'dark'; values: TokenValues } {
+/** Which concrete token set to show: a choice, possibly 'system', resolved against the device and the bundle.
+ *  `personal` means the person picked this theme themselves: an explicit Light or Dark is then kept as chosen, and
+ *  only the organisation's default (or 'Match device') follows the device. Custom switches versions either way. */
+export function resolve(choice: string | undefined, b: ThemeBundle, personal = false): { name: ThemeName; variant: 'light' | 'dark'; values: TokenValues } {
   let name = (choice || b.default || 'light') as string;
-  const follow = name === 'system' || (b.follow_system && name === (b.default || 'light') && name !== 'graphite');
+  const follow = name === 'system' || (!!b.follow_system && (name === 'custom' || (!personal && name === (b.default || 'light'))));
   let variant: 'light' | 'dark' = 'light';
   if (name === 'system') name = prefersDark() ? 'dark' : 'light';
   if (name === 'custom' && !b.custom) name = 'light';
@@ -50,10 +52,10 @@ export function writeTokens(el: HTMLElement, values: TokenValues, variant: 'ligh
   st.setProperty('--msg-w', b.message_width === 'narrow' ? '680px' : b.message_width === 'wide' ? '1040px' : '820px');
 }
 
-export function applyTheme(choice: string | undefined, b: ThemeBundle, density?: string) {
+export function applyTheme(choice: string | undefined, b: ThemeBundle, density?: string, personal = false) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const r = resolve(choice, b);
+  const r = resolve(choice, b, personal);
   writeTokens(root, r.values, r.variant, b);
   root.dataset.theme = r.name;
   root.dataset.variant = r.variant;

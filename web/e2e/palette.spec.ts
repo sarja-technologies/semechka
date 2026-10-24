@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './support/fixtures';
+import { test, expect, modelButton } from './support/fixtures';
 import { apiAs } from './support/api';
 import { shot } from './support/shots';
 
@@ -48,12 +48,11 @@ test('new chat, new no-save chat, switch model and find a conversation', async (
   await expect(page).toHaveURL(/\/chat$/);
 
   await open(page); await box(page).fill('new chat'); await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'What are you working on?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible();
 
   await open(page); await box(page).fill('Second Assistant');
   await results(page).getByRole('option', { name: 'Second Assistant' }).click();
-  await expect(page.getByLabel('Model', { exact: true })).toHaveValue(/.+/);
-  await expect(page.getByLabel('Model', { exact: true }).locator('option:checked')).toHaveText(/Second Assistant/);
+  await expect(modelButton(page)).toHaveAccessibleName('Model: Second Assistant');
 
   await open(page); await box(page).fill('walrus');
   await results(page).getByRole('option', { name: /palette findable walrus/ }).click();
@@ -64,12 +63,12 @@ test('new chat, new no-save chat, switch model and find a conversation', async (
 test('theme and density commands change and persist the preference', async ({ as }) => {
   const page = await as('member');
   await page.goto('/chat');
-  await open(page); await box(page).fill('theme carbon'); await page.keyboard.press('Enter');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'carbon');
+  await open(page); await box(page).fill('theme dark'); await page.keyboard.press('Enter');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'carbon');
-  await open(page); await box(page).fill('theme paper'); await page.keyboard.press('Enter');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await open(page); await box(page).fill('theme light'); await page.keyboard.press('Enter');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
 test('commands respect permissions: members never see administration, admins do, and sign-out works', async ({ as }) => {

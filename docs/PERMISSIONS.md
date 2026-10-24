@@ -67,6 +67,7 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.backup.manage` — Manage backups | yes | yes | – | – | – | – | – | – | – |
 | `admin.preview_role` — Preview the product as another role | yes | yes | yes | – | – | – | – | – | – |
 | `admin.sso.manage` — Configure single sign-on providers | yes | yes | – | – | – | – | – | – | – |
+| `admin.content.read` — Read other people's conversations | – | – | – | – | – | – | – | – | – |
 
 ## Technical-visibility presets (editable shortcuts)
 

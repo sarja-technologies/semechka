@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, VIEWPORTS, noHorizontalScroll } from './support/fixtures';
+import { test, expect, VIEWPORTS, noHorizontalScroll, modelButton } from './support/fixtures';
 import { shot } from './support/shots';
 
 const APP = ['/usage', '/help', '/account', '/unavailable/image'];
@@ -30,7 +30,7 @@ for (const v of VIEWPORTS) {
       const page = await as('member');
       await page.setViewportSize({ width: v.width, height: v.height });
       await page.goto('/chat');
-      await expect(page.getByRole('heading', { name: 'What are you working on?' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible();
       await noHorizontalScroll(page);
       expect(await stickingOut(page)).toEqual([]);
       await shot(page, `app-chat-empty-${v.name}`);
@@ -42,14 +42,7 @@ for (const v of VIEWPORTS) {
       expect(await stickingOut(page)).toEqual([]);
       await shot(page, `app-chat-reply-${v.name}`);
       // the model picker shows its whole label: nothing is cut off
-      const sel = page.getByLabel('Model', { exact: true });
-      const fits = await sel.evaluate((el: HTMLSelectElement) => {
-        const label = el.selectedOptions[0].textContent!.trim();
-        const c = document.createElement('canvas').getContext('2d')!;
-        c.font = getComputedStyle(el).font;
-        const pad = parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).paddingRight) + 24; // arrow
-        return { need: c.measureText(label).width + pad, have: el.clientWidth, label };
-      });
+      const fits = await modelButton(page).locator('.name').evaluate((el) => ({ need: el.scrollWidth, have: el.clientWidth, label: el.textContent!.trim() }));
       expect(fits.need, `model picker truncates "${fits.label}"`).toBeLessThanOrEqual(fits.have + 1);
       for (const r of APP) {
         await page.goto(r);

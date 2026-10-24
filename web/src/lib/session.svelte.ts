@@ -67,6 +67,8 @@ export function refreshTheme() {
   const t: ThemeBundle = app.me?.ui?.theme ?? app.publicTheme ?? {};
   const choice = app.me ? app.me.ui.theme.active : undefined;
   app.themePref = choice ?? t.default ?? 'light';
-  const r = applyTheme(choice, t, app.me?.user?.prefs?.density || app.me?.ui?.density || t.density);
+  // the server falls back to the default when the saved choice is no longer allowed, so only a match is personal
+  const personal = !!choice && choice === app.me?.user?.prefs?.theme;
+  const r = applyTheme(choice, t, app.me?.user?.prefs?.density || app.me?.ui?.density || t.density, personal);
   if (r) { app.themeName = r.name; app.themeVariant = r.variant; }
 }

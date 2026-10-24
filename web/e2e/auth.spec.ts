@@ -1,4 +1,4 @@
-import { test, expect, signIn } from './support/fixtures';
+import { test, expect, signIn, appReady, signOut } from './support/fixtures';
 import { apiAs, setSetting } from './support/api';
 import { PW, URLS, USERS } from './support/env';
 import { totp } from './support/totp';
@@ -26,10 +26,9 @@ test.describe('sign-in', () => {
     await signIn(page, USERS.member.email, USERS.member.password);
     await expect(page).toHaveURL(/\/chat/);
     await page.reload();
-    await expect(page.getByRole('navigation', { name: 'Modes' })).toBeVisible();
+    await appReady(page);
     const before = await context.cookies();
-    await page.getByRole('button', { name: new RegExp(USERS.member.name) }).click();
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await signOut(page);
     await expect(page).toHaveURL(/\/login/);
     await context.addCookies(before); // replay the stolen cookie
     expect((await page.request.get('/api/me')).status()).toBe(401);

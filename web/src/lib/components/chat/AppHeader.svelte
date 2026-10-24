@@ -77,7 +77,7 @@
     {#if pos === 'right'}{@render brand()}{/if}
     <button class="btn ghost icon sm" onclick={openPalette} aria-label="Search and commands" title="Search and commands (Ctrl+K)"><Icon name="search" size={17} /></button>
     <div class="acct">
-      <button bind:this={btn} class="av" onclick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Account: ${app.me?.user.display_name}`}>{initials}</button>
+      <button bind:this={btn} class="av" onclick={toggle} aria-haspopup="menu" aria-expanded={open} ><span aria-hidden="true">{initials}</span><span class="sr-only">Account: {app.me?.user.display_name}</span></button>
       {#if open}
         <div class="mscrim" role="presentation" onclick={() => close(false)}></div>
         <div class="amenu fade" role="menu" tabindex="-1" aria-label="Account" onkeydown={key}>

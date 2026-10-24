@@ -140,7 +140,7 @@ def main() -> int:
             "owner": {"email": owner_email, "password": creds[owner_email], "display_name": "Salted Owner"},
             "preset": "business",
             "settings": {"brand.org_name": "Salted Test Lab", "brand.app_name": "Semechka Salted", "brand.short_name": "Salted",
-                         "brand.tab_title": "Salted · Semechka test environment", "brand.theme_default": "carbon",
+                         "brand.tab_title": "Salted · Semechka test environment", "brand.theme_default": "dark",
                          "signup.mode": "invite"},
             "backend": {"adapter": "sarness", "base_url": a.engine_url, "api_key": engine_token},
             "backend_name": "Spark Sarness Engine", "enable_models": pick, "smoke_model": pick[0] if pick else None},

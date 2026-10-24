@@ -14,9 +14,42 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `brand.tab_title` | string | `Semechka` | deployment | specific | `admin.branding` |  |
 | `brand.logo_asset` | string | `` | deployment | specific | `admin.branding` |  |
 | `brand.favicon_asset` | string | `` | deployment | specific | `admin.branding` |  |
-| `brand.theme_default` | enum | `paper` | deployment, user | specific | `admin.branding` |  |
-| `brand.accent_light` | color | `#087771` | deployment | specific | `admin.branding` |  |
-| `brand.accent_dark` | color | `#64BEB5` | deployment | specific | `admin.branding` |  |
+
+## Theme & Layout
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `brand.theme_default` | enum | `light` | deployment, role, team | specific | `admin.branding` |  |
+| `theme.follow_system` | bool | `True` | deployment | specific | `admin.branding` |  |
+| `theme.user_choice` | bool | `True` | deployment | specific | `admin.branding` |  |
+| `theme.custom` | json | *(computed)* | deployment | specific | `admin.branding` |  |
+| `theme.draft` | json | *(computed)* | deployment | specific | `admin.branding` |  |
+| `theme.font` | enum | `plex` | deployment | specific | `admin.branding` |  |
+| `theme.font_size` | int | `14` | deployment | specific | `admin.branding` |  |
+| `theme.custom_css` | text | `` | deployment | specific | `admin.branding` |  |
+| `layout.user_align` | enum | `right` | deployment | specific | `admin.branding` |  |
+| `layout.message_width` | enum | `normal` | deployment | specific | `admin.branding` |  |
+| `layout.sidebar_width` | int | `272` | deployment | specific | `admin.branding` |  |
+
+## Identity & Branding
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `brand.header_position` | enum | `left` | deployment | specific | `admin.branding` |  |
+| `brand.header_content` | enum | `both` | deployment | specific | `admin.branding` |  |
+| `brand.header_text` | string | `` | deployment | specific | `admin.branding` |  |
+| `brand.logo_dark_asset` | string | `` | deployment | specific | `admin.branding` |  |
+| `brand.logo_height` | int | `24` | deployment | specific | `admin.branding` |  |
+| `brand.header_height` | int | `52` | deployment | specific | `admin.branding` |  |
+| `brand.header_padding` | int | `16` | deployment | specific | `admin.branding` |  |
+| `brand.logo_gap` | int | `8` | deployment | specific | `admin.branding` |  |
+| `brand.header_text_size` | int | `15` | deployment | specific | `admin.branding` |  |
+| `brand.header_text_weight` | enum | `600` | deployment | specific | `admin.branding` |  |
+| `brand.sidebar_brand` | bool | `False` | deployment | specific | `admin.branding` |  |
+| `brand.login_title` | string | `` | deployment | specific | `admin.branding` |  |
+| `brand.login_logo` | bool | `True` | deployment | specific | `admin.branding` |  |
+| `brand.welcome_title` | string | `` | deployment, role, team | specific | `admin.branding` |  |
+| `brand.welcome_text` | text | `` | deployment, role, team | specific | `admin.branding` |  |
 | `brand.radius` | int | `8` | deployment | specific | `admin.branding` |  |
 | `brand.density` | enum | `comfortable` | deployment, role, user | specific | `admin.branding` |  |
 | `brand.footer_text` | text | `` | deployment | specific | `admin.branding` |  |
@@ -69,8 +102,8 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `auth.password_min_length` | int | `12` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
 | `auth.session_hours` | int | `168` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
 | `auth.idle_minutes` | int | `0` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
-| `auth.mfa_required_admins` | bool | `False` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
-| `auth.mfa_required_all` | bool | `False` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
+| `auth.mfa_policy` | enum | `optional` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation · People who must use MFA and have not set it up can only reach their account page until they do. Single sign-on accounts follow their identity provider's MFA. |
+| `auth.mfa_roles` | list | `[]` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
 | `auth.allow_user_delete` | bool | `True` | deployment | specific | `admin.signup.edit` |  |
 | `sso.local_login` | bool | `True` | deployment | specific | `admin.sso.manage` | Turning this off sends everyone except owners to the identity provider. |
 
@@ -144,4 +177,50 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `knowledge.top_k` | int | `5` | deployment, role, team | min | `admin.settings.edit` |  |
 | `knowledge.context_chars` | int | `6000` | deployment, role, team | min | `admin.settings.edit` |  |
 | `code.system_prompt` | text | `You are a careful programming assistant. Prefer correct, re | deployment | specific | `admin.settings.edit` |  |
+
+## Interface
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `ui.sidebar` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.search` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.folders` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.pinning` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.history_grouping` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.model_chooser` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.model_names` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.model_meta` | bool | `False` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.quantization` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.context_size` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.gen_params` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.tool_indicators` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.image_gen` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.video_gen` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.file_upload` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.retention_notice` | bool | `False` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.help_links` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.org_branding` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.mode_selector` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.technical_drawer` | bool | `True` | deployment, role, team | specific | `admin.navigation` |  |
+| `ui.retention_notice_place` | enum | `composer` | deployment, role, team | specific | `admin.navigation` |  |
+
+## Layout & Navigation
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `models.default.chat` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
+| `models.default.vision` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
+| `models.default.code` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
+| `models.default.image` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
+| `models.default.video` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
+| `models.provider_icons` | json | `{}` | deployment | specific | `admin.models.manage` |  |
+
+## Privacy & Retention
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `privacy.user_delete_conversations` | bool | `True` | deployment, role, team | false_wins | `admin.policy.edit` |  |
+| `privacy.admin_content_access` | enum | `off` | deployment | specific | `admin.policy.edit` | weakening changes need confirmation · Changes what the 'How is this chat protected?' panel tells everyone. |
+| `privacy.audit_retention_days` | int | `-1` | deployment | specific | `admin.policy.edit` |  |
+| `privacy.attachment_max_mb` | int | `10` | deployment, role, team | min | `admin.policy.edit` |  |
 

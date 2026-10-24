@@ -69,7 +69,7 @@
           <div class="grow"><div class="label">{im.label}</div><span class="hint">{im.hint}</span>
             {#if b[im.f] && dims[im.f]}<span class="hint mono dims">Current file: {dims[im.f]}</span>{/if}</div>
           {#if b[im.f]}
-            <span class="thumbs" aria-label={`Current ${im.label.toLowerCase()}`}>
+            <span class="thumbs" role="img" aria-label={`Current ${im.label.toLowerCase()}`}>
               <span class="th lt"><img src={`/api/assets/${b[im.f]}`} alt="" onload={(e) => measured(im.f, e)} /></span>
               <span class="th dk"><img src={`/api/assets/${b[im.f]}`} alt="" /></span>
             </span>

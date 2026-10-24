@@ -16,7 +16,10 @@
     const words = q.toLowerCase().split(/[\s:]+/).filter(Boolean);
     if (!words.length) return base.filter((c) => c.group === 'Go to' || c.group === 'Actions').slice(0, 14);
     // every typed word must appear somewhere in the group, label or keywords, in any order ("theme carbon")
-    return base.filter((c) => { const hay = `${c.group} ${c.label} ${c.keywords ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
+    // ...ranked by how many of them are in the label itself, so "theme dark" puts Theme: Dark first (stable on ties)
+    return base.filter((c) => { const hay = `${c.group} ${c.label} ${c.keywords ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); })
+      .map((c, i) => ({ c, i, s: words.filter((w) => c.label.toLowerCase().includes(w)).length }))
+      .sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.c);
   });
   const results = $derived([...local, ...remote.filter((r) => !local.some((l) => l.id === r.id))].slice(0, 24));
 

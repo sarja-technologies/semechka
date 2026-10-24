@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { test, expect } from './support/fixtures';
+import { test, expect, modelOptions, chooseModel } from './support/fixtures';
 import { apiAs } from './support/api';
 import { BACKEND, PY } from './support/env';
 
@@ -32,8 +32,8 @@ test('a backend that goes away produces a clear, recoverable error, and chat res
 
   const page = await as('member');
   await page.goto('/chat');
-  await expect(page.getByLabel('Model', { exact: true }).locator('option', { hasText: 'Outage Model' })).toHaveCount(1);
-  await page.getByLabel('Model', { exact: true }).selectOption({ label: 'Outage Model' });
+  await expect.poll(() => modelOptions(page)).toContain('Outage Model');
+  await chooseModel(page, 'Outage Model');
   await page.getByLabel('Message', { exact: true }).fill('before the outage');
   await page.getByRole('button', { name: /^Send/ }).click();
   await expect(page.locator('article.msg.assistant').last()).toContainText('Hello from the fake model');

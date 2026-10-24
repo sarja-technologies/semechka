@@ -1,56 +1,51 @@
 #!/usr/bin/env python3
-"""Computes WCAG contrast ratios for every foreground/background token pair in web/src/app.css, per theme.
-Exit status 1 if any text pair is below 4.5:1 (or a UI-boundary pair below 3:1). Used by CI and by docs/DESIGN_REVIEW.md."""
-import re
+"""Computes WCAG contrast ratios for every pair listed in web/src/lib/theme/tokens.json, for each maintained theme
+(Light, Dark, Graphite). These are the same pairs the theme editor checks before a Custom theme can be published.
+Exit status 1 if any pair is below its minimum (4.5:1 for text, 3:1 for UI boundaries). Used by CI and by
+docs/DESIGN_REVIEW.md."""
+import json
 import sys
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parents[1] / "web/src/app.css"
+TOKENS = Path(__file__).resolve().parents[1] / "web/src/lib/theme/tokens.json"
 
 
-def lum(hexcolor: str) -> float:
+def rgba(hexcolor: str) -> tuple[float, float, float, float]:
     h = hexcolor.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4  # noqa: E731
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return r, g, b, (int(h[6:8], 16) / 255 if len(h) == 8 else 1.0)
+
+
+def over(top, under):
+    a = top[3]
+    return tuple(top[i] * a + under[i] * (1 - a) for i in range(3)) + (1.0,)
+
+
+def lum(c) -> float:
+    f = lambda v: v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4  # noqa: E731
+    r, g, b = (v / 255 for v in c[:3])
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
 
 
-def ratio(a: str, b: str) -> float:
-    la, lb = lum(a), lum(b)
-    hi, lo = max(la, lb), min(la, lb)
+def ratio(fg: str, bg: str, base: str) -> float:
+    # translucent colours are composited the way the browser paints them: background over the page, text over that
+    b = over(rgba(bg), over(rgba(base), (255, 255, 255, 1.0)))
+    f = over(rgba(fg), b)
+    hi, lo = max(lum(f), lum(b)), min(lum(f), lum(b))
     return (hi + 0.05) / (lo + 0.05)
 
 
-def themes():
-    css = CSS.read_text()
-    out = {}
-    for name, sel in (("paper", r":root, :root\[data-theme='paper'\]"), ("carbon", r":root\[data-theme='carbon'\]"), ("graphite", r":root\[data-theme='graphite'\]")):
-        block = re.search(sel + r"\s*\{(.*?)\}", css, re.S).group(1)
-        out[name] = dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", block))
-    return out
-
-
-TEXT_PAIRS = [("fg", "bg"), ("fg", "surface"), ("fg", "surface-2"), ("fg-muted", "bg"), ("fg-muted", "surface"), ("fg-muted", "surface-2"),
-              ("accent", "bg"), ("accent", "surface"), ("accent", "surface-2"), ("accent", "accent-soft"), ("accent-fg", "accent"),
-              ("danger", "surface"), ("danger", "bg"), ("danger", "surface-2"), ("success", "surface-2"), ("warn", "surface-2"), ("info", "surface-2"), ("danger", "danger-soft"), ("success", "surface"), ("success", "success-soft"),
-              ("warn", "surface"), ("warn", "warn-soft"), ("info", "surface"), ("info", "info-soft"), ("fg", "accent-soft")]
-UI_PAIRS = [("border-strong", "surface"), ("border-strong", "bg"), ("accent", "surface")]
-
-
 def main() -> int:
+    spec = json.loads(TOKENS.read_text())
     bad = 0
-    for theme, t in themes().items():
-        print(f"\n{theme}")
-        for fg, bg in TEXT_PAIRS:
-            r = ratio(t[fg], t[bg])
-            flag = "" if r >= 4.5 else "  <-- below 4.5:1"
-            bad += r < 4.5
-            print(f"  {fg:14} on {bg:12} {r:5.2f}{flag}")
-        for fg, bg in UI_PAIRS:
-            r = ratio(t[fg], t[bg])
-            flag = "" if r >= 3 else "  <-- below 3:1 (UI boundary)"
-            bad += r < 3
-            print(f"  [ui] {fg:9} on {bg:12} {r:5.2f}{flag}")
+    for name, preset in spec["presets"].items():
+        t = preset["values"]
+        print(f"\n{preset['label']} ({name})")
+        for p in spec["contrast"]:
+            r = ratio(t[p["fg"]], t[p["bg"]], t["bg"])
+            low = r + 1e-9 < p["min"]
+            bad += low
+            print(f"  {p['fg']:16} on {p['bg']:16} {r:5.2f}  (min {p['min']}){'  <-- too low' if low else ''}  {p['label']}")
     print(f"\n{bad} failing pair(s)")
     return 1 if bad else 0
 

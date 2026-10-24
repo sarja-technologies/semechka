@@ -14,8 +14,9 @@
     'brand.org_name': '', 'brand.app_name': '', 'brand.short_name': '', 'brand.tab_title': '', 'brand.theme_default': 'light',
     'privacy.mode': 'standard', 'privacy.chat_retention_days': 30, 'privacy.ephemeral_allowed': true, 'privacy.external_egress': false, 'privacy.notice': '',
     'quota.daily_messages': 0, 'chat.attachments': true,
-    'access.exposure': 'loopback', 'signup.mode': 'invite', 'signup.require_approval': true, 'signup.allowed_domains': [], 'auth.mfa_required_admins': false
+    'access.exposure': 'loopback', 'signup.mode': 'invite', 'signup.require_approval': true, 'signup.allowed_domains': [], 'auth.mfa_policy': 'optional'
   });
+  const MFA: Record<string, string> = { optional: 'Optional for everyone', admins: 'Required for administrators', everyone: 'Required for everyone', off: 'Not offered' };
   let domainsText = $state('');
   let be = $state({ on: true, adapter: 'openai_compat', base_url: '', api_key: '', external: false, hint_id: '', name: 'Primary backend' });
   let probe = $state<any>(null), enable = $state<string[]>([]), smoke = $state('');
@@ -189,8 +190,9 @@
     {#if v['signup.mode'] === 'domain'}<div class="field"><label for="dd">Approved domains (comma separated)</label><input id="dd" class="input mono" bind:value={domainsText} placeholder="example.org, lab.example" /></div>{/if}
     {#if v['signup.mode'] === 'public'}<div class="notice warn"><div class="small">Public registration exposes this service to strangers. Keep admin approval on and daily limits low.</div></div>{/if}
     {#if v['signup.mode'] === 'public' || v['signup.mode'] === 'domain'}<label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['signup.require_approval']} /> New accounts need administrator approval</label>{/if}
-    <label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['auth.mfa_required_admins']} /> Require multi-factor authentication for administrators</label>
-    {#if v['auth.mfa_required_admins']}<div class="notice info"><div class="small">You will be asked to set up an authenticator app straight after launch, before using administration.</div></div>{/if}
+    <div class="field"><label for="mfa">Multi-factor authentication</label><select id="mfa" class="input" bind:value={v['auth.mfa_policy']}>{#each Object.entries(MFA) as [k, l] (k)}<option value={k}>{l}</option>{/each}</select>
+      <span class="hint">An authenticator app plus one-time recovery codes. You can require it for chosen roles later.</span></div>
+    {#if v['auth.mfa_policy'] === 'admins' || v['auth.mfa_policy'] === 'everyone'}<div class="notice info"><div class="small">You will be asked to set up an authenticator app straight after launch, before using administration.</div></div>{/if}
     <p class="hint">Email verification and password-reset emails need SMTP, which you can configure after launch.</p>
     <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next}>Review</button></div>
 
@@ -205,7 +207,7 @@
       <tr><th scope="row">History</th><td>{retentionOpts.find((o) => o[0] === v['privacy.chat_retention_days'])?.[1]}</td></tr>
       <tr><th scope="row">Exposure</th><td>{v['access.exposure'] === 'lan' ? 'Network (after restart)' : 'This machine only'}</td></tr>
       <tr><th scope="row">Sign-up</th><td>{v['signup.mode']}{v['signup.require_approval'] && ['public', 'domain'].includes(v['signup.mode']) ? ', with approval' : ''}</td></tr>
-      <tr><th scope="row">MFA for admins</th><td>{v['auth.mfa_required_admins'] ? 'Required' : 'Not required'}</td></tr>
+      <tr><th scope="row">Multi-factor authentication</th><td>{MFA[v['auth.mfa_policy']]}</td></tr>
     </tbody></table></div>
     <div class="row" style="margin-top:16px"><button class="btn" onclick={back} disabled={busy}>Back</button><button class="btn primary" onclick={launch} disabled={busy}>{busy ? 'Launching…' : 'Launch'}</button></div>
 

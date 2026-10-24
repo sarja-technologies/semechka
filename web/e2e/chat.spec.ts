@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './support/fixtures';
+import { test, expect, modelOptions, chooseModel, modelButton } from './support/fixtures';
 import { apiAs } from './support/api';
 import { shot } from './support/shots';
 
@@ -15,7 +15,7 @@ test.describe('chat', () => {
   test('a message streams back from the model and the conversation is saved and listed', async ({ as }) => {
     const page = await as('member');
     await page.goto('/chat');
-    await expect(page.getByRole('heading', { name: 'What are you working on?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible();
     await send(page, 'Say hello to the harbour');
     await expect(lastReply(page)).toContainText('Hello from the fake model');
     await expect(page).toHaveURL(/\/chat\/[\w-]+$/);
@@ -67,7 +67,7 @@ test.describe('chat', () => {
     // edit the user message: a new branch with a new reply
     await page.locator('article.msg.user').first().getByRole('button', { name: /Edit/ }).click();
     await page.getByLabel('Edit message').fill('branching test question, edited');
-    await page.getByRole('button', { name: 'Save and regenerate' }).click();
+    await page.locator('article.msg.user').first().getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('article.msg.user').first()).toContainText('edited');
     await expect(page.locator('article.msg.user').first().getByText('2/2')).toBeVisible();
     await page.locator('article.msg.user').first().getByRole('button', { name: 'Previous version' }).click();
@@ -86,17 +86,22 @@ test.describe('chat', () => {
     await expect(page.getByText('No conversation matches that search.')).toBeVisible();
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('');
 
+    // export, rename and delete live in the conversation's menu in the sidebar
+    const actions = (t: string) => page.getByRole('button', { name: `Actions for ${t}` });
     const dl = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Export as Markdown' }).click();
+    await actions('zebra crossing research notes').click();
+    await page.getByRole('menuitem', { name: 'Export as Markdown' }).click();
     expect((await dl).suggestedFilename()).toMatch(/\.md$/);
 
-    await page.getByRole('button', { name: 'Rename', exact: true }).click();
-    await page.getByLabel('Title').fill('Zebra notes renamed');
-    await page.getByRole('button', { name: 'Rename', exact: true }).last().click();
-    await expect(page.getByRole('heading', { name: 'Zebra notes renamed' })).toBeVisible();
+    await actions('zebra crossing research notes').click();
+    await page.getByRole('menuitem', { name: 'Rename' }).click();
+    await page.getByLabel('Conversation name').fill('Zebra notes renamed');
+    await page.getByLabel('Conversation name').press('Enter');
+    await expect(page.getByRole('link', { name: 'Zebra notes renamed' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Delete conversation' }).click();
-    await page.getByRole('button', { name: 'Delete conversation' }).last().click();
+    await actions('Zebra notes renamed').click();
+    await page.getByRole('menuitem', { name: /^Delete/ }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete conversation' }).click();
     await expect(page.getByRole('link', { name: 'Zebra notes renamed' })).toHaveCount(0);
   });
 
@@ -105,13 +110,13 @@ test.describe('chat', () => {
     const api = await apiAs('member');
     const before = (await (await api.get('/api/chat/conversations')).json()).length;
     await page.goto('/chat');
-    await page.getByRole('checkbox', { name: 'No-save' }).check();
+    await page.getByRole('checkbox', { name: "Don't save this conversation" }).check();
     await expect(page.getByRole('heading', { name: 'This conversation will not be saved' })).toBeVisible();
     await send(page, 'a secret that must not persist');
     await expect(lastReply(page)).toContainText('Hello from the fake model');
-    await expect(page.getByRole('button', { name: /Not saved/ })).toBeVisible();
+    await expect(page.locator('.chip', { hasText: 'Not saved' })).toBeVisible();
     await expect(page).toHaveURL(/\/chat$/);
-    await page.getByRole('button', { name: /Not saved/ }).click();
+    await page.getByRole('button', { name: 'How is this handled?' }).click();
     await expect(page.getByRole('dialog')).toContainText(/not (be )?(saved|stored)|nothing/i);
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     expect((await (await api.get('/api/chat/conversations')).json()).length).toBe(before);
@@ -123,12 +128,14 @@ test.describe('chat', () => {
   test('the model picker switches the model that answers', async ({ as }) => {
     const page = await as('member');
     await page.goto('/chat');
-    await expect(page.getByLabel('Model', { exact: true }).locator('option')).toHaveCount(2);
-    const opts = await page.getByLabel('Model', { exact: true }).locator('option').allInnerTexts();
-    await page.getByLabel('Model', { exact: true }).selectOption({ index: 1 });
+    await expect.poll(() => modelOptions(page)).toHaveLength(2);
+    const opts = await modelOptions(page);
+    const current = (await modelButton(page).locator('.name').innerText()).trim();
+    const other = opts.find((o) => o !== current)!;
+    await chooseModel(page, other);
     await send(page, 'which model is this');
     await expect(lastReply(page)).toContainText('Hello');
-    await expect(lastReply(page).locator('.who')).toContainText(opts[1].replace(/ \(.*/, ''));
+    await expect(lastReply(page).locator('.who')).toContainText(other);
   });
 });
 
@@ -136,7 +143,7 @@ test.describe('technical visibility', () => {
   test('an ordinary member sees no technical affordance, in the UI or in raw API responses', async ({ as }) => {
     const page = await as('member');
     await page.goto('/chat');
-    await expect(page.getByRole('button', { name: 'Technical details' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(Details|Hide details|Technical details)$/ })).toHaveCount(0);
     await send(page, 'tech check');
     await expect(lastReply(page)).toContainText('Hello');
     const api = await apiAs('member');
@@ -152,13 +159,14 @@ test.describe('technical visibility', () => {
   test('a person granted technical fields sees exactly those, read-only', async ({ as }) => {
     const page = await as('tech');
     await page.goto('/chat');
-    await page.getByRole('button', { name: 'Technical details' }).click();
+    await page.getByRole('button', { name: 'Details', exact: true }).click();
     await send(page, 'tech details please');
     await expect(lastReply(page)).toContainText('Hello');
     const drawer = page.getByRole('complementary', { name: 'Technical details' });
     await expect(drawer).toBeVisible();
     await expect(drawer).toContainText(/tokens|speed|Model ID/i);
-    await expect(drawer.getByRole('button')).toHaveCount(0); // reading is not operating
+    // reading is not operating: the only control in the drawer closes it
+    expect(await drawer.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))).toEqual(['Close technical details']);
     await shot(page, 'chat-technical-1280');
     const api = await apiAs('tech');
     expect((await api.post('/api/admin/models/x/unload')).status()).toBe(403);

@@ -22,7 +22,7 @@
         <div class="pu" class:left={!right}><span>What is the capital of France?</span></div>
         <div class="pa">
           <span class="pwho"><span class="pmark">Qw</span> Model</span>
-          <p>The capital of France is <strong>Paris</strong>. It has been the capital since <code>987</code> and sits on the Seine. <a href="#preview" tabindex="-1" onclick={(e) => e.preventDefault()}>Read more</a></p>
+          <p>The capital of France is <strong>Paris</strong>. It has been the capital since <code>987</code> and sits on the Seine. <span class="plink">Read more</span></p>
           <div class="pcard"><span class="pchip ok">Complete</span><span class="pchip warn">Stopped</span><span class="pchip bad">Failed</span><span class="pchip info">Queued</span></div>
         </div>
       </div>
@@ -54,7 +54,7 @@
   .pa { background: var(--assistant-msg-bg); font-size: 13px; }
   .pa p { margin: 4px 0 8px; }
   .pa code { font-family: var(--mono); background: var(--bg-2); padding: 1px 4px; border-radius: 4px; font-size: 12px; }
-  .pa a { color: var(--link); }
+  .pa .plink { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
   .pwho { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; }
   .pmark { width: 16px; height: 16px; border-radius: 4px; background: #3D5A80; color: #fff; font-size: 8px; display: grid; place-items: center; }
   .pcard { display: flex; flex-wrap: wrap; gap: 4px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; }

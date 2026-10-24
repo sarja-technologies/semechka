@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { app } from '$lib/session.svelte';
-  import { get, post, patch, del, qs } from '$lib/api';
+  import { get, post, patch, del, qs, ApiError } from '$lib/api';
   import { toast } from '$lib/toast.svelte';
   import { list, loadList, loadFolders, dateGroups, drop, upsert, type ConvRow } from '$lib/chat/store.svelte';
   import { errText } from '$lib/chat/thread.svelte';
@@ -115,10 +115,13 @@
   }
 
   // ---- width -------------------------------------------------------------------------------------------------
+  // the current width, for the separator's value (read once the page has its saved or default width)
+  let width = $state(272);
+  onMount(() => { const r = getComputedStyle(document.documentElement); width = parseInt(r.getPropertyValue('--sidebar-user-w') || r.getPropertyValue('--sidebar-w')) || 272; });
   function startResize(e: PointerEvent) {
     const el = (e.currentTarget as HTMLElement); el.setPointerCapture(e.pointerId);
     const root = document.documentElement;
-    const move = (ev: PointerEvent) => { const w = Math.max(220, Math.min(420, ev.clientX)); root.style.setProperty('--sidebar-user-w', `${w}px`); };
+    const move = (ev: PointerEvent) => { const w = Math.max(220, Math.min(420, ev.clientX)); root.style.setProperty('--sidebar-user-w', `${w}px`); width = w; };
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
       try { localStorage.setItem('sem.sidebar.w', getComputedStyle(root).getPropertyValue('--sidebar-user-w').trim()); } catch { /* storage unavailable */ }
@@ -130,11 +133,20 @@
     e.preventDefault();
     const root = document.documentElement, cur = parseInt(getComputedStyle(root).getPropertyValue('--sidebar-user-w') || getComputedStyle(root).getPropertyValue('--sidebar-w')) || 272;
     const w = Math.max(220, Math.min(420, cur + (e.key === 'ArrowRight' ? 16 : -16)));
-    root.style.setProperty('--sidebar-user-w', `${w}px`);
+    root.style.setProperty('--sidebar-user-w', `${w}px`); width = w;
     try { localStorage.setItem('sem.sidebar.w', `${w}px`); } catch { /* storage unavailable */ }
   }
   const retention = $derived(ui.retention?.show && ui.retention.place === 'sidebar' ? ui.retention.text : '');
   const close = () => (list.sidebarOpen = false);
+  async function exportMd(c: ConvRow) {
+    menu = null;
+    try {
+      const r = await fetch(`/api/chat/conversations/${c.id}/export?format=md`, { credentials: 'same-origin' });
+      if (!r.ok) throw new ApiError(r.status, (await r.json().catch(() => ({}))).detail);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob());
+      a.download = `${(c.title || '').replace(/[^\w.-]+/g, '_').slice(0, 50) || 'conversation'}.md`; a.click(); URL.revokeObjectURL(a.href);
+    } catch (e) { toast(errText(e), 'bad'); }
+  }
 </script>
 
 {#snippet item(c: ConvRow)}
@@ -160,7 +172,7 @@
   </div>
   <button class="btn new" onclick={() => { close(); onnew(); }} aria-keyshortcuts="Control+Shift+O"><Icon name="edit" size={16} /> New conversation</button>
   {#if f.search !== false}
-    <div class="search"><Icon name="search" size={15} />
+    <div class="search" data-focus-ring><Icon name="search" size={15} />
       <label class="sr-only" for="side-q">Search conversations</label>
       <input id="side-q" data-search type="search" placeholder="Search" bind:value={list.q} oninput={onSearch} />
     </div>
@@ -220,26 +232,28 @@
   {/if}
   <!-- a focusable splitter (WAI-ARIA window splitter): arrow keys resize it -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-  <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" aria-valuemin="220" aria-valuemax="420" tabindex="0" onpointerdown={startResize} onkeydown={resizeKey}></div>
+  <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" aria-valuemin={220} aria-valuemax={420} aria-valuenow={width} aria-valuetext={`${width} pixels wide`} tabindex="0" onpointerdown={startResize} onkeydown={resizeKey}></div>
 </aside>
 {#if list.sidebarOpen}<div class="scrim" role="presentation" onclick={close}></div>{/if}
 
 {#if menu}
-  {@const c = menu.kind === 'conv' ? find(menu.id) : null}
-  {@const fd = menu.kind === 'folder' ? list.folders.find((x) => x.id === menu?.id) : null}
+  <!-- c and fd are derived from menu, which the handlers close: each handler copies what it needs first -->
+  {@const c = menu?.kind === 'conv' ? find(menu.id) : null}
+  {@const fd = menu?.kind === 'folder' ? list.folders.find((x) => x.id === menu?.id) : null}
   <div class="mscrim" role="presentation" onclick={() => (menu = null)}></div>
   <div class="cmenu fade" role="menu" tabindex="-1" style:left="{menu.x}px" style:top="{menu.y}px" onkeydown={menuKey}>
     {#if c}
-      <button role="menuitem" onclick={() => { menu = null; renaming = { id: c.id, title: c.title }; }}><Icon name="edit" size={15} /> Rename</button>
+      <button role="menuitem" onclick={() => { const x = c; menu = null; renaming = { id: x.id, title: x.title }; }}><Icon name="edit" size={15} /> Rename</button>
       {#if f.pinning}<button role="menuitem" onclick={() => change(c.id, { pinned: !c.pinned })}><Icon name="pin" size={15} /> {c.pinned ? 'Unpin' : 'Pin to top'}</button>{/if}
       {#if f.folders}
         {#each list.folders.filter((x) => x.id !== c.folder_id) as x (x.id)}<button role="menuitem" onclick={() => change(c.id, { folder_id: x.id }, `Moved to ${x.name}`)}><Icon name="folder" size={15} /> Move to {x.name}</button>{/each}
         {#if c.folder_id}<button role="menuitem" onclick={() => change(c.id, { folder_id: '' })}><Icon name="folder" size={15} /> Remove from folder</button>{/if}
       {/if}
-      <button role="menuitem" onclick={() => change(c.id, { archived: !c.archived }, c.archived ? 'Restored' : 'Archived').then(() => drop(c.id))}><Icon name="history" size={15} /> {c.archived ? 'Restore from archive' : 'Archive'}</button>
-      {#if ui.composer.delete}<hr /><button role="menuitem" class="danger" onclick={() => { menu = null; confirmDel = c; }}><Icon name="trash" size={15} /> Delete…</button>{/if}
+      {#if ui.composer.export}<button role="menuitem" onclick={() => exportMd(c)}><Icon name="download" size={15} /> Export as Markdown</button>{/if}
+      <button role="menuitem" onclick={() => { const x = c; change(x.id, { archived: !x.archived }, x.archived ? 'Restored' : 'Archived').then(() => drop(x.id)); }}><Icon name="history" size={15} /> {c.archived ? 'Restore from archive' : 'Archive'}</button>
+      {#if ui.composer.delete}<hr /><button role="menuitem" class="danger" onclick={() => { const x = c; menu = null; confirmDel = x; }}><Icon name="trash" size={15} /> Delete…</button>{/if}
     {:else if fd}
-      <button role="menuitem" onclick={() => { menu = null; renamingFolder = { id: fd.id, name: fd.name }; }}><Icon name="edit" size={15} /> Rename folder</button>
+      <button role="menuitem" onclick={() => { const x = fd; menu = null; renamingFolder = { id: x.id, name: x.name }; }}><Icon name="edit" size={15} /> Rename folder</button>
       <button role="menuitem" class="danger" onclick={() => deleteFolder(fd.id)}><Icon name="trash" size={15} /> Remove folder (keeps its conversations)</button>
     {/if}
   </div>
@@ -258,7 +272,7 @@
   .only-sheet { display: none; }
   .new { justify-content: flex-start; width: 100%; background: transparent; border-color: var(--border-strong); }
   .search { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 34px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); color: var(--fg-muted); }
-  .search:focus-within { border-color: var(--fg-muted); }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .search input { all: unset; flex: 1; min-width: 0; color: var(--fg); font-size: 14px; }
   .lists { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px; overscroll-behavior: contain; }
   ul { list-style: none; margin: 0; padding: 0; }
@@ -290,7 +304,8 @@
   .pg { display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: 34px; color: var(--fg); text-decoration: none; border-radius: var(--radius-sm); font-size: 14px; }
   .pg:hover { background: var(--hover); } .pg.on { background: var(--selected); font-weight: 600; }
   .grip { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 2; }
-  .grip:hover, .grip:focus-visible { background: var(--border-strong); outline: none; }
+  .grip:hover { background: var(--border-strong); }
+  .grip:focus-visible { background: var(--accent); outline: 2px solid var(--accent); outline-offset: 0; }
   .mscrim { position: fixed; inset: 0; z-index: 70; }
   .cmenu { position: fixed; z-index: 71; min-width: 200px; max-width: 260px; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 4px; }
   .cmenu button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 0 10px; min-height: 34px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; color: var(--fg); }
