@@ -45,7 +45,12 @@ async function main() {
   await page.goto(BASE + '/login');
   const login = await page.evaluate(async ([e, p]) => (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: e, password: p }) })).status, [EMAIL, PASSWORD]);
   if (login !== 200) throw new Error('sign-in failed: ' + login);
-  const expected = await page.evaluate(async (c) => { const j = await (await fetch('/api/chat/conversations/' + c)).json(); return j.messages.length; }, CONV);
+  // the visible branch: 0.3.0 reports its length (and renders a slice of it); 0.2.0 renders every message it returns
+  const expected = await page.evaluate(async (c) => {
+    const t = await fetch(`/api/chat/conversations/${c}/thread?limit=1`);
+    if (t.ok) return (await t.json()).total;
+    const j = await (await fetch('/api/chat/conversations/' + c)).json(); return j.messages.length;
+  }, CONV);
 
   const out = { label, cpu_throttle: THROTTLE, open_long: [], stream: [] };
   for (let i = 0; i < RUNS; i++) {
@@ -54,11 +59,11 @@ async function main() {
     const t0 = Date.now();
     await page.goto(`${BASE}/chat/${CONV}`);
     // every message on the active path is in the DOM, or (virtualised UIs) the last one is visible and the count is reported
-    await page.waitForFunction((n) => {
+    await page.waitForFunction(([n, total]) => {
       const a = document.querySelectorAll('article[data-msg], article.msg');
       const sc = document.querySelector('[data-chat-scroll]');
-      return a.length >= n || (sc && sc.getAttribute('data-total') === String(n) && a.length > 0);
-    }, Math.min(expected, 200), { timeout: 30000 });
+      return a.length >= n || (sc && sc.getAttribute('data-total') === String(total) && a.length > 0);
+    }, [Math.min(expected, 200), expected], { timeout: 30000 });
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const ms = Date.now() - t0;
     const p = await page.evaluate(() => ({ long: window.__perf.long, nodes: document.querySelectorAll('*').length, articles: document.querySelectorAll('article').length }));

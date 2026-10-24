@@ -149,11 +149,18 @@ export function mix(a: string, b: string, t: number): string {
   return toHex([0, 1, 2].map((i) => A[i] + (B[i] - A[i]) * t).concat(1) as [number, number, number, number]);
 }
 
+/** Which maintained theme a Custom version was started from: Graphite shares the dark scheme, and its background
+ *  (never derived) tells them apart. */
+export function sourceOf(variant: 'light' | 'dark', current: TokenValues): 'light' | 'dark' | 'graphite' {
+  return variant === 'dark' && current.bg?.toUpperCase() === PRESETS.graphite.values.bg.toUpperCase() ? 'graphite' : variant;
+}
+
 /** Re-derive every token that the administrator has not overridden from Colour 1, Colour 2 and Accent, keeping the
  *  preset's light/dark structure. Text colours are not derived (they would put contrast at risk); they keep the preset. */
-export function derive(variant: 'light' | 'dark', base: { brand: string; 'brand-2': string; accent: string }, overrides: string[], current: TokenValues): TokenValues {
-  const p = PRESETS[variant].values;
-  const bg = p.bg;
+export function derive(variant: 'light' | 'dark', base: { brand: string; 'brand-2': string; accent: string }, overrides: string[], current: TokenValues,
+  from: 'light' | 'dark' | 'graphite' = sourceOf(variant, current)): TokenValues {
+  const p = PRESETS[from].values;
+  const bg = current.bg ?? p.bg;
   const d: TokenValues = {
     brand: base.brand, 'brand-2': base['brand-2'], accent: base.accent, link: base.accent,
     'btn-primary-bg': base.brand,

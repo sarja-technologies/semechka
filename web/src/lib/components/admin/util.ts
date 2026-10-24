@@ -6,6 +6,7 @@ export const fmtParams = (n?: number | null) => (n == null ? '—' : n >= 1e9 ? 
 export const ADMIN_PAGES = [
   { href: '/admin', label: 'Overview', icon: 'list', perm: 'admin.overview', exact: true },
   { href: '/admin/branding', label: 'Identity & Branding', icon: 'palette', perm: 'admin.branding' },
+  { href: '/admin/theme', label: 'Theme', icon: 'palette', perm: 'admin.branding' },
   { href: '/admin/navigation', label: 'Layout & Navigation', icon: 'nav', perm: 'admin.navigation' },
   { href: '/admin/people', label: 'People & Accounts', icon: 'users', perm: 'admin.users.view' },
   { href: '/admin/invites', label: 'Invites & Enrolment', icon: 'mail', perm: 'admin.users.invite' },
