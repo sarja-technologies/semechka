@@ -109,13 +109,25 @@ def main() -> int:
     check("Semechka instances bind the LAN address, not every interface",
           f"{IP}:8787" in listening and f"{IP}:8788" in listening and "0.0.0.0:8787" not in listening and "0.0.0.0:8788" not in listening)
 
-    # 4. Roasted is still a first-run product
+    want = os.environ.get("SEMECHKA_EXPECT_VERSION")
+    for u in ("roasted", "salted"):
+        v = ssh(f"~/semechka-deploy/{u}/app/venv/bin/semechka --version").split()[-1:] or ["?"]
+        check(f"{u} runs the expected release", not want or v[0] == want, f"{v[0]}")
+
+    # 4. Roasted: a first-run product until its owner completes the wizard; after that, its own configured install
     r = Client(ROASTED)
     code, pub = r.json("GET", "/api/public")
-    check("Roasted reachable over the LAN and still showing the first-run wizard", code == 200 and pub.get("needs_setup") is True)
-    code, raw, hdr = r.req("GET", "/setup")
-    check("Roasted serves the wizard page", code == 200 and b"<html" in raw.lower())
-    check("Roasted has no users and no default admin", r.json("POST", "/api/auth/login", {"email": "admin@example.test", "password": "x" * 14})[0] in (400, 401, 403, 404, 422))
+    roasted_new = pub.get("needs_setup") is True
+    if roasted_new:
+        check("Roasted reachable over the LAN and still showing the first-run wizard", code == 200)
+        code, raw, hdr = r.req("GET", "/setup")
+        check("Roasted serves the wizard page", code == 200 and b"<html" in raw.lower())
+        check("Roasted has no users and no default admin", r.json("POST", "/api/auth/login", {"email": "admin@example.test", "password": "x" * 14})[0] in (400, 401, 403, 404, 422))
+    else:
+        # completed by its owner: nothing here signs in to it; only public facts are checked
+        check("Roasted reachable over the LAN and set up by its owner", code == 200 and bool(pub.get("brand", {}).get("app_name")),
+              f"app {pub.get('brand', {}).get('app_name')!r}")
+        check("Roasted refuses setup calls once set up", r.json("GET", "/api/setup/status")[1].get("needs_setup") is False)
     roasted_brand = json.dumps(pub.get("brand"), sort_keys=True)
 
     # 5. Salted + real chat on the Spark
@@ -168,23 +180,23 @@ def main() -> int:
     for c in s.jar:  # replay Salted's session cookie against Roasted
         c2.jar.set_cookie(http.cookiejar.Cookie(0, c.name, c.value, None, False, IP, True, False, "/", True, False, None, False, None, None, {}))
     check("a Salted session cookie is rejected by Roasted", c2.json("GET", "/api/me")[0] == 401)
-    rc = Client(ROASTED)
     check("session cookies use different names per instance", True, f"Salted cookie {s.cookie_names()} ")
     owner = Client(SALTED)
     check("Salted owner sign-in", owner.login("owner@salted.test", cred("owner@salted.test")) == 200)
     marker = "isolation-check-" + hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]
-    before = owner.json("GET", "/api/admin/settings/brand.footer_text/effective")[1]
+    before = Client(SALTED).json("GET", "/api/public")[1].get("brand", {}).get("footer_text") or ""  # restored below
     owner.json("PUT", "/api/admin/settings/brand.footer_text", {"value": marker, "scope_type": "deployment", "scope_id": "", "confirm_weaker": True})
     check("a Salted setting change does not appear on Roasted",
           marker in json.dumps(Client(SALTED).json("GET", "/api/public")[1]) and marker not in json.dumps(Client(ROASTED).json("GET", "/api/public")[1]))
-    owner.json("PUT", "/api/admin/settings/brand.footer_text", {"value": "Salted · Semechka test environment", "scope_type": "deployment", "scope_id": "", "confirm_weaker": True})
+    owner.json("PUT", "/api/admin/settings/brand.footer_text", {"value": before, "scope_type": "deployment", "scope_id": "", "confirm_weaker": True})
+    check("the Salted setting is restored", Client(SALTED).json("GET", "/api/public")[1].get("brand", {}).get("footer_text", "") == before)
     key_hashes = ssh("sha256sum ~/semechka-deploy/roasted/data/master.key ~/semechka-deploy/salted/data/master.key | awk '{print $1}'").split()
     check("instances have different master keys and separate databases", len(set(key_hashes)) == 2 and
           ssh("ls ~/semechka-deploy/roasted/data/semechka.db ~/semechka-deploy/salted/data/semechka.db | wc -l") == "2")
 
     # 7. credential protection
     perms_out = ssh("stat -c '%a %n' ~/semechka-deploy/secrets/* ~/semechka-deploy/*/data ~/semechka-deploy/*/data/master.key ~/semechka-deploy/*/data/semechka.db")
-    bad = [l for l in perms_out.splitlines() if l.split()[0] not in ("600", "700")]
+    bad = [ln for ln in perms_out.splitlines() if ln.split()[0] not in ("600", "700")]
     check("secret files and data directories are owner-only", not bad, "; ".join(bad) or "all 600/700")
     leak = ssh("python3 - <<'PY'\nimport pathlib,glob\nroot=pathlib.Path.home()/'semechka-deploy'\npw=[l.split('\\t')[1] for l in (root/'secrets/salted-credentials.txt').read_text().splitlines() if '\\t' in l]\nhits=0\nfor f in list(root.glob('salted/data/**/*'))+list(root.glob('roasted/data/**/*'))+list(root.glob('logs/*')):\n    if f.is_file() and f.name!='setup-token':\n        b=f.read_bytes()\n        hits+=sum(p.encode() in b for p in pw)\nprint(hits)\nPY")
     check("no account password appears in any database file or log", leak == "0", f"{leak} matches")
@@ -208,7 +220,7 @@ def main() -> int:
             check("Salted conversation history survives a restart", s2.json("GET", f"/api/chat/conversations/{conv_id}")[0] == 200)
         check("Salted settings survive a restart", s2.json("GET", "/api/public")[1].get("brand", {}).get("org_name") == "Salted Test Lab")
         pub2 = Client(ROASTED).json("GET", "/api/public")[1]
-        check("Roasted is still at its first-run wizard after a restart", pub2.get("needs_setup") is True and json.dumps(pub2.get("brand"), sort_keys=True) == roasted_brand)
+        check("Roasted keeps its state and branding across a restart", pub2.get("needs_setup") is roasted_new and json.dumps(pub2.get("brand"), sort_keys=True) == roasted_brand)
         new_orig = ssh("systemctl --user show sarness-engine -p MainPID --value")
         check("the original Sarness Engine service was not interrupted", new_orig == orig_pid, f"pid {new_orig}")
         check("dedicated engine still serving", engine_system().get("engine", {}).get("version") is not None)
