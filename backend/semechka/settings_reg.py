@@ -217,7 +217,7 @@ DEFS: list[Def] = [
           merge="false_wins", edit_perm="admin.settings.edit", aliases=[f"disable {m}"])
       for m, lbl in [("chat", "chat"), ("code", "code workspace"), ("image", "image generation"),
                      ("video", "video generation"), ("audio", "audio"), ("knowledge", "knowledge search"),
-                     ("agents", "agents and tools")]],
+                     ("agents", "assistants (saved prompts; no tools)")]],
     # ---- composer ----
     Def("chat.attachments", U, "Allow text-file attachments", "Text files are read in the browser and included in the message (no upload storage). Images are not supported in this release.", "bool", True,
         scopes=["deployment", "role", "team"], merge="false_wins"),
@@ -349,6 +349,43 @@ DEFS: list[Def] = [
     Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    # ---- knowledge fork: generation queue, knowledge limits, code workspace ----
+    Def("queue.backend_concurrency", Q, "Simultaneous generations per backend",
+        "How many replies one backend works on at once; the rest wait in the queue. A backend's own "
+        "'max_concurrency' option overrides this. Match it to what the backend really supports "
+        "(for llama.cpp: its parallel slots).", "int", 2, min=1, max=64, edit_perm="admin.quotas.edit",
+        effect="Lower values make people wait longer but protect the backend from overload."),
+    Def("queue.user_slots_per_backend", Q, "Simultaneous generations per person on one backend",
+        "Applies only while other people are waiting, so a single user can still use an idle backend.",
+        "int", 1, min=1, max=64, edit_perm="admin.quotas.edit"),
+    Def("queue.wait_timeout_seconds", Q, "Longest wait in the queue (seconds)",
+        "A request that has not started by then is cancelled with a clear message. 0 means wait indefinitely.",
+        "int", 300, min=0, max=3600, edit_perm="admin.quotas.edit"),
+    Def("queue.max_depth", Q, "Maximum waiting requests per backend",
+        "Further requests are refused immediately instead of queuing.", "int", 50, min=1, max=1000,
+        edit_perm="admin.quotas.edit"),
+    Def("knowledge.max_collections", M, "Knowledge collections per person", "Personal collections each person may own.",
+        "int", 20, min=1, max=1000, scopes=["deployment", "role", "team", "user"], merge="min",
+        edit_perm="admin.quotas.edit"),
+    Def("knowledge.max_docs_per_collection", M, "Documents per collection", "", "int", 200, min=1, max=10000,
+        edit_perm="admin.quotas.edit"),
+    Def("knowledge.max_doc_kb", M, "Largest document (KB)", "Upload size limit for one document.", "int", 2048,
+        min=16, max=65536, edit_perm="admin.quotas.edit"),
+    Def("knowledge.max_chunks_per_collection", M, "Passages per collection",
+        "Documents are split into passages of about 1,200 characters. Searching decrypts a collection's passages into "
+        "memory, so this bounds memory use.", "int", 20000, min=100, max=200000, edit_perm="admin.quotas.edit"),
+    Def("knowledge.top_k", M, "Passages given to the model per question",
+        "Keyword search picks the best-matching passages; this many are added to the prompt.", "int", 5, min=1,
+        max=20, scopes=["deployment", "role", "team"], merge="min"),
+    Def("knowledge.context_chars", M, "Maximum characters of passages per question",
+        "Caps how much retrieved text is added to the prompt.", "int", 6000, min=500, max=100000,
+        scopes=["deployment", "role", "team"], merge="min"),
+    Def("code.system_prompt", M, "Code workspace instructions",
+        "Added to the model's instructions in the code workspace. Nothing is executed: the workspace has no "
+        "sandbox or tools.", "text", "You are a careful programming assistant. Prefer correct, readable code. "
+        "Put code in fenced blocks with the language named. State assumptions and say when you are unsure. "
+        "You cannot run code or access files or the internet; do not claim to have tested anything.",
+        edit_perm="admin.settings.edit", validator=lambda v: _strlen(v, 0, 4000)),
 ]
 
 BY_ID: dict[str, Def] = {d.id: d for d in DEFS}

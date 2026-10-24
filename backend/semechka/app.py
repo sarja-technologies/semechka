@@ -19,7 +19,7 @@ from sqlalchemy import delete, select
 from . import __version__, audit, media_svc, services
 from .config import Config
 from .models import AuditEvent, Conversation, UsageEvent
-from .routers import admin_config, admin_people, auth, chat, me, media, misc, setup, sso  # sso: OIDC single sign-on
+from .routers import admin_config, admin_people, assistants, auth, chat, knowledge, me, media, misc, queue, setup, sso  # sso: OIDC single sign-on
 from .state import AppState
 
 log = logging.getLogger("semechka")
@@ -83,7 +83,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, admin_people.router, admin_config.router, misc.router, sso.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, misc.router, sso.router):
         app.include_router(r)
 
     web = cfg.web_dir

@@ -27,7 +27,8 @@ const md = new Marked({
     code({ text, lang }: { text: string; lang?: string }) {
       const l = (lang || '').split(/\s/)[0];
       const body = l && hljs.getLanguage(l) ? hljs.highlight(text, { language: l, ignoreIllegals: true }).value : esc(text);
-      return `<pre><code class="hljs${l ? ' language-' + esc(l) : ''}">${body}</code></pre>`;
+      // The Copy button is wired by event delegation in Markdown.svelte; it copies the code's text content.
+      return `<div class="codeblock"><div class="codehead"><span class="lang">${l ? esc(l) : 'text'}</span><button type="button" class="copy-code">Copy</button></div><pre><code class="hljs${l ? ' language-' + esc(l) : ''}">${body}</code></pre></div>`;
     },
     html({ text }: { text: string }) { return esc(text); }  // raw HTML from a model is shown as text, never rendered
   }

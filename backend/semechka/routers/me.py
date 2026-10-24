@@ -8,6 +8,8 @@ from .. import perms, services
 from ..deps import Ctx, current, mfa_required_for
 from ..models import Role, Team
 
+LABELS = {"agents": "Assistants", "knowledge": "Knowledge", "code": "Code"}  # 'agents' is the stored id; it has no tools
+
 router = APIRouter(prefix="/api")
 
 THEME_CHOICES = ["paper", "carbon", "graphite", "system"]
@@ -25,11 +27,11 @@ def ui_config(ctx_s, st, p, *, preview=False) -> dict:
             state = modes[iid]
             if state.get("code") in ("disabled", "forbidden"):
                 continue  # hidden entirely; the API rejects it too
-            nav.append({"id": iid, "label": it.get("label") or iid.title(), "enabled": it.get("enabled", True),
+            nav.append({"id": iid, "label": it.get("label") or LABELS.get(iid, iid.title()), "enabled": it.get("enabled", True),
                         "available": state["enabled"], "reason": state["reason"]})
         elif it.get("enabled", True):
             if iid == "usage" or iid == "help":
-                nav.append({"id": iid, "label": it.get("label") or iid.title(), "enabled": True, "available": True, "reason": ""})
+                nav.append({"id": iid, "label": it.get("label") or LABELS.get(iid, iid.title()), "enabled": True, "available": True, "reason": ""})
     nav = [n for n in nav if n["enabled"]]
     home = g("nav.home")
     if not any(n["id"] == home and n["available"] for n in nav):

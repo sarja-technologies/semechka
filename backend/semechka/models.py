@@ -237,6 +237,9 @@ class Meta(Base):
 
 Index("ix_msgs_conv_parent", Message.conversation_id, Message.parent_id)
 
+# --- knowledge fork: tables for collections, assistants and conversation context live in their own module ---
+from . import models_knowledge  # noqa: E402,F401
+
 
 class EmailToken(Base):
     __tablename__ = "email_tokens"

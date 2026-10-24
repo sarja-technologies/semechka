@@ -10,17 +10,24 @@
   import Modal from '$lib/components/Modal.svelte';
   import Markdown from '$lib/components/Markdown.svelte';
   import ProtectionPanel from '$lib/components/ProtectionPanel.svelte';
+  import ContextBar from '$lib/components/ContextBar.svelte';
+  import Sources from '$lib/components/Sources.svelte';
 
-  type Msg = { id: string; parent_id: string | null; role: string; content: string; status: string; created_at: number; model: string | null; tech: Record<string, any> };
+  // The same page serves Chat and the Code workspace; only the workspace differs (see routes/(app)/code).
+  let { workspace = 'chat' }: { workspace?: 'chat' | 'code' } = $props();
+  const base = $derived(`/${workspace}`);
+
+  type Msg = { id: string; parent_id: string | null; role: string; content: string; status: string; created_at: number; model: string | null; tech: Record<string, any>; sources?: any[] };
   const ui = $derived(app.me.ui);
   const routeId = $derived(page.params.id);
 
   let models = $state<any[]>([]), modelsError = $state(''), modelId = $state('');
   let convs = $state<any[]>([]), q = $state(''), showArchived = $state(false), listLoading = $state(true), listError = $state('');
   let conv = $state<{ id: string; title: string; active_leaf: string | null; messages: Msg[]; retention_note?: string; expires_at?: number | null } | null>(null);
+  let assistantId = $state<string | null>(null), collectionIds = $state<string[]>([]);
   let convLoading = $state(false), convError = $state('');
   let ephemeral = $state(false), eph = $state<Msg[]>([]);
-  let live = $state<null | { mode: string; anchor: string | null; userText: string; text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; startedUser: boolean }>(null);
+  let live = $state<null | { mode: string; anchor: string | null; userText: string; text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; startedUser: boolean; queue?: null | { position: number; ahead: number; waiting: number; running: number; limit: number }; sources?: any[]; skipped?: number }>(null);
   let ctrl: { abort: () => void; done: Promise<void> } | null = null;
   let input = $state(''), sendError = $state(''), outcome = $state('');
   let files = $state<{ name: string; text: string }[]>([]), fileNote = $state('');
@@ -74,29 +81,44 @@
     try { await patch(`/api/chat/conversations/${conv.id}`, { active_leaf: leaf.id }); } catch (e) { toast(msg(e), 'bad'); }
   }
 
+  function useAssistantModel() {
+    const a = assistantId; if (!a) return;
+    get(`/api/assistants/${a}`).then((x) => { if (x.model_id && models.find((m) => m.id === x.model_id)) modelId = x.model_id; }).catch(() => {});
+  }
+  async function ctxChanged() {
+    useAssistantModel();
+    if (!conv || ephemeral) return; // saved conversations remember it; new ones send it with the first message
+    try { await patch(`/api/chat/conversations/${conv.id}`, { assistant_id: assistantId, collection_ids: collectionIds }); }
+    catch (e) { toast(msg(e), 'bad'); }
+  }
+
   const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'Something unexpected happened. Try again.');
 
   // ---------- loading ----------
   async function loadModels() {
-    try { models = await get('/api/chat/models'); modelsError = ''; if (!models.find((m) => m.id === modelId)) modelId = models[0]?.id ?? ''; }
+    try {
+      models = await get(`/api/chat/models${qs({ mode: workspace === 'code' ? 'code' : undefined })}`); modelsError = '';
+      if (workspace === 'code') models = [...models].sort((a, b) => Number(!!b.code_hint) - Number(!!a.code_hint)); // admin-tagged or code-named models first
+      if (!models.find((m) => m.id === modelId)) modelId = models[0]?.id ?? '';
+    }
     catch (e) { models = []; modelsError = msg(e); }
   }
   let searchTimer: ReturnType<typeof setTimeout>;
   async function loadList() {
     listLoading = true;
-    try { convs = await get(`/api/chat/conversations${qs({ q: q || undefined, archived: showArchived || undefined })}`); listError = ''; }
+    try { convs = await get(`/api/chat/conversations${qs({ q: q || undefined, archived: showArchived || undefined, mode: workspace === 'code' ? 'code' : undefined })}`); listError = ''; }
     catch (e) { listError = msg(e); } finally { listLoading = false; }
   }
   function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(loadList, 250); }
   async function loadConv(id: string) {
     convLoading = true; convError = '';
-    try { const c = await get(`/api/chat/conversations/${id}`); conv = c; if (c.model_id && models.find((m) => m.id === c.model_id)) modelId = c.model_id; selected = null; await scrollEnd(true); }
+    try { const c = await get(`/api/chat/conversations/${id}`); conv = c; assistantId = c.context?.assistant_id ?? null; collectionIds = c.context?.collection_ids ?? []; if (c.model_id && models.find((m) => m.id === c.model_id)) modelId = c.model_id; selected = null; await scrollEnd(true); }
     catch (e) { conv = null; convError = e instanceof ApiError && e.status === 404 ? 'This conversation does not exist or is not yours.' : msg(e); }
     finally { convLoading = false; }
   }
   function onRoute(id: string | undefined) {
     if (id && id === skipLoad) { skipLoad = ''; return; }
-    if (id) { epoch++; live = null; ctrl = null; ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; }
+    if (id) { epoch++; live = null; ctrl = null; ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; const a = page.url.searchParams.get('assistant'); if (a) { assistantId = a; useAssistantModel(); } }
     sheetList = false;
   }
   $effect(() => { const id = routeId; untrack(() => onRoute(id)); });
@@ -127,9 +149,9 @@
   // ---------- sending ----------
   async function ensureConv(): Promise<string | null> {
     if (conv) return conv.id;
-    const c = await post('/api/chat/conversations', { model_id: modelId });
+    const c = await post('/api/chat/conversations', { model_id: modelId, mode: workspace, assistant_id: assistantId, collection_ids: collectionIds });
     conv = { id: c.id, title: c.title, active_leaf: null, messages: [], expires_at: c.expires_at };
-    skipLoad = c.id; goto(`/chat/${c.id}`, { replaceState: true });
+    skipLoad = c.id; goto(`${base}/${c.id}`, { replaceState: true });
     return c.id;
   }
   // Each generation remembers the conversation and mode it started in. Starting a new chat (or opening another one) bumps
@@ -148,7 +170,7 @@
         let hist = eph.map((m) => ({ role: m.role, content: m.content }));
         if (mode === 'regenerate') { while (hist.length && hist[hist.length - 1].role === 'assistant') hist.pop(); }
         else { hist.push({ role: 'user', content }); }
-        url = '/api/chat/ephemeral/generate'; body = { messages: hist, model_id: modelId };
+        url = '/api/chat/ephemeral/generate'; body = { messages: hist, model_id: modelId, workspace, assistant_id: assistantId, collection_ids: collectionIds };
       } else {
         const id = await ensureConv(); if (!id) return;
         convId = id;
@@ -161,6 +183,8 @@
         if (mine !== epoch) return;
         if (ev.type === 'start') { cur.status = 'streaming'; cur.startedUser = true; }
         else if (ev.type === 'delta') { cur.text += ev.content; cur.reasoning += ev.reasoning; scrollEnd(); }
+        else if (ev.type === 'queue') cur.queue = ev.running === true ? null : ev;
+        else if (ev.type === 'sources') { cur.sources = ev.sources; cur.skipped = ev.skipped; }
         else if (ev.type === 'error') cur.error = ev.message;
         else if (ev.type === 'done') final = ev;
       });
@@ -170,7 +194,7 @@
         if (mode !== 'regenerate') eph.push({ id: 'u' + eph.length + Date.now(), parent_id: null, role: 'user', content, status: 'complete', created_at: 0, model: null, tech: {} });
         else { while (eph.length && eph[eph.length - 1].role === 'assistant') eph.pop(); }
         const text = final?.content ?? cur.text ?? '';
-        if (text || cur.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: cur.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {} });
+        if (text || cur.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: cur.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {}, sources: final?.sources });
       } else if (convId) {
         if (cur.status === 'stopping') await new Promise((r) => setTimeout(r, 350));
         if (mine !== epoch) return;
@@ -197,7 +221,7 @@
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast('Copy is not available in this browser context.', 'bad'); } }
 
   // ---------- conversation actions ----------
-  function newChat(eph_ = false) { epoch++; live = null; ctrl = null; ephemeral = eph_; eph = []; conv = null; sendError = ''; if (routeId) goto('/chat'); sheetList = false; tick().then(() => composer?.focus()); }
+  function newChat(eph_ = false) { epoch++; live = null; ctrl = null; ephemeral = eph_; eph = []; conv = null; sendError = ''; assistantId = null; collectionIds = []; if (routeId) goto(base); sheetList = false; tick().then(() => composer?.focus()); }
   async function rename() { if (!conv || !renameText.trim()) return; try { await patch(`/api/chat/conversations/${conv.id}`, { title: renameText.trim() }); conv.title = renameText.trim(); renameOpen = false; loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function archive() { if (!conv) return; try { await patch(`/api/chat/conversations/${conv.id}`, { archived: !showArchived }); toast(showArchived ? 'Restored' : 'Archived'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function remove() { if (!conv) return; try { await del(`/api/chat/conversations/${conv.id}`); deleteOpen = false; toast('Conversation deleted'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }
@@ -221,8 +245,8 @@
 </script>
 
 <svelte:window onkeydown={globalKey} />
-{#if !ui.modes.chat.enabled}
-  <div style="padding:24px;max-width:640px"><h1 style="margin-bottom:12px">Chat</h1><div class="notice warn" role="status"><div><strong>Chat is not available to you.</strong> {ui.modes.chat.reason}</div></div></div>
+{#if !ui.modes[workspace].enabled}
+  <div style="padding:24px;max-width:640px"><h1 style="margin-bottom:12px">{workspace === 'code' ? 'Code' : 'Chat'}</h1><div class="notice warn" role="status"><div><strong>{workspace === 'code' ? 'The code workspace is' : 'Chat is'} not available to you.</strong> {ui.modes[workspace].reason}</div></div></div>
 {:else}
 <div class="chat" class:withdrawer={techOn}>
   <aside class="list" class:sheet={sheetList} class:closed={!sheetList} aria-label="Conversations">
@@ -238,7 +262,7 @@
       {:else if !convs.length}<p class="muted small">{q ? 'No conversation matches that search.' : showArchived ? 'No archived conversations.' : 'No saved conversations yet. Start one and it will appear here.'}</p>{/if}
       {#each groups as [label, list]}
         <h2 class="gh">{label}</h2>
-        {#each list as c (c.id)}<a class="ci" class:on={conv?.id === c.id || routeId === c.id} href={`/chat/${c.id}`} aria-current={routeId === c.id ? 'page' : undefined}>{c.title}</a>{/each}
+        {#each list as c (c.id)}<a class="ci" class:on={conv?.id === c.id || routeId === c.id} href={`${base}/${c.id}`} aria-current={routeId === c.id ? 'page' : undefined}>{c.title}</a>{/each}
       {/each}
     </div>
   </aside>
@@ -264,10 +288,11 @@
         {#if modelsError}
           <div class="notice warn" role="alert"><div><strong>Chat is not ready.</strong> {modelsError}</div></div>
         {:else if convLoading}<p class="muted" role="status">Loading conversation…</p>
-        {:else if convError}<div class="notice bad" role="alert"><div>{convError} <a href="/chat">Start a new chat</a></div></div>
+        {:else if convError}<div class="notice bad" role="alert"><div>{convError} <a href={base}>Start a new chat</a></div></div>
         {:else if !shown.length && !live}
           <div class="empty">
-            <h2>{ephemeral ? 'This conversation will not be saved' : 'What are you working on?'}</h2>
+            <h2>{ephemeral ? 'This conversation will not be saved' : workspace === 'code' ? 'What are you building?' : 'What are you working on?'}</h2>
+            {#if workspace === 'code' && !ephemeral}<div class="notice info"><div class="small"><strong>Answers only.</strong> The code workspace writes and explains code but cannot run it, open your files or reach the internet. Test anything it gives you yourself. Attach source files with the + button.</div></div>{/if}
             {#if ephemeral}
               <p class="small muted">Read how it is handled before you send your first message.</p>
               <div class="panel"><div class="panel-b"><ProtectionPanel {modelId} ephemeral /></div></div>
@@ -292,6 +317,7 @@
                 <div class="row" style="margin-top:8px"><button class="btn primary sm" disabled={!editing.text.trim() || busy} onclick={() => { const e = editing!; editing = null; run('edit', e.text.trim(), m.id); }}>Save and regenerate</button><button class="btn sm" onclick={() => (editing = null)}>Cancel</button></div>
               {:else}<div class="utext">{m.content}</div>{/if}
             {:else}
+              {#if m.sources?.length}<Sources sources={m.sources} />{/if}
               {#if m.content}<Markdown text={m.content} />{:else}<p class="muted small">{m.status === 'error' ? 'The model did not return a reply.' : 'No text was produced.'}</p>{/if}
               {#if techOn && m.tech.tokens_per_s}<span class="chip mono">{m.tech.tokens_per_s} tok/s</span>{/if}
             {/if}
@@ -309,7 +335,9 @@
         {#if live}
           {#if live.mode !== 'regenerate'}<article class="msg user pending"><div class="who">You {#if live.status === 'sending'}<span class="chip">Sending</span>{/if}</div><div class="utext">{live.userText}</div></article>{/if}
           <article class="msg assistant" aria-live="off" aria-label={model?.alias ?? 'Assistant'}>
-            <div class="who">{model?.alias ?? 'Assistant'} <span class="chip info" role="status">{live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text || live.reasoning ? 'Writing' : 'Thinking'}</span></div>
+            <div class="who">{model?.alias ?? 'Assistant'} <span class="chip info" role="status">{live.queue ? `In queue: position ${live.queue.position}` : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text || live.reasoning ? 'Writing' : 'Thinking'}</span></div>
+            {#if live.queue}<p class="small muted" style="margin:0 0 6px">{live.queue.running} of {live.queue.limit} reply slot{live.queue.limit === 1 ? '' : 's'} in use; {live.queue.waiting} waiting. Your request starts when it reaches the front. Press Stop to leave the queue.</p>{/if}
+            {#if live.sources?.length || live.skipped}<Sources sources={live.sources ?? []} skipped={live.skipped ?? 0} />{/if}
             {#if live.reasoning}<details bind:open={openThink['live']}><summary class="small muted">See thinking</summary><pre class="think">{live.reasoning}</pre></details>{/if}
             {#if live.text}<Markdown text={live.text} />{/if}
           </article>
@@ -327,6 +355,8 @@
             {#each models as m}<option value={m.id}>{m.alias}{m.pinned ? ' (pinned)' : ''}{m.external ? ' (external)' : ''}</option>{/each}
           </select>
           {#if model?.external}<span class="chip warn">External service</span>{/if}
+          {#if workspace === 'code' && model?.code_hint}<span class="chip info" title="Why this is suggested">Suggested for code: {model.code_hint}</span>{/if}
+          <ContextBar bind:assistantId bind:collectionIds disabled={busy} onchange={ctxChanged} />
           {#if techOn && model}{#each Object.entries(model.tech).filter(([k]) => k !== '_unavailable' && ['model_real_id', 'quantization', 'context', 'params'].includes(k)) as [k, v]}<span class="chip mono" title={TECH_LABELS[k]}>{fmtTech(k, v)}</span>{/each}{/if}
           <span class="spacer"></span>
           {#if canEph && !conv && !shown.length}<label class="small row" style="gap:6px"><input type="checkbox" checked={ephemeral} onchange={(e) => { ephemeral = e.currentTarget.checked; eph = []; }} /> No-save</label>{/if}

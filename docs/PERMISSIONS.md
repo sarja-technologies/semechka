@@ -8,12 +8,12 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 |---|---|---|---|---|---|---|---|---|---|
 | **Modes** | | | | | | | | | |
 | `mode.chat` — Use chat | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `mode.code` — Use code workspace | yes | – | – | – | – | – | – | – | – |
+| `mode.code` — Use code workspace | yes | yes | yes | – | – | – | yes | yes | – |
 | `mode.image` — Generate images | yes | – | – | – | – | – | – | – | – |
 | `mode.video` — Generate video | yes | – | – | – | – | – | – | – | – |
 | `mode.audio` — Use audio (speech) | yes | – | – | – | – | – | – | – | – |
-| `mode.knowledge` — Use knowledge search | yes | – | – | – | – | – | – | – | – |
-| `mode.agents` — Use agents and tools | yes | – | – | – | – | – | – | – | – |
+| `mode.knowledge` — Use knowledge search | yes | yes | yes | – | – | – | yes | yes | – |
+| `mode.agents` — Use assistants (no tool execution) | yes | yes | yes | – | – | – | yes | yes | – |
 | **Chat** | | | | | | | | | |
 | `chat.ephemeral` — Start no-save conversations | yes | yes | yes | – | – | – | yes | – | – |
 | `chat.attach` — Attach files to chat | yes | yes | yes | – | – | – | yes | yes | – |

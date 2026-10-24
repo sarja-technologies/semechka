@@ -12,6 +12,7 @@ dependencies = [
   "cryptography>=43",
   "httpx>=0.27",
   "python-multipart>=0.0.9",
+  "pypdf>=5",
 ]
 
 [project.optional-dependencies]

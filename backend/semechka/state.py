@@ -8,6 +8,7 @@ from .config import Config
 from .crypto import Vault, load_or_create_master_key
 from . import migrations
 from .db import Database
+from .scheduler import Scheduler
 from .security import RateLimiter
 from .settings_svc import SettingsService
 
@@ -23,6 +24,7 @@ class AppState:
     health_cache: dict[str, tuple[float, dict]] = field(default_factory=dict)
     started: float = field(default_factory=time.time)
     stop_events: dict[str, asyncio.Event] = field(default_factory=dict)
+    scheduler: Scheduler = field(default_factory=Scheduler)  # per-backend generation queue (see scheduler.py)
 
     @property
     def cookie_name(self) -> str:
