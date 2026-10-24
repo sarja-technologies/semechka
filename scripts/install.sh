@@ -103,6 +103,7 @@ echo; echo "Installing to $PREFIX (data in $DATA)"
 "$PYBIN" -m venv "$PREFIX/venv"
 "$PREFIX/venv/bin/pip" install --quiet --upgrade pip
 "$PREFIX/venv/bin/pip" install --quiet "$WHEEL"
+"$PREFIX/venv/bin/pip" install --quiet --force-reinstall --no-deps "$WHEEL"   # same-version rebuilds must replace the files
 mkdir -p "$DATA" && chmod 700 "$DATA"
 mkdir -p "$HOME/.local/bin" && ln -sf "$PREFIX/venv/bin/semechka" "$HOME/.local/bin/semechka$SUFFIX"
 NEWVER=$("$PREFIX/venv/bin/semechka" --version | awk '{print $NF}')
