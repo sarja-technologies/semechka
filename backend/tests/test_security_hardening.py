@@ -157,7 +157,9 @@ def test_member_cannot_manage_invites_users_or_read_others_data(owner, app):
 
 PUBLIC = {"/api/health", "/api/public", "/api/setup/status", "/api/auth/login", "/api/auth/signup", "/api/auth/forgot",
           "/api/auth/reset", "/api/auth/verify", "/api/assets/{name}", "/api/setup/complete", "/api/setup/hardware",
-          "/api/setup/backend-test"}
+          "/api/setup/backend-test",
+          # SSO: provider list for the login page, the OIDC redirect legs (state-bound), and logout (no-op without a session)
+          "/api/sso/providers", "/api/sso/{pid}/start", "/api/sso/callback", "/api/sso/logout"}
 
 
 def _fill(path: str, real: dict | None = None) -> str:
