@@ -62,7 +62,7 @@
   {/if}
 {/snippet}
 
-<header class="hdr" class:center={pos === 'center'} style:height="{b.header_height ?? 52}px" style:padding-inline="{b.header_padding ?? 16}px">
+<header class="hdr" class:center={pos === 'center'} style:height="{b.header_height ?? 48}px" style:padding-inline="{b.header_padding ?? 12}px">
   <div class="l">
     {#if sidebar}
       <button class="btn ghost icon sm sbt" class:desk={collapsed} onclick={ontoggle} aria-label={collapsed ? 'Show the sidebar' : 'Show conversations'} title="Conversations (Ctrl+Shift+S)"><Icon name="sidebar" size={18} /></button>
@@ -111,7 +111,7 @@
 </header>
 
 <style>
-  .hdr { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; background: var(--header-bg); border-bottom: 1px solid var(--border); min-height: 40px; }
+  .hdr { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; background: var(--header-bg); min-height: 40px; }
   .hdr.center { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
   .l, .r { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .r { justify-content: flex-end; }
@@ -119,19 +119,21 @@
   .brand { display: inline-flex; align-items: center; color: var(--fg); text-decoration: none; min-width: 0; border-radius: var(--radius-sm); }
   .brand img { display: block; max-width: 200px; object-fit: contain; }
   .bn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
-  .ttl { color: var(--fg-muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--border); }
+  .ttl { color: var(--fg); font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+  .brand + .ttl { color: var(--fg-muted); font-weight: 400; padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border); }
   .sbt:not(.desk) { display: none; }
   .ret { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
   .acct { position: relative; }
-  .av { all: unset; box-sizing: border-box; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600;
-    background: var(--btn-primary-bg); color: var(--btn-primary-fg); cursor: pointer; }
+  .av { all: unset; box-sizing: border-box; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600;
+    background: var(--selected); color: var(--fg); cursor: pointer; }
+  .av:hover { background: var(--hover); box-shadow: inset 0 0 0 1px var(--border); }
   .av:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .mscrim { position: fixed; inset: 0; z-index: 80; }
-  .amenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 81; width: 260px; max-height: calc(100dvh - 72px); overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 4px; }
+  .amenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 81; width: 260px; max-height: calc(100dvh - 72px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-menu); box-shadow: var(--shadow); padding: 4px; }
   .who { display: grid; padding: 8px 10px; gap: 1px; overflow-wrap: anywhere; }
   .sec { border-top: 1px solid var(--border); padding: 4px 0; display: grid; }
   .lab { padding: 4px 10px 2px; }
-  .amenu button, .amenu a { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; min-height: 34px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; color: var(--fg); }
+  .amenu button, .amenu a { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; min-height: 32px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; color: var(--fg); }
   .amenu button:hover, .amenu a:hover, .amenu button:focus-visible, .amenu a:focus-visible { background: var(--hover); outline: none; }
   .ck { margin-left: auto; display: grid; }
   .sw { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); flex: none; }

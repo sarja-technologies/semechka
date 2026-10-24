@@ -91,7 +91,7 @@
       thread.patchMessage(m.id, { media: job, status });
     },
     icon(modelId) {
-      for (const o of [textOp, 'image', 'video'] as Operation[]) { const hit = catalog(o)?.models?.find((x: any) => x.id === (modelId ?? composer?.modelFor(textOp))); if (hit) return hit.profile?.icon; }
+      for (const o of [textOp, 'image', 'video'] as Operation[]) { const hit = catalog(o)?.models?.find((x: any) => x.id === (modelId ?? composer?.modelFor(textOp))); if (hit) return hit.icon ?? hit.profile?.icon; }
       return null;
     }
   };
@@ -189,13 +189,16 @@
   .chat.drawer { grid-template-columns: minmax(0, 1fr) 300px; }
   .conv { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
   .tools { position: absolute; top: 8px; right: 12px; z-index: 4; }
-  .dock { flex: none; padding: 0 24px 12px; background: var(--bg); }
+  .dock { flex: none; padding: 0 24px 14px; background: var(--bg); }
   .dock > :global(*) { max-width: var(--msg-w); margin: 0 auto; }
-  .empty { padding: 12vh 0 24px; display: grid; gap: 12px; justify-items: start; }
-  .empty h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  /* the welcome sits in the lower-middle of the pane, just above the composer */
+  .empty { min-height: 56vh; padding: 0 0 28px; display: grid; gap: 12px; align-content: end; justify-items: center; text-align: center; }
+  .empty h1 { font-size: 28px; font-weight: 400; letter-spacing: -0.015em; }
   .empty p { margin: 0; max-width: 60ch; }
-  .sugg { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); width: 100%; margin-top: 8px; }
-  .sugg .btn { white-space: normal; text-align: left; justify-content: flex-start; height: auto; padding: 10px 12px; line-height: 1.4; background: var(--card-bg); }
+  .empty .panel { text-align: left; width: 100%; }
+  .sugg { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); width: 100%; margin-top: 12px; }
+  .sugg .btn { white-space: normal; text-align: left; justify-content: flex-start; align-items: flex-start; height: auto; padding: 12px 14px; line-height: 1.4;
+    background: var(--card-bg); border-radius: var(--radius-composer); box-shadow: none; color: var(--fg-2); font-weight: 400; }
   .dropzone { position: absolute; inset: 8px; border: 2px dashed var(--fg-muted); border-radius: var(--radius); background: color-mix(in srgb, var(--bg) 85%, transparent);
     display: grid; place-content: center; justify-items: center; gap: 8px; font-weight: 600; z-index: 20; pointer-events: none; }
   .details { border-left: 1px solid var(--border); padding: 12px 16px; overflow: auto; background: var(--card-bg); display: grid; gap: 8px; align-content: start; }
@@ -206,5 +209,5 @@
     .chat.drawer { grid-template-columns: minmax(0, 1fr); }
     .details { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 45vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow); }
   }
-  @media (max-width: 719px) { .dock { padding: 0 8px 8px; } .empty { padding-top: 6vh; } .tools { top: 4px; right: 4px; } }
+  @media (max-width: 719px) { .dock { padding: 0 8px 8px; } .empty { min-height: 40vh; } .empty h1 { font-size: 24px; } .tools { top: 4px; right: 4px; } }
 </style>

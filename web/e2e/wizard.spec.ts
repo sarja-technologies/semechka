@@ -51,7 +51,7 @@ test('first-run wizard: every step works, branding and policies apply, nothing i
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // step 2: preset
-  await expect(page.getByRole('heading', { name: 'Deployment preset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How will this server be used?', exact: true })).toBeVisible();
   await page.getByRole('radio').nth(1).check();
   await matrix(page, 'wizard-2-preset');
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -94,6 +94,12 @@ test('first-run wizard: every step works, branding and policies apply, nothing i
   // step 7: access
   await expect(page.getByRole('heading', { name: 'Access and sign-up', exact: true })).toBeVisible();
   await page.getByLabel('How people get an account').selectOption('admin');
+  // the Business preset filled this in, and it stays editable (the rest of this test signs in without a second factor)
+  const mfa = page.getByLabel('Multi-factor authentication');
+  await expect(mfa).toHaveValue('admins');
+  await expect(page.locator('label[for=mfa] .from')).toHaveText('from preset');
+  await mfa.selectOption('optional');
+  await expect(page.locator('label[for=mfa] .from')).toHaveCount(0);
   await matrix(page, 'wizard-7-access');
   await page.getByRole('button', { name: 'Review' }).click();
 

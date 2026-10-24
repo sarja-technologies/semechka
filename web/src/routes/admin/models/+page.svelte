@@ -11,7 +11,9 @@
   import { loadRoles, loadTeams, loadUsers, type Opt, type Rule } from '$lib/components/admin/lookup';
   import CatalogBoard from '$lib/components/admin/CatalogBoard.svelte';
   import GrantsEditor from '$lib/components/admin/GrantsEditor.svelte';
-  let tab = $state<'catalogue' | 'engine'>('catalogue');
+  import EnginePanel from '$lib/components/admin/EnginePanel.svelte';
+  let tab = $state<'catalogue' | 'running' | 'engine'>('catalogue');
+  const seeEngines = $derived(can('ops.model.load') || can('ops.queue.view') || can('admin.system.view'));
   let rows = $state<any[]>([]); let total = $state(0); let loading = $state(true); let error = $state('');
   let q = $state(''); let tag = $state(''); let capability = $state(''); let backend = $state(''); let enabled = $state(''); let pg = $state(1); const per = 20;
   let backends = $state<any[]>([]); let roles = $state<Opt[]>([]); let teams = $state<Opt[]>([]); let users = $state<Opt[]>([]);
@@ -33,7 +35,7 @@
   }
   // edit
   let eOpen = $state(false); let m = $state<any>(null); let e = $state<any>({}); let eErr = $state(''); let rules = $state<Rule[]>([]); let tagsText = $state('');
-  function edit(r: any) { m = r; e = { alias: r.alias, enabled: r.enabled, pinned: r.pinned, system_prompt: '', keepPrompt: true, max_tokens: r.gen_limits.max_tokens ?? '', temperature: r.gen_limits.temperature ?? '', allow_tools: r.allow_tools }; tagsText = (r.tags ?? []).join(', '); rules = r.grants.map((g: any) => ({ ...g, subject_id: g.subject_type === 'everyone' ? '*' : g.subject_id })); eErr = ''; opLog = ''; eOpen = true; }
+  function edit(r: any) { m = r; e = { alias: r.alias, enabled: r.enabled, pinned: r.pinned, system_prompt: '', keepPrompt: true, max_tokens: r.gen_limits.max_tokens ?? '', temperature: r.gen_limits.temperature ?? '', allow_tools: r.allow_tools }; tagsText = (r.tags ?? []).join(', '); rules = r.grants.map((g: any) => ({ ...g, subject_id: g.subject_type === 'everyone' ? '*' : g.subject_id })); eErr = ''; eOpen = true; }
   async function saveModel() {
     eErr = '';
     try {
@@ -45,16 +47,15 @@
       eOpen = false; toast('Model saved.'); load();
     } catch (x) { eErr = errMsg(x); }
   }
-  let opLog = $state(''); let opBusy = $state(false);
-  async function op(kind: string) { opBusy = true; opLog = ''; try { await post(`/api/admin/models/${m.id}/${kind}`); opLog = `${kind} requested and accepted by the backend.`; } catch (x: any) { opLog = x.code === 'forbidden' ? 'You do not have permission to load or unload models (ops.model.load).' : x.code === 'unsupported' ? `Not supported by this backend: ${x.message}` : errMsg(x); } opBusy = false; }
   const caps = ['chat', 'vision', 'tools', 'embeddings', 'image', 'video', 'audio'];
 </script>
 <Page title="Models" lead="Discovered models stay off, with nobody allowed, until you turn them on and allow someone. Groups, order and icons only change how the chooser looks; access comes from each model's rules, and a deny always wins.">
   <div class="tabs" role="tablist" aria-label="Models">
     <button role="tab" aria-selected={tab === 'catalogue'} class:on={tab === 'catalogue'} onclick={() => (tab = 'catalogue')}>Catalogue</button>
+    {#if seeEngines}<button role="tab" aria-selected={tab === 'running'} class:on={tab === 'running'} onclick={() => (tab = 'running')}>Running</button>{/if}
     <button role="tab" aria-selected={tab === 'engine'} class:on={tab === 'engine'} onclick={() => { tab = 'engine'; load(); }}>Engine settings and bulk access</button>
   </div>
-  {#if tab === 'catalogue'}<CatalogBoard />{:else}
+  {#if tab === 'catalogue'}<CatalogBoard />{:else if tab === 'running'}<EnginePanel />{:else}
   <div class="row" style="margin-bottom:12px" role="search">
     <div style="flex:1 1 220px;max-width:300px"><label class="sr-only" for="mq">Search models</label><input id="mq" class="input" type="search" placeholder="Search alias or real id" bind:value={q} oninput={filt} /></div>
     <label class="sr-only" for="mt">Capability</label><select id="mt" class="input" style="max-width:160px" bind:value={capability} onchange={filt}><option value="">Any capability</option>{#each caps as c}<option>{c}</option>{/each}</select>
@@ -104,9 +105,8 @@
   </fieldset>
 
   <fieldset class="fs"><legend>Operate</legend>
-    <p class="hint" style="margin:0">Loading and unloading is a separate permission (ops.model.load) from editing the catalogue, and only some backends support it.</p>
-    <div class="row"><button class="btn sm" disabled={opBusy || !can('ops.model.load')} onclick={() => op('load')}>Load</button><button class="btn sm" disabled={opBusy || !can('ops.model.load')} onclick={() => op('unload')}>Unload</button>{#if !can('ops.model.load')}<span class="hint">You do not hold ops.model.load.</span>{/if}{#if m.meta.loaded !== undefined}<span class="chip">last seen {m.meta.loaded ? 'loaded' : 'not loaded'}</span>{/if}</div>
-    {#if opLog}<p class="small" role="status">{opLog}</p>{/if}</fieldset>
+    <p class="hint" style="margin:0">Loading and unloading is a separate permission (ops.model.load) from editing the catalogue. It happens under <strong>Running</strong>, which shows the engine's memory and anything that would interrupt someone's reply before you confirm.</p>
+    <div class="row">{#if can('ops.model.load')}<button class="btn sm" onclick={() => { eOpen = false; tab = 'running'; }}>Open Running</button>{:else}<span class="hint">You do not hold ops.model.load.</span>{/if}{#if m.meta.loaded !== undefined}<span class="chip">last seen {m.meta.loaded ? 'loaded' : 'not loaded'}</span>{/if}</div></fieldset>
   {#if eErr}<p class="err" role="alert">{eErr}</p>{/if}{/if}
   {#snippet footer()}<button class="btn" onclick={() => (eOpen = false)}>Cancel</button><button class="btn primary" onclick={saveModel}>Save model</button>{/snippet}
 </Modal>

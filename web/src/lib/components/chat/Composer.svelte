@@ -151,21 +151,44 @@
   function send() {
     if (!canSend) return;
     const turn: Turn = { content: text.trim(), attachments: ready.map(({ uploading: _u, error: _e, local: _l, ...a }) => a), operation: op, modelId,
-      modelLabel: model?.alias ?? 'Assistant', media: op !== 'text' ? mediaParams() : undefined,
+      modelLabel: model?.label ?? model?.alias ?? 'Assistant', media: op !== 'text' ? mediaParams() : undefined,
       sourceId: op !== 'text' ? ready.find((a) => a.kind === 'image')?.id ?? null : null };
     for (const a of atts) if (a.local) URL.revokeObjectURL(a.local);
+    if (turn.content) mine = [turn.content, ...mine.filter((x) => x !== turn.content)].slice(0, 50);
     text = ''; atts = []; attNote = ''; autosize();
     onsend(turn);
   }
   /** What the current choices would send, for regenerate and edit (same operation and model as shown). */
   export function current(): Pick<Turn, 'modelId' | 'modelLabel' | 'operation'> & { media?: Record<string, unknown> } {
-    return { modelId, modelLabel: model?.alias ?? 'Assistant', operation: op, media: op !== 'text' ? mediaParams() : undefined };
+    return { modelId, modelLabel: model?.label ?? model?.alias ?? 'Assistant', operation: op, media: op !== 'text' ? mediaParams() : undefined };
   }
   export function modelFor(o: Operation) { return chosen[o] ?? catalog(o)?.default ?? ''; }
-  // Typing is never blocked while the model list loads; Enter pressed meanwhile sends as soon as a model is known.
+  // Typing is never blocked while the model list loads; a send pressed meanwhile goes as soon as a model is known.
   let pending = $state(false);
+  // Enter sends by default (Shift+Enter for a new line); with "Enter sends" off, Enter is a new line and Ctrl/Cmd+Enter
+  // sends. The arrow keys always move the caret; earlier messages come back only with Alt+Up/Down, and only when on.
+  const enterSends = $derived(ui.composer.enter_sends !== false);
+  const historyKeys = $derived(!!ui.composer.prompt_history);
+  const sendKeys = $derived(enterSends ? 'Enter' : navigator.platform?.startsWith('Mac') ? '⌘ Enter' : 'Ctrl+Enter');
+  let hist = -1, draft = '';
+  // newest first: what was sent from here (a turn joins the thread's messages only once its reply is saved), then the thread's
+  let mine = $state<string[]>([]);
+  const sent = $derived([...new Set([...mine, ...thread.messages.filter((m) => m.role === 'user' && m.content?.trim()).map((m) => m.content).reverse()])]);
+  function recall(dir: 1 | -1) {
+    const next = hist + dir;
+    if (next < -1 || next >= sent.length) return;
+    if (hist === -1) draft = text;
+    hist = next; text = hist === -1 ? draft : sent[hist]; autosize();
+    tick().then(() => box?.setSelectionRange(text.length, text.length));
+  }
   function key(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!cat && text.trim()) pending = true; else send(); }
+    if (e.isComposing) return;
+    if (historyKeys && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); recall(e.key === 'ArrowUp' ? 1 : -1); return; }
+    const mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && (enterSends || mod)) {
+      e.preventDefault(); hist = -1;
+      if (!cat && text.trim()) pending = true; else send();
+    }
   }
   $effect(() => { if (pending && cat) untrack(() => { pending = false; send(); }); });
   const canEph = $derived(!!ui.composer.ephemeral);
@@ -192,21 +215,21 @@
   {/if}
 
   {#if op === 'text' && hasImage && model && !(model.capabilities ?? []).includes('vision')}
-    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model.alias} cannot read images. It will receive only the file names. Choose a model that can see pictures.</p>
+    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model.label ?? model.alias} cannot read images. It will receive only the file names. Choose a model that can see pictures.</p>
   {:else if op !== 'text' && needSource && !hasImage}
-    <p class="hint warnline" role="status"><Icon name="info" size={14} /> {model?.alias} {op === 'image' ? 'edits pictures: attach the picture to change.' : 'animates a picture: attach the starting picture.'}</p>
+    <p class="hint warnline" role="status"><Icon name="info" size={14} /> {model?.label} {op === 'image' ? 'edits pictures: attach the picture to change.' : 'animates a picture: attach the starting picture.'}</p>
   {:else if cannotUseSource}
-    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model?.alias} {op === 'image' ? 'cannot edit pictures' : 'cannot animate a picture'}. Remove the picture or choose another model.</p>
+    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model?.label} {op === 'image' ? 'cannot edit pictures' : 'cannot animate a picture'}. Remove the picture or choose another model.</p>
   {/if}
 
   <div class="box" data-focus-ring>
     <label class="sr-only" for="msg">Message</label>
-    <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={autosize} onpaste={paste} {placeholder}
-      disabled={!!cat && (!!cat.error || !cat.models?.length)} aria-describedby="composer-help"></textarea>
+    <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={() => { hist = -1; autosize(); }} onpaste={paste} {placeholder}
+      disabled={!!cat && (!!cat.error || !cat.models?.length)} aria-describedby="composer-help" aria-keyshortcuts={historyKeys ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}></textarea>
     <div class="bar">
       {#if canAttach}
-        <label class="btn ghost icon sm" title="Attach files or pictures" aria-label="Attach files or pictures">
-          <Icon name="attach" size={17} /><input type="file" multiple class="sr-only" onchange={pick} accept={op === 'text' ? undefined : 'image/*'} />
+        <label class="round ghostr" title="Attach files or pictures" aria-label="Attach files or pictures">
+          <Icon name="plus" size={18} /><input type="file" multiple class="sr-only" onchange={pick} accept={op === 'text' ? undefined : 'image/*'} />
         </label>
       {/if}
       {#if showOps}
@@ -218,18 +241,19 @@
           {/each}
         </div>
       {/if}
-      {#if flags.model_chooser !== false}
-        <ModelChooser catalog={cat} bind:value={chosen[catOp]} disabled={busy} label={op === 'text' ? 'Model' : op === 'image' ? 'Picture model' : 'Video model'} needVision={op === 'text' && hasImage} />
-      {/if}
       {#if op !== 'text' && mopt}
-        <button type="button" class="btn ghost icon sm" class:on={setOpen} aria-expanded={setOpen} aria-controls="media-settings" title="Picture and video settings" aria-label="Settings" onclick={() => (setOpen = !setOpen)}><Icon name="sliders" size={16} /></button>
+        <button type="button" class="round ghostr" class:on={setOpen} aria-expanded={setOpen} aria-controls="media-settings" title="Picture and video settings" aria-label="Settings" onclick={() => (setOpen = !setOpen)}><Icon name="sliders" size={16} /></button>
       {/if}
       <span class="spacer"></span>
+      {#if flags.model_chooser !== false}
+        <ModelChooser catalog={cat} op={catOp} bind:value={chosen[catOp]} disabled={busy} label={op === 'text' ? 'Model' : op === 'image' ? 'Picture model' : 'Video model'} needVision={op === 'text' && hasImage} />
+      {/if}
       {#if busy}
-        <button class="btn danger solid send" onclick={onstop} aria-label="Stop (Esc)" title="Stop (Esc)"><Icon name="stop" size={15} /><span class="sl">Stop</span></button>
+        <button class="round send stop" onclick={onstop} aria-label="Stop (Esc)" title="Stop (Esc)"><Icon name="stop" size={14} /></button>
       {:else}
-        <button class="btn primary send" onclick={send} disabled={!canSend} aria-label={op === 'text' ? 'Send (Enter)' : op === 'image' ? 'Make picture (Enter)' : 'Make video (Enter)'}>
-          <Icon name={op === 'text' ? 'send' : op} size={15} /><span class="sl">{op === 'text' ? 'Send' : 'Make'}</span>
+        {@const verb = op === 'text' ? 'Send' : op === 'image' ? 'Make picture' : 'Make video'}
+        <button class="round send" onclick={send} disabled={!canSend} aria-label={`${verb} (${sendKeys})`} title={`${verb} (${sendKeys})`}>
+          <Icon name="arrowup" size={18} />
         </button>
       {/if}
     </div>
@@ -269,22 +293,27 @@
 
 <style>
   .composer { width: 100%; display: grid; gap: 6px; }
-  .box { background: var(--composer-bg); border: 1px solid var(--border-strong); border-radius: calc(var(--radius) + 4px); padding: 8px 8px 6px 12px; display: grid; gap: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  /* the field has no ring of its own; the whole box carries a 2px accent ring while it has focus */
-  .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  textarea { all: unset; box-sizing: border-box; width: 100%; min-height: 28px; max-height: 240px; overflow-y: auto; padding: 4px 0; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .box { background: var(--composer-bg); border: 1px solid var(--border); border-radius: var(--radius-composer); padding: 10px 10px 8px 14px; display: grid; gap: 6px;
+    box-shadow: var(--shadow-sm); transition: border-color var(--fast) var(--ease); }
+  /* the field has no ring of its own; the whole box carries a 2px ring (border plus spread) while it has focus */
+  .box:focus-within { border-color: var(--border-strong); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-strong); }
+  textarea { all: unset; box-sizing: border-box; width: 100%; min-height: 44px; max-height: 240px; overflow-y: auto; padding: 4px 0; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
   textarea::placeholder { color: var(--fg-muted); }
   textarea:disabled { cursor: not-allowed; }
   .bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: -6px; }
-  .ops { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; gap: 2px; }
-  .opb { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: calc(var(--radius-sm) - 2px); font-size: 13px; color: var(--fg-muted); cursor: pointer; }
+  .round { all: unset; box-sizing: border-box; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; cursor: pointer; flex: none;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
+  .round:focus-visible, .round:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ghostr { color: var(--fg-muted); } .ghostr:hover, .ghostr.on { background: var(--hover); color: var(--fg); }
+  .send { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+  .send:hover:not(:disabled) { opacity: 0.88; }
+  .send:disabled { background: var(--selected); color: var(--fg-muted); cursor: default; }
+  .ops { display: inline-flex; border-radius: 999px; padding: 2px; gap: 2px; background: var(--bg-2); }
+  .opb { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 13px; color: var(--fg-muted); cursor: pointer; }
   .opb:hover:not(:disabled) { color: var(--fg); background: var(--hover); }
-  .opb.on { background: var(--selected); color: var(--fg); font-weight: 600; }
+  .opb.on { background: var(--composer-bg); color: var(--fg); font-weight: 500; box-shadow: var(--shadow-sm); }
   .opb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .opb:disabled { cursor: default; }
-  .btn.on { background: var(--selected); }
-  .send { min-height: 32px; padding: 0 12px; border-radius: var(--radius); }
   .atts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .att { display: inline-flex; align-items: center; gap: 6px; padding: 3px 3px 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-bg); font-size: 13px; max-width: 260px; }
   .att.bad { border-color: var(--danger); color: var(--danger); }
@@ -296,18 +325,16 @@
   .fld.wide { width: min(100%, 320px); }
   .fld .input { min-height: 32px; padding: 4px 8px; font-size: 13px; color: var(--fg); }
   .foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 24px; padding: 0 4px; }
-  .eph { gap: 6px; }
-  .linkish { all: unset; cursor: pointer; color: var(--fg-muted); text-decoration: underline; text-underline-offset: 2px; }
-  .linkish:hover { color: var(--fg); } .linkish:focus-visible { outline: 2px solid var(--accent); }
+  .eph { gap: 6px; color: var(--fg-muted); font-size: 13px; }
+  .linkish { all: unset; cursor: pointer; color: var(--fg-muted); text-underline-offset: 2px; }
+  .linkish:hover { color: var(--fg); text-decoration: underline; } .linkish:focus-visible { outline: 2px solid var(--accent); }
   @media (max-width: 719px) {
     .ol { display: none; } .opb { padding: 0 7px; }
-    .sl { display: none; } .send { width: 36px; padding: 0; }
     .foot :global(.ctx) { width: 100%; }
   }
   @media (pointer: coarse) {
     textarea { min-height: 40px; padding: 8px 0; }
-    .send { min-height: 40px; } .opb { height: 40px; }
+    .round { width: 40px; height: 40px; } .opb { height: 40px; }
     .linkish { display: inline-flex; align-items: center; min-height: 40px; }
   }
-  @media (pointer: coarse) and (max-width: 719px) { .send { width: 40px; } }
 </style>

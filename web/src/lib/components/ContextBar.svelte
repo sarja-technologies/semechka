@@ -34,7 +34,7 @@
       </select>
     {/if}
     {#if canK}
-      <button class="btn sm" {disabled} onclick={() => (open = true)} aria-haspopup="dialog"><Icon name="knowledge" size={15} /> Knowledge{chosen.size ? ` (${chosen.size})` : ''}</button>
+      <button class="btn ghost sm kb" {disabled} onclick={() => (open = true)} aria-haspopup="dialog"><Icon name="knowledge" size={15} /> Knowledge{chosen.size ? ` (${chosen.size})` : ''}</button>
     {/if}
     {#if error}<span class="err" role="status">{error}</span>{/if}
   </div>
@@ -54,7 +54,11 @@
   </Modal>
 {/if}
 <style>
-  .asel { width: auto; min-width: 140px; max-width: 220px; }
+  /* quiet controls under the composer: they read as options, not as form fields */
+  .asel { width: auto; min-width: 0; max-width: 220px; min-height: 28px; padding: 0 26px 0 10px; border-color: transparent; background-color: transparent;
+    border-radius: 999px; font-size: 13px; color: var(--fg-2); box-shadow: none; }
+  .asel:hover:not(:disabled) { background-color: var(--hover); }
+  .kb { border-radius: 999px; color: var(--fg-2); font-weight: 400; font-size: 13px; }
   .clist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
-  @media (max-width: 719px) { .asel { min-width: 0; flex: 1; } }
+  @media (max-width: 719px) { .asel { flex: 1; } }
 </style>

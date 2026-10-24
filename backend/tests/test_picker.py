@@ -33,7 +33,8 @@ def test_owner_sees_every_usable_model_with_real_names_details_and_live_state(mo
     assert list(m) == ["fake-chat", "fake-big"]  # offered first; fake-big is usable only through models.use_all
     chat, big = m["fake-chat"], m["fake-big"]
     assert chat["restricted"] is False and big["restricted"] is True and big["usable"] is True
-    assert chat["label"] == "fake-chat" and chat["sub"] == "Fake chat · Q8_0"  # default: alias with the real name
+    # an alias nobody chose (the one made from the identifier) gives way to the engine's own name
+    assert chat["label"] == "Fake chat · Q8_0" and chat["sub"] is None and chat["alias"] == "fake-chat"
     assert chat["real_id"] == "local:fake-chat"
     assert chat["details"] == {"architecture": "qwen35", "quantization": "Q8_0", "format": "GGUF", "context_length": 4096,
                                "license": "Apache-2.0", "memory_mb": 1500, "size_bytes": 1,
@@ -50,9 +51,12 @@ def test_names_setting_shows_aliases_real_names_or_both_and_never_changes_the_id
     assert mo.put("/api/admin/settings/models.display.names", json={"value": "real"}).status_code == 200
     chat = by_alias(picker(mo))["fake-chat"]
     assert chat["label"] == "Fake chat · Q8_0" and chat["sub"] is None and chat["alias"] == "fake-chat"
-    mo.put("/api/admin/settings/models.display.names", json={"value": "alias"})
     mid = ids(st)["fake-chat"]
     assert mo.patch(f"/api/admin/catalog/models/{mid}", json={"alias": "Quick helper"}).status_code == 200
+    mo.put("/api/admin/settings/models.display.names", json={"value": "both"})
+    chat = by_alias(picker(mo))["Quick helper"]
+    assert chat["label"] == "Quick helper" and chat["sub"] == "Fake chat · Q8_0"
+    mo.put("/api/admin/settings/models.display.names", json={"value": "alias"})
     chat = by_alias(picker(mo))["Quick helper"]
     assert chat["label"] == "Quick helper" and chat["sub"] is None and chat["real_id"] == "local:fake-chat"
     with st.db.session() as s:
@@ -163,3 +167,15 @@ def test_sections_by_family_size_capability_and_admin_groups():
     assert [(s["title"], s["models"]) for s in grp] == [("Fast", ["c", "a"]), ("Other models", ["b"])]
     grp = catalog_svc.sections(rows(), "groups", [{"id": "g1", "name": "Fast", "models": ["c", "a"]}], custom=False)
     assert grp[0]["models"] == ["a", "c"]
+
+
+# ---- composer keys (personal choice over the administrator's default) -------------------------------------
+def test_enter_sends_and_prompt_history_follow_the_setting_until_a_person_chooses(mo, st):
+    comp = lambda: mo.get("/api/me").json()["ui"]["composer"]  # noqa: E731
+    assert comp()["enter_sends"] is True and comp()["prompt_history"] is False
+    assert mo.put("/api/admin/settings/chat.enter_sends", json={"value": False}).status_code == 200
+    assert comp()["enter_sends"] is False
+    assert mo.patch("/api/me", json={"enter_sends": True, "prompt_history": True}).status_code == 200
+    assert comp()["enter_sends"] is True and comp()["prompt_history"] is True
+    assert mo.patch("/api/me", json={"enter_sends": None}).status_code == 200  # back to the setting
+    assert comp()["enter_sends"] is False and comp()["prompt_history"] is True

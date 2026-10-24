@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The signed-in shell: header across the top, conversation sidebar on the left, the page beside it.
+  // The signed-in shell: the conversation sidebar runs the full height on the left; the page beside it has a slim top bar.
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount, untrack } from 'svelte';
@@ -65,28 +65,29 @@
 
 {#if app.me}
   <div class="app">
-    <AppHeader sidebar={hasSidebar} {collapsed} ontoggle={toggle} onnew={newChat} title={list.title} />
-    <div class="body">
-      {#if hasSidebar && !collapsed}<Sidebar {activeId} onnew={newChat} ondeleted={deleted} oncollapse={toggle} />
-      {:else if hasSidebar}<div class="mobile-only"><Sidebar {activeId} onnew={newChat} ondeleted={deleted} oncollapse={toggle} /></div>{/if}
+    {#if hasSidebar && !collapsed}<Sidebar {activeId} onnew={newChat} ondeleted={deleted} oncollapse={toggle} />
+    {:else if hasSidebar}<div class="mobile-only"><Sidebar {activeId} onnew={newChat} ondeleted={deleted} oncollapse={toggle} /></div>{/if}
+    <div class="col">
+      <AppHeader sidebar={hasSidebar} {collapsed} ontoggle={toggle} onnew={newChat} title={list.title} />
       <main id="main" tabindex="-1">{@render children()}</main>
+      {#if brand.footer_text || brand.powered_by}
+        <footer class="tiny muted">
+          {#if brand.footer_text}<span>{brand.footer_text}</span>{/if}
+          {#if brand.powered_by}<span>Powered by Semechka</span>{/if}
+        </footer>
+      {/if}
     </div>
-    {#if brand.footer_text || brand.powered_by}
-      <footer class="tiny muted">
-        {#if brand.footer_text}<span>{brand.footer_text}</span>{/if}
-        {#if brand.powered_by}<span>Powered by Semechka</span>{/if}
-      </footer>
-    {/if}
   </div>
 {/if}
 <Palette />
 
 <style>
-  .app { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
-  .body { flex: 1; display: flex; min-height: 0; }
+  /* the sidebar runs the full height; the page column carries its own slim top bar */
+  .app { display: flex; height: 100dvh; min-height: 0; }
+  .col { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
   main { flex: 1; min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
   main:focus { outline: none; }
-  footer { flex: none; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 4px 16px; border-top: 1px solid var(--border); background: var(--header-bg); }
+  footer { flex: none; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 4px 16px; background: var(--bg); }
   .mobile-only { display: none; }
   @media (max-width: 899px) { .mobile-only { display: contents; } }
 </style>

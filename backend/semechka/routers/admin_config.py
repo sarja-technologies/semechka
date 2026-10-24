@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
-from .. import adapters, audit, perms, services, telemetry
+from .. import adapters, audit, catalog_svc, perms, services, telemetry
 from ..backends_svc import adapter_for, sync_models
 from ..deps import Ctx, audit_ctx, current, require
 from ..models import (
@@ -369,8 +369,14 @@ def list_admin_models(ctx: Ctx = Depends(require("admin.models.manage")), q: str
     grants: dict[str, list] = {}
     for g in ctx.s.execute(select(ModelGrant)).scalars():
         grants.setdefault(g.model_id, []).append(g)
-    return {"total": total, "page": page, "per_page": per_page,
-            "items": [_model_out(m, backends.get(m.backend_id), grants.get(m.id, []), full) for m in page_rows]}
+    icons = ctx.st.settings.deployment(ctx.s, "models.provider_icons") or {}
+    logos = bool(ctx.st.settings.deployment(ctx.s, "models.developer_logos"))
+    items = []
+    for m in page_rows:  # the icon the picker shows, so an administrator recognises the same model
+        out = _model_out(m, backends.get(m.backend_id), grants.get(m.id, []), full)
+        out["icon"] = catalog_svc.profile_of(m, icons, logos).get("icon")
+        items.append(out)
+    return {"total": total, "page": page, "per_page": per_page, "items": items}
 
 
 class ModelPatch(BaseModel):
@@ -440,7 +446,6 @@ def set_grants(mid: str, body: GrantsIn, ctx: Ctx = Depends(require("admin.model
 def _clean_grants(ctx, grants):
     """Rules: subject (everyone, role, team or person), allow/deny, and optionally the modes the rule covers
     (chat, code, vision, image, video); no modes means every mode. One rule per subject."""
-    from .. import catalog_svc
     seen, clean = set(), []
     for g in grants:
         t, i, e, modes = g.get("subject_type"), g.get("subject_id"), g.get("effect"), g.get("modes")

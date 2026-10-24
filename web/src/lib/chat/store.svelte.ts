@@ -69,12 +69,18 @@ export async function loadCatalog(op: Operation, force = false): Promise<any> {
   if (!force && inflight[op]) return inflight[op];
   inflight[op] = get(`/api/models/catalog?operation=${op}`)
     .then((c) => { catalogs[op] = c; return c; })
-    .catch((e) => { catalogs[op] = { error: e instanceof ApiError ? e.message : 'Could not load models.', models: [], groups: [], ungrouped: [], pinned: [] }; return catalogs[op]; })
+    .catch((e) => { catalogs[op] = { error: e instanceof ApiError ? e.message : 'Could not load models.', models: [], sections: [], unusable: [], groups: [], ungrouped: [], pinned: [] }; return catalogs[op]; })
     .finally(() => { inflight[op] = undefined; });
   return inflight[op];
 }
 
 export function resetCatalogs() { for (const k of Object.keys(catalogs)) delete catalogs[k]; }
+
+/** After a change that affects every list (personal arrangement, favourites): reload this one, drop the rest. */
+export async function refreshCatalogs(op: Operation) {
+  for (const k of Object.keys(catalogs)) if (k !== op) delete catalogs[k];
+  return loadCatalog(op, true);
+}
 
 /** Date buckets for the sidebar, newest first. */
 export function dateGroups(rows: ConvRow[]): [string, ConvRow[]][] {

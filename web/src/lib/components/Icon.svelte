@@ -19,7 +19,8 @@
     history: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.5M3 4v4h4M12 8v5l3 2', attach: 'M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L14 7',
     pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6', folder: 'M3 6h6l2 2h10v11H3z', sidebar: 'M3 4h18v16H3zM9 4v16',
     more: 'M5 12h.01M12 12h.01M19 12h.01', library: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', sliders: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
-    upload: 'M12 16V4M7 9l5-5 5 5M5 20h14', filter: 'M3 5h18l-7 8v6l-4 2v-8z', external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6'
+    upload: 'M12 16V4M7 9l5-5 5 5M5 20h14', filter: 'M3 5h18l-7 8v6l-4 2v-8z', external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
+    star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z', arrowup: 'M12 19V5M5.5 11.5L12 5l6.5 6.5'
   };
 </script>
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}><path d={P[name] ?? P.info} /></svg>

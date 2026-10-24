@@ -40,8 +40,10 @@ export function writeTokens(el: HTMLElement, values: TokenValues, variant: 'ligh
   const st = el.style;
   for (const t of TOKENS) st.setProperty(`--${t.id}`, values[t.id]);
   st.setProperty('color-scheme', variant);
-  st.setProperty('--shadow', variant === 'dark' ? '0 8px 24px rgba(0, 0, 0, 0.45)' : '0 8px 24px rgba(0, 0, 0, 0.10)');
-  const font = FONTS.find((f) => f.id === b.font) ?? FONTS[0];
+  el.dataset.variant = variant;
+  st.setProperty('--shadow', variant === 'dark' ? '0 12px 32px rgba(0, 0, 0, 0.5)' : '0 12px 32px rgba(0, 0, 0, 0.12)');
+  st.setProperty('--shadow-sm', variant === 'dark' ? '0 1px 2px rgba(0, 0, 0, 0.4)' : '0 1px 3px rgba(0, 0, 0, 0.06)');
+  const font = FONTS.find((f) => f.id === b.font) ?? FONTS.find((f) => f.id === 'system') ?? FONTS[0];
   st.setProperty('--font', font.stack);
   if (b.font_size) st.setProperty('--font-size', `${b.font_size}px`);
   if (b.radius !== undefined && b.radius !== null) {
@@ -49,7 +51,7 @@ export function writeTokens(el: HTMLElement, values: TokenValues, variant: 'ligh
     st.setProperty('--radius-sm', `${Math.max(2, Math.round(b.radius * 0.75))}px`);
   }
   if (b.sidebar_width) st.setProperty('--sidebar-w', `${b.sidebar_width}px`);
-  st.setProperty('--msg-w', b.message_width === 'narrow' ? '680px' : b.message_width === 'wide' ? '1040px' : '820px');
+  st.setProperty('--msg-w', b.message_width === 'narrow' ? '640px' : b.message_width === 'wide' ? '1000px' : '768px');
 }
 
 export function applyTheme(choice: string | undefined, b: ThemeBundle, density?: string, personal = false) {

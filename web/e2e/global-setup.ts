@@ -34,7 +34,8 @@ export default async function globalSetup() {
   await must(await owner.post('/api/setup/complete', {
     owner: { email: USERS.owner.email, password: USERS.owner.password, display_name: USERS.owner.name }, preset: 'business',
     settings: { 'brand.org_name': 'Banana Corporation', 'brand.app_name': 'Banana Corporation Private AI', 'brand.short_name': 'Banana AI',
-      'brand.tab_title': 'Banana AI', 'signup.mode': 'admin', 'privacy.chat_retention_days': 30, 'privacy.ephemeral_allowed': true },
+      'brand.tab_title': 'Banana AI', 'signup.mode': 'admin', 'privacy.chat_retention_days': 30, 'privacy.ephemeral_allowed': true,
+      'auth.mfa_policy': 'optional' }, // the Business preset requires it for administrators; MFA has its own tests
     backend: { adapter: 'openai_compat', base_url: URLS.fake, external: false }, enable_models: ['fake-small', 'fake-other'], smoke_model: 'fake-small'
   }), 'setup');
   await owner.refreshCsrf();

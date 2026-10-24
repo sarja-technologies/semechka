@@ -90,17 +90,17 @@
 
 <style>
   /* content-visibility lets the browser skip layout and paint for messages far outside the viewport */
-  .msg { margin: 0 0 20px; content-visibility: auto; contain-intrinsic-size: auto 120px; display: flex; flex-direction: column; }
-  .who { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
-  .nm { color: var(--fg); }
+  .msg { margin: 0 0 28px; content-visibility: auto; contain-intrinsic-size: auto 120px; display: flex; flex-direction: column; }
+  .who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 500; flex-wrap: wrap; }
+  .nm { color: var(--fg-2); }
   .body { min-width: 0; }
   .assistant .body { background: var(--assistant-msg-bg); }
-  .bubble { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--user-msg-bg); color: var(--fg); border-radius: var(--radius); padding: 8px 14px; max-width: min(72ch, 100%); }
+  .bubble { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--user-msg-bg); color: var(--fg); border-radius: calc(var(--radius) * 1.8); padding: 10px 16px; max-width: min(72ch, 100%); line-height: 1.55; }
   .op { display: block; font-weight: 600; color: var(--fg-muted); margin-bottom: 2px; }
   .user { align-items: flex-start; }
   :global([data-align='right']) .user { align-items: flex-end; }
   :global([data-align='right']) .user .atts { justify-content: flex-end; }
-  .user .body { max-width: min(85%, 72ch); display: grid; gap: 6px; justify-items: inherit; }
+  .user .body { max-width: min(78%, 72ch); display: grid; gap: 6px; justify-items: inherit; }
   :global([data-align='right']) .user .body { justify-items: end; }
   .editbox { display: grid; gap: 8px; width: min(640px, 85vw); }
   .atts { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -114,7 +114,7 @@
   :global([data-align='left']) .acts.right { justify-content: flex-start; }
   /* actions are quiet until the message is hovered or focused; touch screens always show them */
   @media (hover: hover) and (pointer: fine) {
-    .acts > .btn { opacity: 0; transition: opacity 100ms ease-out; }
+    .acts > .btn { opacity: 0; transition: opacity var(--fast) var(--ease); }
     .msg:hover .acts > .btn, .msg:focus-within .acts > .btn, .msg.sel .acts > .btn { opacity: 1; }
   }
   .ver { display: inline-flex; align-items: center; gap: 2px; color: var(--fg-muted); }

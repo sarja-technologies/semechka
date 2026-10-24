@@ -189,3 +189,41 @@ test('another person cannot open or change my conversation, even knowing its id'
     expect(r.status()).toBe(404);
   await api.dispose();
 });
+
+test('composer keys: Enter sends by default, Ctrl+Enter when Enter is a new line, earlier messages only on Alt+Up', async ({ as }) => {
+  const api = await apiAs('member');
+  const page = await as('member');
+  const box = page.getByLabel('Message', { exact: true });
+  try {
+    await page.goto('/chat');
+    await box.fill('first keyed message');
+    await box.press('Enter');
+    await expect(lastReply(page)).toContainText('Hello from the fake model');
+    // the arrow keys move the caret; an empty box does not fill with an earlier message
+    await box.press('ArrowUp');
+    await expect(box).toHaveValue('');
+
+    expect((await api.patch('/api/me', { enter_sends: false, prompt_history: true })).status()).toBe(200);
+    await page.reload();
+    await box.fill('line one');
+    await box.press('Enter');
+    await box.pressSequentially('line two');
+    await expect(box).toHaveValue('line one\nline two');
+    await expect(page.getByRole('button', { name: /^Send \((Ctrl\+Enter|⌘ Enter)\)$/ })).toBeVisible();
+    await box.press('Control+Enter');
+    await expect(page.locator('article.msg.user').last()).toContainText('line two');
+    await expect(box).toHaveValue('');
+    await box.press('ArrowUp');
+    await expect(box).toHaveValue('');
+    await box.press('Alt+ArrowUp');
+    await expect(box).toHaveValue('line one\nline two');
+    await box.press('Alt+ArrowUp');
+    await expect(box).toHaveValue('first keyed message');
+    await box.press('Alt+ArrowDown');
+    await box.press('Alt+ArrowDown');
+    await expect(box).toHaveValue('');
+  } finally {
+    await api.patch('/api/me', { enter_sends: null, prompt_history: null });
+    await api.dispose();
+  }
+});

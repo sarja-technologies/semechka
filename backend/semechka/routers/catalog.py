@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .. import catalog_svc, services
+from .. import backends_svc, catalog_svc, services
 from ..deps import Ctx, audit_ctx, current, require, require_any
 from ..models import (
     Backend,
@@ -304,7 +304,13 @@ def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, restricted: 
     p, meta = ctx.principal, m.meta or {}
     real = meta.get("engine_name") or services.display_id(m.real_id)
     names = opts["names"]
-    label, sub = (real, None) if names == "real" else (m.alias, real if names == "both" and real != m.alias else None)
+    # an alias still equal to the one made from the identifier at discovery was never chosen by anyone: show the
+    # engine's own name instead of a raw identifier (display only; the stored alias and identifier are untouched)
+    given = m.alias != backends_svc.friendly_alias(m.real_id) or not meta.get("engine_name")
+    if names == "real" or not given:
+        label, sub = real, None
+    else:
+        label, sub = m.alias, (real if names == "both" and real != m.alias else None)
     tech = {"family": prof.get("family"), "architecture": meta.get("architecture"),
             "parameters": prof.get("parameters"), "quantization": prof.get("quantization"), "format": meta.get("format"),
             "context_length": prof.get("context_length"), "license": meta.get("license"),

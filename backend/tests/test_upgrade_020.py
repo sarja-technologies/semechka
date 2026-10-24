@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from semechka import migrations
+from semechka import migrations, theme_svc
 from semechka.app import create_app
 from semechka.config import Config
 from semechka.models import Conversation, ModelGrant, User
@@ -49,7 +49,8 @@ def test_upgrade_keeps_accounts_settings_models_and_conversations(old_data):
     # look and feel: Carbon with a changed accent becomes a published Custom theme with that accent
     assert setting(st, "brand.theme_default") == "custom"
     custom = setting(st, "theme.custom")
-    assert custom["light"]["accent"] == "#0B5E8A" and custom["dark"]["bg"] == "#141617"
+    # the accent is the site's own; the rest comes from the release's Dark preset
+    assert custom["light"]["accent"] == "#0B5E8A" and custom["dark"]["bg"] == theme_svc.preset("dark")["bg"]
     assert setting(st, "theme.follow_system") is False
     assert setting(st, "auth.mfa_policy") == "admins"
     assert setting(st, "brand.app_name") == "Fixture AI" and setting(st, "privacy.chat_retention_days") == 30

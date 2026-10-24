@@ -172,9 +172,11 @@ def update_me(body: PrefsIn, ctx: Ctx = Depends(current)):
         prefs["density"] = body.density
     if body.show_tech is not None:
         prefs["show_tech"] = bool(body.show_tech)
-    for k in ("enter_sends", "prompt_history"):
+    for k in ("enter_sends", "prompt_history"):  # an explicit null goes back to following the setting
         if getattr(body, k) is not None:
             prefs[k] = getattr(body, k)
+        elif k in body.model_fields_set:
+            prefs.pop(k, None)
     if body.picker is not None:
         pk = dict(prefs.get("picker") or {})
         for k, v in body.picker.items():

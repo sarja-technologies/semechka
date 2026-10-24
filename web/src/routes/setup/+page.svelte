@@ -22,7 +22,18 @@
   let probe = $state<any>(null), enable = $state<string[]>([]), smoke = $state('');
   let techPreset = $state('simple'), result = $state<any>(null);
 
-  function pickPreset(k: string) { preset = k; Object.assign(v, hw.presets[k].settings); domainsText = (v['signup.allowed_domains'] ?? []).join(', '); }
+  // A preset fills in starting values; Custom fills in none, so each of those choices is made on its own step.
+  const base = $state.snapshot(v);
+  const governed = $derived<string[]>(hw ? [...new Set(Object.values(hw.presets).flatMap((p: any) => Object.keys(p.settings)))].filter((k) => k in base) : []);
+  function pickPreset(k: string) {
+    preset = k;
+    const set = hw.presets[k].settings;
+    for (const key of governed) v[key] = k === 'custom' ? (typeof base[key] === 'boolean' ? base[key] : null) : (key in set ? set[key] : base[key]);
+    domainsText = (v['signup.allowed_domains'] ?? []).join(', ');
+  }
+  const custom = $derived(preset === 'custom');
+  const unchosen = (...keys: string[]) => keys.some((k) => v[k] === null || v[k] === undefined || v[k] === '');
+  const fromPreset = (k: string) => !custom && hw && k in hw.presets[preset].settings && v[k] === hw.presets[preset].settings[k];
   async function start() {
     busy = true; error = '';
     try { setSetupToken(token.trim()); hw = await get('/api/setup/hardware'); pickPreset(preset); const found = hw.backends.find((b: any) => b.reachable); if (found) { be.adapter = found.adapter; be.base_url = found.base_url; be.hint_id = found.hint_id ?? ''; } step = 1; }
@@ -65,6 +76,7 @@
   const TECH = [['simple', 'Simple', 'Friendly model names and plain errors only.'], ['informed', 'Informed', 'Adds model family, context size, approximate speed and queue state.'], ['technical', 'Technical', 'Adds real model ID, quantisation, generation settings, token counts and timings.'], ['expert', 'Expert', 'Every safe technical field the backend provides. Never secrets, other people’s content or control over infrastructure.']];
   const next = () => { error = ''; step++; window.scrollTo(0, 0); }, back = () => { error = ''; step--; };
 </script>
+{#snippet tag(k: string)}{#if fromPreset(k)}<span class="from" title={`Filled in by the ${hw.presets[preset].label} preset`}>from preset</span>{/if}{/snippet}
 <main id="main" class="wiz">
   <header><Wordmark size={20} fallback /><span class="muted small">First-run setup</span></header>
   {#if step < 9}
@@ -101,12 +113,16 @@
     <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next} disabled={!idOk}>Continue</button></div>
 
   {:else if step === 2}
-    <h1>Deployment preset</h1>
-    <p class="muted">A preset only fills in starting values. Every value stays editable, and you can see them on the review step.</p>
+    <h1>How will this server be used?</h1>
+    <p class="muted">A preset fills in starting values for sign-up, privacy, history, limits and sign-in security. Every value stays editable on the next steps and afterwards in Administration.</p>
     <div class="stack" role="radiogroup" aria-label="Preset">
-      {#each Object.entries(hw.presets) as [k, p]}
+      {#each Object.entries(hw.presets).filter(([k]) => k !== 'custom') as [k, p] (k)}
         <label class="opt" class:sel={preset === k}><input type="radio" name="preset" checked={preset === k} onchange={() => pickPreset(k)} /><div><strong>{(p as any).label}</strong><div class="small muted">{(p as any).description}</div></div></label>
       {/each}
+      {#if hw.presets.custom}
+        <p class="or small muted">or</p>
+        <label class="opt" class:sel={custom}><input type="radio" name="preset" checked={custom} onchange={() => pickPreset('custom')} /><div><strong>{hw.presets.custom.label}</strong><div class="small muted">{hw.presets.custom.description}</div></div></label>
+      {/if}
     </div>
     <div class="row" style="margin-top:16px"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next}>Continue</button></div>
 
@@ -168,33 +184,35 @@
 
   {:else if step === 6}
     <h1>Privacy, retention and limits</h1>
+    {#if custom}<p class="muted">Custom setup: choose each of these.</p>{/if}
     <div class="grid">
-      <div class="field"><label for="pm">Privacy mode</label><select id="pm" class="input" bind:value={v['privacy.mode']}><option value="standard">Standard private</option><option value="user_controlled">User-controlled history</option><option value="enterprise">Enterprise-managed</option></select></div>
-      <div class="field"><label for="rt">Keep chat history for</label><select id="rt" class="input" bind:value={v['privacy.chat_retention_days']}>{#each retentionOpts as [n, l]}<option value={n}>{l}</option>{/each}</select><span class="hint">Applies to conversations created from now on.</span></div>
-      <div class="field"><label for="dm">Messages per person per day</label><input id="dm" class="input" type="number" min="0" bind:value={v['quota.daily_messages']} /><span class="hint">0 means no limit.</span></div>
+      <div class="field"><label for="pm">Privacy mode {@render tag('privacy.mode')}</label><select id="pm" class="input" bind:value={v['privacy.mode']}>{#if v['privacy.mode'] === null}<option value={null} disabled>Choose…</option>{/if}<option value="standard">Standard private</option><option value="user_controlled">User-controlled history</option><option value="enterprise">Enterprise-managed</option></select></div>
+      <div class="field"><label for="rt">Keep chat history for {@render tag('privacy.chat_retention_days')}</label><select id="rt" class="input" bind:value={v['privacy.chat_retention_days']}>{#if v['privacy.chat_retention_days'] === null}<option value={null} disabled>Choose…</option>{/if}{#each retentionOpts as [n, l]}<option value={n}>{l}</option>{/each}</select><span class="hint">Applies to conversations created from now on.</span></div>
+      <div class="field"><label for="dm">Messages per person per day {@render tag('quota.daily_messages')}</label><input id="dm" class="input" type="number" min="0" bind:value={v['quota.daily_messages']} placeholder={custom ? 'Enter a number' : undefined} /><span class="hint">0 means no limit.</span></div>
     </div>
     <label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['privacy.ephemeral_allowed']} /> Allow “no-save” conversations</label>
     <label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['chat.attachments']} /> Allow text-file attachments</label>
-    <label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['privacy.external_egress']} /> Allow models that run on external services</label>
+    <label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['privacy.external_egress']} /> Allow models that run on external services {@render tag('privacy.external_egress')}</label>
     {#if v['privacy.external_egress']}<div class="notice warn"><div class="small">Messages sent to those models leave your network in readable form. People are told so in the chat.</div></div>{/if}
     <div class="field"><label for="pn">Notice shown in the privacy panel (optional)</label><textarea id="pn" class="input" bind:value={v['privacy.notice']}></textarea></div>
     <p class="hint">Chat text is stored encrypted at rest with a key kept on this server. It is readable by the model engine while it answers, so Semechka never describes chats as end-to-end encrypted.</p>
-    <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next}>Continue</button></div>
+    <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next} disabled={unchosen('privacy.mode', 'privacy.chat_retention_days', 'quota.daily_messages')}>Continue</button></div>
 
   {:else if step === 7}
     <h1>Access and sign-up</h1>
+    {#if custom}<p class="muted">Custom setup: choose each of these.</p>{/if}
     <div class="grid">
       <div class="field"><label for="ex">Who can reach the server</label><select id="ex" class="input" bind:value={v['access.exposure']}><option value="loopback">This machine only</option><option value="lan">Other devices on my network (plain HTTP)</option></select><span class="hint">Takes effect the next time Semechka starts. Use HTTPS in front of it before real use beyond a trusted network.</span></div>
-      <div class="field"><label for="sm2">How people get an account</label><select id="sm2" class="input" bind:value={v['signup.mode']}><option value="admin">Created by an administrator only</option><option value="invite">By invitation</option><option value="domain">Anyone with an approved email domain</option><option value="public">Anyone may register</option></select></div>
+      <div class="field"><label for="sm2">How people get an account {@render tag('signup.mode')}</label><select id="sm2" class="input" bind:value={v['signup.mode']}>{#if v['signup.mode'] === null}<option value={null} disabled>Choose…</option>{/if}<option value="admin">Created by an administrator only</option><option value="invite">By invitation</option><option value="domain">Anyone with an approved email domain</option><option value="public">Anyone may register</option></select></div>
     </div>
     {#if v['signup.mode'] === 'domain'}<div class="field"><label for="dd">Approved domains (comma separated)</label><input id="dd" class="input mono" bind:value={domainsText} placeholder="example.org, lab.example" /></div>{/if}
     {#if v['signup.mode'] === 'public'}<div class="notice warn"><div class="small">Public registration exposes this service to strangers. Keep admin approval on and daily limits low.</div></div>{/if}
     {#if v['signup.mode'] === 'public' || v['signup.mode'] === 'domain'}<label class="row" style="gap:8px;margin-bottom:8px"><input type="checkbox" bind:checked={v['signup.require_approval']} /> New accounts need administrator approval</label>{/if}
-    <div class="field"><label for="mfa">Multi-factor authentication</label><select id="mfa" class="input" bind:value={v['auth.mfa_policy']}>{#each Object.entries(MFA) as [k, l] (k)}<option value={k}>{l}</option>{/each}</select>
+    <div class="field"><label for="mfa">Multi-factor authentication {@render tag('auth.mfa_policy')}</label><select id="mfa" class="input" bind:value={v['auth.mfa_policy']}>{#if v['auth.mfa_policy'] === null}<option value={null} disabled>Choose…</option>{/if}{#each Object.entries(MFA) as [k, l] (k)}<option value={k}>{l}</option>{/each}</select>
       <span class="hint">An authenticator app plus one-time recovery codes. You can require it for chosen roles later.</span></div>
     {#if v['auth.mfa_policy'] === 'admins' || v['auth.mfa_policy'] === 'everyone'}<div class="notice info"><div class="small">You will be asked to set up an authenticator app straight after launch, before using administration.</div></div>{/if}
     <p class="hint">Email verification and password-reset emails need SMTP, which you can configure after launch.</p>
-    <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next}>Review</button></div>
+    <div class="row"><button class="btn" onclick={back}>Back</button><button class="btn primary" onclick={next} disabled={unchosen('signup.mode', 'auth.mfa_policy')}>Review</button></div>
 
   {:else if step === 8}
     <h1>Review and launch</h1>
@@ -234,9 +252,11 @@
   .n { font-size: 12px; }
   @media (max-width: 640px) { .steps .t { display: none; } .steps li.on .t { display: inline; } }
   h1 { margin-bottom: 8px; } .body > p, .body > .field, .body > .grid { max-width: 640px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 16px; align-items: start; }
   .opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
-  .opt.sel { border-color: var(--accent); background: var(--accent-soft); } .opt input { margin-top: 3px; }
+  .opt.sel { border-color: var(--border-strong); background: var(--accent-soft); } .opt input { margin-top: 3px; flex: none; }
+  .or { margin: 4px 0; text-align: center; }
+  .from { white-space: nowrap; margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--fg-muted); background: var(--bg-2); border-radius: 999px; padding: 1px 8px; }
   .plain { padding-left: 18px; display: grid; gap: 6px; } .fs { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px; padding: 12px; display: grid; gap: 6px; }
   th[scope='row'] { width: 180px; position: static !important; background: transparent !important; } table.t td { white-space: normal; }
 </style>
