@@ -246,3 +246,40 @@ def test_admin_mfa_reset_needs_a_reason_ends_sessions_and_never_reveals_secrets(
     with st.db.session() as s:
         ev = s.execute(select(AuditEvent).where(AuditEvent.action == "user.mfa_reset")).scalar_one()
         assert ev.detail["reason"] == "Lost phone, verified in person"
+
+
+def test_three_presets_plus_custom_apply_exactly_their_values(tmp_path):
+    from semechka.app import create_app
+    from semechka.config import Config
+    from semechka.presets import CHOICES, PRESETS
+    from semechka.routers.setup import ensure_setup_token
+    assert list(PRESETS) == ["personal", "business", "managed"] and list(CHOICES) == [*PRESETS, "custom"]
+    keys = {k for p in PRESETS.values() for k in p["settings"]}
+    for name in CHOICES:
+        c = Config(data_dir=tmp_path / name)
+        c.background = False
+        a = create_app(c)
+        st = a.state.sem
+        token = ensure_setup_token(st)
+        api = Api(a)
+        offered = api.get("/api/setup/hardware", headers={"x-setup-token": token}).json()["presets"]
+        assert sorted(offered) == sorted(CHOICES)
+        with st.db.session() as s:
+            defaults = {k: st.settings.deployment(s, k) for k in keys}
+        own = {"privacy.chat_retention_days": 7}  # what the owner changed in a later step always wins
+        body = {"owner": {"email": "a@example.test", "password": PW, "display_name": "A"}, "preset": name, "settings": own}
+        assert api.post("/api/setup/complete", headers={"x-setup-token": token}, json=body).status_code == 200
+        with st.db.session() as s:
+            got = {k: st.settings.deployment(s, k) for k in keys}
+            assert st.settings.deployment(s, "deployment.preset") == name
+        preset = {} if name == "custom" else PRESETS[name]["settings"]  # Custom: nothing but the owner's own choices
+        assert got == {**defaults, **preset, **own}, name
+
+
+def test_an_unknown_preset_is_refused_and_nothing_is_created(app, st):
+    from semechka.routers.setup import ensure_setup_token
+    token = ensure_setup_token(st)
+    api = Api(app)
+    body = {"owner": {"email": "a@example.test", "password": PW, "display_name": "A"}, "preset": "enterprise"}
+    assert api.post("/api/setup/complete", headers={"x-setup-token": token}, json=body).status_code == 422
+    assert api.get("/api/public").json()["needs_setup"] is True

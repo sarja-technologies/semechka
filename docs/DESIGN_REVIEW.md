@@ -1,6 +1,33 @@
 # Design review
 
-Two passes. **Pass 2 (below) supersedes pass 1** wherever they overlap: pass 1 was manual, iframe-based and partial; pass 2 is a repeatable suite driving real Google Chrome at real viewport sizes against real servers. Pass 1 is kept underneath as history.
+Three passes, newest first. **Pass 2 supersedes pass 1** wherever they overlap: pass 1 was manual, iframe-based and partial; pass 2 is a repeatable suite driving real Google Chrome at real viewport sizes against real servers. Pass 1 is kept underneath as history.
+
+## Pass 3 (0.4.0): the redesign, against real servers
+
+**Method.** Headless system Chrome driven by scripts (no mocks of Semechka): a local instance with a copy of Salted's
+configuration connected to the real Spark engine through an SSH tunnel, a throwaway instance for the wizard, and then
+production Salted and Roasted after deployment. Sign-in went through the API, so no password was typed into a page;
+the real Roasted's setup token was never entered. Every screenshot listed was opened and looked at. A curated set is in
+`docs/screenshots/0.4.0/`.
+
+| Area | Light | Dark | 375 px | Where |
+|---|---|---|---|---|
+| Empty chat, composer, model picker (owner: every model with state and Restricted tags; member: only offered models, no identifiers) | yes | yes | yes | production Salted |
+| A conversation with a real reply | yes | yes | yes | production Salted |
+| Running tab: memory, chat model, jobs, queue, load/unload/free with checks first | yes | yes | n/a | production Salted and local (load, picture, video run for real) |
+| All settings (search, categories, effective value) | yes | yes | n/a | production Salted |
+| Page not found | yes | yes | n/a | production Salted |
+| First-run wizard: preset step, every preset, Custom with nothing chosen, review, launch | yes | n/a | each step | throwaway instance |
+| Wizard token page | yes | yes | yes | production Roasted |
+| Catalogue, branding, theme, roles, models settings, code, mobile sidebar and picker | yes | yes | some | local |
+
+**Found and fixed in this pass:** the picker label cut off at 375 px; the composer's focus ring read mid-transition by
+the accessibility test; prompt history missing the message just sent; picker labels showing engine details to people
+without the technical permission; `PATCH /api/me` unable to clear a personal choice (composer keys, then theme); the
+Running tab offering buttons that could only ever answer "Not loaded" or be refused; the framework's bare 404 page.
+
+**Not done.** Chrome only; no screen reader; no side-by-side comparison with the Codex app itself (only its published
+screenshots were studied, and nothing of OpenAI's was copied).
 
 ## Pass 2: repeatable real-browser verification
 
