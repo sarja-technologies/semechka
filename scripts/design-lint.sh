@@ -27,4 +27,8 @@ for p in pathlib.Path(".").rglob("*"):
             if emo.search(line): bad.append(f"{p}:{i}: emoji used as UI")
 if bad: print("FAIL: violet/purple hex colours:\n  " + "\n  ".join(bad)); sys.exit(1)
 PY
+# the interface themes against the same token contract the server validates
+if ! cmp -s ../../backend/semechka/theme/tokens.json lib/theme/tokens.json; then
+  echo "FAIL: web/src/lib/theme/tokens.json differs from backend/semechka/theme/tokens.json (copy it over)"; FAIL=1
+fi
 [ "$FAIL" -eq 0 ] && echo "design-lint: pass" || exit 1

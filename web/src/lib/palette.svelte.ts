@@ -23,7 +23,7 @@ export const openPalette = () => { palette.open = true; };
 export const allCommands = () => sources.flatMap((s) => s.commands?.() ?? []);
 export const searchers = () => sources.filter((s) => s.search);
 
-const THEMES: [string, string][] = [['paper', 'Paper (light)'], ['carbon', 'Carbon (dark)'], ['graphite', 'Graphite (dark grey)'], ['system', 'Match system']];
+const THEMES: [string, string][] = [['light', 'Light'], ['dark', 'Dark'], ['graphite', 'Graphite (dark grey)'], ['custom', 'Custom (your organisation)'], ['system', 'Match device']];
 
 async function setPref(body: Record<string, unknown>) { try { await patch('/api/me', body); await loadMe(); } catch { toast('Could not save that preference.', 'bad'); } }
 
@@ -56,7 +56,7 @@ registerSource({
       out.push({ id: 'act:new', group: 'Actions', label: 'New chat', keywords: 'start conversation', run: () => goto(`/chat?new=${Date.now()}`) });
       if (app.me.ui.composer?.ephemeral) out.push({ id: 'act:new-nosave', group: 'Actions', label: 'New no-save chat', hint: 'Nothing is stored', keywords: 'private ephemeral temporary', run: () => goto(`/chat?new=${Date.now()}&nosave=1`) });
     }
-    for (const [v, label] of THEMES) out.push({ id: `theme:${v}`, group: 'Appearance', label: `Theme: ${label}`, keywords: 'dark light appearance', run: () => setPref({ theme: v }) });
+    if (app.me.ui.theme?.user_choice) for (const [v, label] of THEMES) if (v === 'system' || app.me.ui.theme.choices.includes(v)) out.push({ id: `theme:${v}`, group: 'Appearance', label: `Theme: ${label}`, keywords: 'dark light appearance', run: () => setPref({ theme: v }) });
     for (const v of ['comfortable', 'compact']) out.push({ id: `dens:${v}`, group: 'Appearance', label: `Density: ${v}`, run: () => setPref({ density: v }) });
     if (app.me.ui.tech?.drawer) out.push({ id: 'act:tech', group: 'Actions', label: app.me.user.prefs.show_tech ? 'Hide technical details' : 'Show technical details', run: () => setPref({ show_tech: !app.me.user.prefs.show_tech }) });
     return out;

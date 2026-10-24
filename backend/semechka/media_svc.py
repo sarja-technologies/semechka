@@ -244,7 +244,7 @@ def job_out(st, s, p, j: MediaJob, models: dict | None = None) -> dict:
             "prompt": st.vault.decrypt(j.prompt_enc, "media") if j.prompt_enc else "", "params": params,
             "progress": j.progress, "progress_text": j.progress_text, "queue_position": j.queue_position,
             "elapsed_s": round(elapsed, 1), "error": j.error, "save": j.save, "created_at": j.created_at,
-            "finished_at": j.finished_at, "assets": assets,
+            "finished_at": j.finished_at, "assets": assets, "conversation_id": j.conversation_id,
             "tech": services.filter_tech(p, {
                 "model_real_id": services.display_id(m.real_id) if m else None, "gen_params": params or None,
                 "elapsed_s": round(elapsed, 1), "queue": _queue_tech(j), "node": b.name if b else None,

@@ -11,7 +11,7 @@
   let preset = $state('business');
   // every wizard value is a settings-registry key, so it reappears later in Administration > Settings
   let v = $state<Record<string, any>>({
-    'brand.org_name': '', 'brand.app_name': '', 'brand.short_name': '', 'brand.tab_title': '', 'brand.theme_default': 'paper',
+    'brand.org_name': '', 'brand.app_name': '', 'brand.short_name': '', 'brand.tab_title': '', 'brand.theme_default': 'light',
     'privacy.mode': 'standard', 'privacy.chat_retention_days': 30, 'privacy.ephemeral_allowed': true, 'privacy.external_egress': false, 'privacy.notice': '',
     'quota.daily_messages': 0, 'chat.attachments': true,
     'access.exposure': 'loopback', 'signup.mode': 'invite', 'signup.require_approval': true, 'signup.allowed_domains': [], 'auth.mfa_required_admins': false
@@ -87,7 +87,7 @@
       <div class="field"><label for="an">Application title</label><input id="an" class="input" bind:value={v['brand.app_name']} placeholder="Banana Corporation Private AI" /></div>
       <div class="field"><label for="sn">Short name</label><input id="sn" class="input" bind:value={v['brand.short_name']} placeholder="Banana AI" /></div>
       <div class="field"><label for="tt">Browser tab label</label><input id="tt" class="input" bind:value={v['brand.tab_title']} placeholder="Banana AI" /></div>
-      <div class="field"><label for="th">Default theme</label><select id="th" class="input" bind:value={v['brand.theme_default']}><option value="paper">Paper (light)</option><option value="carbon">Carbon (dark)</option><option value="graphite">Graphite (dark grey)</option><option value="system">Match each person’s system</option></select></div>
+      <div class="field"><label for="th">Default theme</label><select id="th" class="input" bind:value={v['brand.theme_default']}><option value="light">Light</option><option value="dark">Dark</option><option value="graphite">Graphite (dark grey)</option></select></div>
     </div>
     <p class="hint">Logo, favicon and colours are set after launch in Administration, where the logo can be uploaded and previewed.</p>
     <h2 style="margin:24px 0 8px;font-size:16px">Owner account</h2>

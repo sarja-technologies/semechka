@@ -14,7 +14,10 @@
     moon: 'M20 14A8 8 0 019.5 4 8 8 0 1020 14z', server: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01', key: 'M14 10a4 4 0 11-8 0 4 4 0 018 0zM12.5 13l8 8M17 17.5l2-2', log: 'M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3',
     palette: 'M12 3a9 9 0 100 18c1.5 0 2-1 1.5-2s0-2 1.5-2h2a3 3 0 003-3c0-6-4-11-8-11zM7.5 11h.01M10 7.5h.01M14.5 7.5h.01', nav: 'M3 12l18-9-6 18-3-8z', mail: 'M3 6h18v12H3zM3 7l9 7 9-7',
     info: 'M12 8h.01M11 12h1v5M3 12a9 9 0 1018 0 9 9 0 10-18 0', warn: 'M12 4l10 17H2zM12 10v5M12 18h.01', user: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3.5-6 8-6s8 2 8 6',
-    history: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.5M3 4v4h4M12 8v5l3 2', filter: 'M3 5h18l-7 8v6l-4 2v-8z', external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6'
+    history: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.5M3 4v4h4M12 8v5l3 2', attach: 'M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L14 7',
+    pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6', folder: 'M3 6h6l2 2h10v11H3z', sidebar: 'M3 4h18v16H3zM9 4v16',
+    more: 'M5 12h.01M12 12h.01M19 12h.01', library: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', sliders: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
+    upload: 'M12 16V4M7 9l5-5 5 5M5 20h14', filter: 'M3 5h18l-7 8v6l-4 2v-8z', external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6'
   };
 </script>
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}><path d={P[name] ?? P.info} /></svg>

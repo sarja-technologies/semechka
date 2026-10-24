@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { app, loadPublic, loadMe } from '$lib/session.svelte';
+  import { app, loadPublic, loadMe, refreshTheme } from '$lib/session.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
   let { children } = $props();
   const PUBLIC = ['/login', '/signup', '/forgot', '/reset', '/verify', '/setup'];
@@ -20,7 +20,7 @@
   onMount(() => {
     boot();
     const mq = matchMedia('(prefers-color-scheme: dark)');
-    const onScheme = () => app.themePref === 'system' && loadPublic();
+    const onScheme = () => refreshTheme();  // the resolver decides whether the device setting matters
     mq.addEventListener('change', onScheme);
     const on = () => { app.offline = false; boot(); }; const off = () => (app.offline = true);
     addEventListener('online', on); addEventListener('offline', off);

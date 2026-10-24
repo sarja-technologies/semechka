@@ -4,48 +4,51 @@
 @import '@fontsource/ibm-plex-mono/latin-400.css';
 @import '@fontsource/ibm-plex-mono/latin-600.css';
 
-/* ---- tokens: Paper (default), Carbon, Graphite. See DESIGN.md. Brand values are applied on :root by the shell. ---- */
-:root, :root[data-theme='paper'] {
-  color-scheme: light;
-  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0f1ee; --fg: #202322; --fg-muted: #5b615f; --border: #d9dbd7; --border-strong: #878a86;
-  --accent: #087771; --accent-fg: #ffffff; --accent-soft: #e3f1ef;
-  --danger: #c23a34; --danger-soft: #fbeceb; --success: #257a56; --success-soft: #e6f3ed; --warn: #966211; --warn-soft: #f8f0df;
-  --info: #3b6e8f; --info-soft: #e6eff5;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-:root[data-theme='carbon'] {
-  color-scheme: dark;
-  --bg: #111415; --surface: #1a1e1f; --surface-2: #222728; --fg: #f0f2ef; --fg-muted: #a3aaa7; --border: #343838; --border-strong: #6c7171;
-  --accent: #64beb5; --accent-fg: #0b1a19; --accent-soft: #17302d;
-  --danger: #ef6d67; --danger-soft: #3a1f1e; --success: #55c595; --success-soft: #16301f; --warn: #d9a441; --warn-soft: #33290f;
-  --info: #7db3d4; --info-soft: #1b2b36;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-}
-:root[data-theme='graphite'] {
-  color-scheme: dark;
-  --bg: #252a2a; --surface: #303637; --surface-2: #394041; --fg: #e9ece8; --fg-muted: #aab1ae; --border: #475150; --border-strong: #828c8a;
-  --accent: #64beb5; --accent-fg: #0b1a19; --accent-soft: #274240;
-  --danger: #f38e8a; --danger-soft: #432726; --success: #5cc99a; --success-soft: #1f3a2d; --warn: #dcaa4a; --warn-soft: #3a3012;
-  --info: #84b9d9; --info-soft: #25363f;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
+/* ---- tokens -------------------------------------------------------------------------------------------------
+   The runtime writes the active theme (Light, Dark, Graphite or the organisation's Custom theme) onto :root from
+   lib/theme/tokens.json. These static values only cover the first paint before that happens. See DESIGN.md. */
 :root {
-  --radius: 8px; --radius-sm: 6px; --radius-chip: 4px;
+  color-scheme: light;
+  --brand: #2B2F31; --brand-2: #0B6E69; --accent: #0B6E69; --bg: #F7F7F5; --bg-2: #EEEFEC; --sidebar-bg: #EFEFEC;
+  --header-bg: #F7F7F5; --composer-bg: #FFFFFF; --user-msg-bg: #E9EAE6; --assistant-msg-bg: #F7F7F5; --card-bg: #FFFFFF; --fg: #1D2021;
+  --fg-2: #3D4345; --fg-muted: #5C6264; --border: #DCDDD9; --border-strong: #878C89; --hover: #E7E8E4; --selected: #E0E6E3;
+  --btn-bg: #FFFFFF; --btn-fg: #1D2021; --btn-primary-bg: #2B2F31; --btn-primary-fg: #FFFFFF; --link: #0B6E69; --success: #23744F;
+  --warn: #875A0F; --danger: #BC3631; --info: #36698A;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  --brand: #ECEDEA; --brand-2: #6CC3B9; --accent: #6CC3B9; --bg: #141617; --bg-2: #1C1F20; --sidebar-bg: #101213;
+  --header-bg: #141617; --composer-bg: #1E2122; --user-msg-bg: #262A2B; --assistant-msg-bg: #141617; --card-bg: #1B1E1F; --fg: #ECEDEA;
+  --fg-2: #C5C9C6; --fg-muted: #9EA4A2; --border: #2D3132; --border-strong: #61676A; --hover: #222627; --selected: #1F2D2C;
+  --btn-bg: #1E2122; --btn-fg: #ECEDEA; --btn-primary-bg: #ECEDEA; --btn-primary-fg: #141617; --link: #6CC3B9; --success: #55C595;
+  --warn: #D9A441; --danger: #EF6D67; --info: #7DB3D4;
+  }
+}
+/* Older names used across the interface, defined from the tokens so every surface follows the theme. */
+:root {
+  --surface: var(--card-bg); --surface-2: var(--bg-2); --accent-soft: var(--selected); --accent-fg: var(--btn-primary-fg);
+  --danger-soft: color-mix(in srgb, var(--danger) 12%, var(--card-bg));
+  --success-soft: color-mix(in srgb, var(--success) 12%, var(--card-bg));
+  --warn-soft: color-mix(in srgb, var(--warn) 12%, var(--card-bg));
+  --info-soft: color-mix(in srgb, var(--info) 12%, var(--card-bg));
+  --radius: 8px; --radius-sm: 6px; --radius-chip: 4px; --font-size: 14px;
   --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --row: 44px; --pad: 16px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
-  --rail: 232px;
+  --rail: 232px; --sidebar-w: 272px; --header-h: 52px; --msg-w: 820px;
 }
 :root[data-density='compact'] { --row: 32px; --pad: 12px; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/1.45 var(--font); font-feature-settings: 'tnum' 1; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 var(--font-size)/1.5 var(--font); font-feature-settings: 'tnum' 1; }
 h1, h2, h3, h4 { line-height: 1.2; margin: 0; font-weight: 600; }
 h1 { font-size: 26px; } h2 { font-size: 20px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
 p { margin: 0 0 var(--s3); }
-a { color: var(--accent); text-underline-offset: 2px; }
+a { color: var(--link); text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
 code, kbd, .mono { font-family: var(--mono); font-size: 0.93em; }
 kbd { border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); }
@@ -57,18 +60,18 @@ small, .muted { color: var(--fg-muted); }
 .skip:focus { left: 8px; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
-::selection { background: var(--accent); color: var(--accent-fg); }
+::selection { background: var(--selected); color: var(--fg); }
 
 /* ---- controls ---- */
 .btn { font: 500 14px/1 var(--font); display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 14px;
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--fg); border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; white-space: nowrap; }
-.btn:hover:not(:disabled) { background: var(--surface-2); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.btn.primary:hover:not(:disabled) { filter: brightness(0.94); background: var(--accent); }
+  border: 1px solid var(--border-strong); background: var(--btn-bg); color: var(--btn-fg); border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn.primary { background: var(--btn-primary-bg); border-color: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--btn-primary-bg) 88%, var(--bg)); }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
-.btn.danger.solid { background: var(--danger); color: #fff; }
+.btn.danger.solid { background: var(--danger); border-color: var(--danger); color: var(--bg); }
 .btn.ghost { border-color: transparent; background: transparent; }
-.btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
+.btn.ghost:hover:not(:disabled) { background: var(--hover); }
 .btn.sm { min-height: 28px; padding: 0 10px; font-size: 13px; }
 .btn.icon { padding: 0; width: 36px; } .btn.icon.sm { width: 28px; }
 .btn:disabled, .btn[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }

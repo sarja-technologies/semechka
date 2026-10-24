@@ -5,6 +5,7 @@
   import { app, loadMe } from '$lib/session.svelte';
   import { toast } from '$lib/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import { THEME_LABELS } from '$lib/theme/theme';
   const me = $derived(app.me);
   let name = $state(app.me.user.display_name), theme = $state(app.me.user.prefs.theme ?? ''), density = $state(app.me.user.prefs.density ?? '');
   let cur = $state(''), nw = $state(''), pwErr = $state('');
@@ -35,7 +36,7 @@
   <section class="panel"><div class="panel-h"><h2 style="font-size:16px">Profile and appearance</h2></div><form class="panel-b" onsubmit={saveProfile}>
     <p class="small muted">Signed in as <span class="mono">{me.user.email}</span>. Roles: {me.roles.map((r: any) => r.label).join(', ')}{me.teams.length ? `. Teams: ${me.teams.map((t: any) => t.name).join(', ')}` : ''}.</p>
     <div class="field"><label for="dn">Display name</label><input id="dn" class="input" bind:value={name} maxlength="120" /></div>
-    <div class="field"><label for="t">Theme</label><select id="t" class="input" bind:value={theme}><option value="">Organisation default</option><option value="paper">Paper</option><option value="carbon">Carbon</option><option value="graphite">Graphite</option><option value="system">Match system</option></select></div>
+    {#if me.ui.theme.user_choice}<div class="field"><label for="t">Theme</label><select id="t" class="input" bind:value={theme}><option value="">Organisation default</option>{#each app.me.ui.theme.choices as c}<option value={c}>{THEME_LABELS[c]}</option>{/each}<option value="system">Match device (Light or Dark)</option></select></div>{/if}
     <div class="field"><label for="d">Density</label><select id="d" class="input" bind:value={density}><option value="">Organisation default</option><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div>
     <button class="btn primary" disabled={!name.trim()}>Save</button></form></section>
 

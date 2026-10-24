@@ -56,6 +56,11 @@ def public(s=Depends(get_db), st: AppState = Depends(get_state)):
     sg = signup_state(s, st)
     return {"needs_setup": needs_setup(s), "brand": {k.split(".", 1)[1]: v for k, v in pub.items() if k.startswith("brand.")},
             "privacy_notice": pub.get("privacy.notice", ""),
+            # the sign-in pages wear the organisation's theme; custom CSS is never applied to them
+            "theme": {k: pub.get(sid) for k, sid in (("default", "brand.theme_default"), ("follow_system", "theme.follow_system"),
+                                                     ("custom", "theme.custom"), ("font", "theme.font"),
+                                                     ("font_size", "theme.font_size"), ("radius", "brand.radius"),
+                                                     ("density", "brand.density"))},
             "signup": {"open": sg["open"], "needs_invite": sg["needs_invite"], "requires_approval": sg["requires_approval"],
                        "message": sg["message"]}}
 
