@@ -1,0 +1,1 @@
+.g.svelte-1uq49ma{grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;display:grid}.bar.svelte-1uq49ma{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:3px;height:10px;margin:8px 0 4px;overflow:hidden}.bar.svelte-1uq49ma span:where(.svelte-1uq49ma){background:var(--accent);height:100%;display:block}

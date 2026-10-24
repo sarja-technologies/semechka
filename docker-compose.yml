@@ -1,0 +1,17 @@
+# Semechka single-node deployment. Not exercised in the authoring environment (no Docker there): see docs/KNOWN_LIMITATIONS.md.
+# The port is published on 127.0.0.1 only. To use it from other devices, put an HTTPS reverse proxy in front.
+services:
+  semechka:
+    build: .
+    image: semechka:0.1.0
+    restart: unless-stopped
+    ports: ["127.0.0.1:8780:8780"]
+    volumes: ["semechka-data:/data"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Reach a model server running on the Docker host from inside the container:
+    extra_hosts: ["host.docker.internal:host-gateway"]
+volumes:
+  semechka-data:
