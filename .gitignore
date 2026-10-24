@@ -14,3 +14,6 @@ dist/
 .env.*
 /data/
 screenshots/tmp/
+web/.e2e-tmp/
+web/test-results/
+web/playwright-report/

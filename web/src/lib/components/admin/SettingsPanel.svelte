@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { get, qs } from '$lib/api';
   import State from './State.svelte';
   import SettingRow from './SettingRow.svelte';
   import { errMsg } from './util';
   let { categories = [], keys = [], q: q0 = '', searchable = true, skip = [] }: { categories?: string[]; keys?: string[]; q?: string; searchable?: boolean; skip?: string[] } = $props();
   let all = $state<any[]>([]); let cats = $state<string[]>([]); let loading = $state(true); let error = $state('');
-  let q = $state(q0); let cat = $state(''); let search: HTMLInputElement | undefined = $state();
+  let q = $state(untrack(() => q0)); let cat = $state(''); let search: HTMLInputElement | undefined = $state();
   async function load() { try { const r = await get('/api/admin/settings' + qs({ q: q || undefined })); all = r.settings; cats = r.categories; error = ''; } catch (e) { error = errMsg(e); } loading = false; }
   onMount(() => { load(); });
   let t: any; const typing = () => { clearTimeout(t); t = setTimeout(load, 200); };

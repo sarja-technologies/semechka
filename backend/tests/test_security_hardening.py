@@ -440,3 +440,24 @@ def test_two_instances_do_not_share_accounts_or_sessions(owner, app, tmp_path, f
 def test_api_reference_is_not_published_by_default(owner, app):
     a = Api(app)
     assert a.get("/api/openapi.json").status_code in (404, 405) and a.get("/api/docs").status_code in (404, 405)
+
+
+def test_server_paths_in_model_ids_are_hidden_unless_tech_permission(owner, app, st):
+    from semechka.models import Model
+    path = "/srv/secret-volume/models/llm/vendor--thing/model-Q4_K_M.gguf"
+    mid = model_id(owner)
+    with st.db.session() as s:
+        s.get(Model, mid).real_id = path
+    lim = make_user(owner, app, "ops@example.test", role="model_operator")
+    owner.put(f"/api/admin/users/{lim.user_id}/override", json={"grants": [], "denies": ["tech.model.id"]})
+    seen = lim.get("/api/admin/models")
+    assert seen.status_code == 200
+    assert "secret-volume" not in seen.text and "model-Q4_K_M.gguf" in seen.text
+    assert "secret-volume" not in lim.get("/api/admin/models", params={"q": "secret-volume"}).text
+    assert lim.get("/api/admin/models", params={"q": "secret-volume"}).json()["total"] == 0
+    full = next(i for i in owner.get("/api/admin/models").json()["items"] if i["id"] == mid)
+    assert full["real_id"] == "model-Q4_K_M.gguf" and full["real_id_full"] == path
+    for url in ("/api/admin/overview", "/api/admin/audit", "/api/chat/models"):
+        assert "secret-volume" not in lim.get(url).text
+    m = make_user(owner, app, "m@example.test")
+    assert "secret-volume" not in m.get("/api/chat/models").text

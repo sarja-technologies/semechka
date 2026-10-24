@@ -22,7 +22,7 @@
   let ephemeral = $state(false), eph = $state<Msg[]>([]);
   let live = $state<null | { mode: string; anchor: string | null; userText: string; text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; startedUser: boolean }>(null);
   let ctrl: { abort: () => void; done: Promise<void> } | null = null;
-  let input = $state(''), sendError = $state('');
+  let input = $state(''), sendError = $state(''), outcome = $state('');
   let files = $state<{ name: string; text: string }[]>([]), fileNote = $state('');
   const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|ya?ml|toml|ini|log|xml|html?|css|js|mjs|ts|tsx|jsx|py|rb|go|rs|c|h|cpp|hpp|java|kt|sh|bash|sql|svelte|vue|php|swift|cs)$/i;
   async function pickFiles(e: Event) {
@@ -102,6 +102,15 @@
   $effect(() => { const id = routeId; untrack(() => onRoute(id)); });
   $effect(() => { showArchived; untrack(loadList); });
   onMount(() => { loadModels(); });
+  // Deep links used by the command palette: ?new=<stamp>[&nosave=1][&model=<id>]
+  let lastNew = '';
+  $effect(() => {
+    const sp = page.url.searchParams, stamp = sp.get('new'), want = sp.get('model');
+    untrack(() => {
+      if (want && models.find((m) => m.id === want)) modelId = want;
+      if (stamp && stamp !== lastNew) { lastNew = stamp; newChat(sp.get('nosave') === '1' && canEph); if (want) modelId = want; goto('/chat', { replaceState: true }); }
+    });
+  });
 
   // resource readings only for people granted them, only while the drawer is open
   $effect(() => {
@@ -125,7 +134,7 @@
   }
   async function run(mode: 'send' | 'regenerate' | 'edit', content: string, anchor: string | null) {
     if (busy || !modelId) return;
-    sendError = '';
+    sendError = ''; outcome = '';
     live = { mode, anchor, userText: content, text: '', reasoning: '', status: 'sending', error: '', startedUser: false };
     try {
       let url: string, body: any;
@@ -159,6 +168,7 @@
         await loadConv(conv.id); loadList();
       }
       if (live?.error) sendError = live.error;
+      outcome = live?.error ? `Reply failed. ${live.error}` : live?.status === 'stopping' || final?.status === 'stopped' ? 'Reply stopped' : 'Reply complete';
     } catch (e) {
       sendError = msg(e);
       if (!ephemeral && conv && conv.messages.length === 0 && !live?.startedUser) { /* empty conversation stays; user can retry */ }
@@ -168,7 +178,10 @@
   function stop() { if (!live || !ctrl) return; live.status = 'stopping'; ctrl.abort(); }
   function key(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
-    else if (e.key === 'Escape' && busy) { e.preventDefault(); stop(); }
+  }
+  // Escape stops a running reply wherever focus is (the Stop button promises it); an open dialog keeps its own Escape.
+  function globalKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && busy && !document.querySelector('[role="dialog"]')) { e.preventDefault(); stop(); }
   }
   function autosize() { tick().then(() => { if (!composer) return; composer.style.height = 'auto'; composer.style.height = Math.min(composer.scrollHeight, 220) + 'px'; }); }
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast('Copy is not available in this browser context.', 'bad'); } }
@@ -197,11 +210,12 @@
   const fieldsAvail = $derived(ui.tech.fields.length > 0);
 </script>
 
+<svelte:window onkeydown={globalKey} />
 {#if !ui.modes.chat.enabled}
   <div style="padding:24px;max-width:640px"><h1 style="margin-bottom:12px">Chat</h1><div class="notice warn" role="status"><div><strong>Chat is not available to you.</strong> {ui.modes.chat.reason}</div></div></div>
 {:else}
 <div class="chat" class:withdrawer={techOn}>
-  <aside class="list" class:sheet={sheetList} aria-label="Conversations">
+  <aside class="list" class:sheet={sheetList} class:closed={!sheetList} aria-label="Conversations">
     <div class="lh">
       <button class="btn primary grow" onclick={() => newChat(false)}><Icon name="plus" /> New chat</button>
       <button class="btn ghost icon sm sheetx" aria-label="Close conversation list" onclick={() => (sheetList = false)}><Icon name="x" /></button>
@@ -233,6 +247,8 @@
       {#if ui.tech.drawer}<button class="btn sm" class:primary={techOn} aria-pressed={techOn} onclick={toggleTech} title="Show technical details for replies"><Icon name="cpu" size={16} /> Technical details</button>{/if}
     </header>
 
+    <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
+    <div class="sr-only" role="status" aria-live="polite" data-chat-status>{live ? (live.status === 'stopping' ? 'Stopping' : 'Assistant is replying') : outcome}</div>
     <div class="scroll" bind:this={scroller}>
       <div class="col">
         {#if modelsError}
@@ -375,7 +391,8 @@
   @media (max-width: 1023px) {
     .chat, .chat.withdrawer { grid-template-columns: 1fr; }
     .list { position: fixed; z-index: 60; left: 0; top: 0; bottom: 0; width: min(320px, 88vw); transform: translateX(-102%); background: var(--surface); box-shadow: var(--shadow); }
-    .list.sheet { transform: none; } .sheetx { display: inline-flex; } .scrim { display: block; position: fixed; inset: 0; background: rgba(10,12,12,.5); z-index: 55; }
+    .list.closed { visibility: hidden; }
+    .list.sheet { transform: none; visibility: visible; } .sheetx { display: inline-flex; } .scrim { display: block; position: fixed; inset: 0; background: rgba(10,12,12,.5); z-index: 55; }
     .listbtn { display: inline-flex; }
     .drawer { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 45vh; border-top: 1px solid var(--border-strong); border-left: 0; box-shadow: var(--shadow); }
   }

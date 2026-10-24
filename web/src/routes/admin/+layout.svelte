@@ -4,7 +4,8 @@
   import { app, can } from '$lib/session.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
-  import Palette from '$lib/components/admin/Palette.svelte';
+  import Palette from '$lib/components/Palette.svelte';
+  import { openPalette } from '$lib/palette.svelte';
   import { ADMIN_PAGES } from '$lib/components/admin/util';
   let { children } = $props();
   let menu = $state(false);
@@ -13,17 +14,14 @@
   $effect(() => { page.url.pathname; menu = false; });
   const active = (p: any) => (p.exact ? page.url.pathname === p.href : page.url.pathname.startsWith(p.href));
   const mfaBlock = $derived(app.me?.mfa_enrolment_required);
-  let pal = $state(false);
-  function key(e: KeyboardEvent) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); pal = true; } }
 </script>
-<svelte:window onkeydown={key} />
 {#if app.me && can('admin.overview')}
 <div class="shell">
   <header class="top">
     <button class="btn ghost icon" aria-label="Admin sections" aria-expanded={menu} aria-controls="anav" onclick={() => (menu = !menu)}><Icon name="menu" /></button>
     <a href="/admin" class="brand"><Wordmark size={16} /> <span class="tag">Admin</span></a>
     <span class="spacer"></span>
-    <button class="btn sm" onclick={() => (pal = true)} aria-label="Open command palette"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
+    <button class="btn sm" onclick={openPalette} aria-label="Open command palette" aria-keyshortcuts="Control+K Meta+K"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
     <a class="btn sm" href="/">Back to app</a>
   </header>
   <nav id="anav" class:open={menu} aria-label="Admin sections">
@@ -34,7 +32,7 @@
     {@render children()}
   </main>
 </div>
-<Palette bind:open={pal} />
+<Palette />
 {/if}
 <style>
   .shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: 52px 1fr; min-height: 100vh; }

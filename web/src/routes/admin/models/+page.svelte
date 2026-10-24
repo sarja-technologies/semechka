@@ -64,7 +64,7 @@
   {#if rows.length}<div class="tablewrap"><table class="t"><caption class="sr-only">Models</caption><thead><tr><th style="width:40px"><input type="checkbox" aria-label="Select all {rows.length} models on this page" checked={pageAll} onchange={togglePage} /></th><th>Alias</th><th>Real id</th><th>Backend</th><th>Capabilities</th><th>Reported</th><th>Access rules</th><th>State</th><th></th></tr></thead><tbody>
     {#each rows as r (r.id)}<tr>
       <td><input type="checkbox" aria-label="Select {r.alias}" checked={picked.has(r.id)} onchange={() => toggle(r.id)} /></td>
-      <td><strong>{r.alias}</strong>{#if r.pinned} <span class="chip">pinned</span>{/if}</td><td class="mono tiny" title={r.real_id} style="max-width:200px;overflow:hidden;text-overflow:ellipsis">{r.real_id.split('/').pop()}</td>
+      <td><strong>{r.alias}</strong>{#if r.pinned} <span class="chip">pinned</span>{/if}</td><td class="mono tiny" title={r.real_id} style="max-width:200px;overflow:hidden;text-overflow:ellipsis">{r.real_id}</td>
       <td>{r.backend}{#if r.external} <span class="chip warn">external</span>{/if}</td><td>{r.capabilities.join(', ')}</td>
       <td class="mono tiny">{[r.meta.params ? fmtParams(r.meta.params) : r.meta.params_label, r.meta.quantization, r.meta.context ? `${r.meta.context} ctx` : null].filter(Boolean).join(' · ') || 'nothing reported'}</td>
       <td>{r.grants.length ? `${r.grants.filter((g: any) => g.effect === 'allow').length} allow, ${r.grants.filter((g: any) => g.effect === 'deny').length} deny` : 'nobody'}</td>
@@ -86,7 +86,7 @@
   {#if m}
   <div class="row"><div class="field grow"><label for="ea">Alias (what people see)</label><input id="ea" class="input" bind:value={e.alias} /></div>
     <label class="row" style="gap:8px"><input type="checkbox" bind:checked={e.enabled} /> Enabled</label><label class="row" style="gap:8px"><input type="checkbox" bind:checked={e.pinned} /> Pinned</label></div>
-  <dl class="kv" style="margin-bottom:16px"><dt>Real id</dt><dd>{m.real_id}</dd><dt>Backend</dt><dd>{m.backend} ({m.runtime})</dd>
+  <dl class="kv" style="margin-bottom:16px"><dt>Model id</dt><dd class="mono">{m.real_id}</dd>{#if m.real_id_full}<dt>Full identifier</dt><dd class="mono">{m.real_id_full}</dd>{/if}<dt>Backend</dt><dd>{m.backend} ({m.runtime})</dd>
     {#each Object.entries(m.meta).filter(([k]) => !['loaded'].includes(k)) as [k, v]}<dt>{k}</dt><dd>{k.includes('bytes') ? fmtBytes(v as number) : String(v)}</dd>{/each}</dl>
   {#if !Object.keys(m.meta).length}<p class="hint">The backend reported no technical details for this model, so none are shown.</p>{/if}
   <div class="field"><label for="et">Tags (comma separated)</label><input id="et" class="input" bind:value={tagsText} /><span class="hint">Descriptive only. A tag never changes what people may do.</span></div>
