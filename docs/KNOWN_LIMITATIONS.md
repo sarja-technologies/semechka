@@ -6,7 +6,7 @@
 - Scheduler: no queues, priority lanes, fair-share, reservations, placement or retries. Only per-person daily quota and concurrent-generation limits.
 - Cluster mode: no node agent, enrolment, signed node traffic or heterogeneous routing. The DGX Spark + RTX 4070 Ti scenario is **not tested**.
 - Multi-tenant hosting (several isolated organisations). Single-organisation only. Do not offer shared hosting on this.
-- SSO/OIDC/SAML/SCIM, passkeys, CAPTCHA, geographic restrictions, signed templates, per-conversation settings scope, custom domains/TLS termination.
+- SAML, SCIM and passkeys/WebAuthn are not built (SAML needs XML-signature handling that has not been reviewed; SCIM needs a provisioning client to test against; WebAuthn needs real authenticators). OpenID Connect sign-in exists but has only been tested against a mock provider, so real-provider quirks are unverified; refresh tokens, `private_key_jwt` client authentication and back-channel logout are not implemented; the DNS check before a provider fetch is not pinned to the connection. Also not built: CAPTCHA, geographic restrictions, signed templates, per-conversation settings scope, custom domains/TLS termination.
 - Content-policy engine (allow/warn/block/hold/redact/escalate), flagged-content review, legal hold, dual approval, data-subject export/delete workflows.
 - User-held-key encryption, customer-managed keys / KMS, E2EE. **Do not describe conversations as end-to-end encrypted.**
 - Backups: encrypted file backup/restore of the SQLite database + key + assets is implemented and tested; scheduled backups, off-host destinations, Postgres backups, retention of backups and restore drills are not.

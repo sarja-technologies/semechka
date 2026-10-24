@@ -72,6 +72,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `auth.mfa_required_admins` | bool | `False` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
 | `auth.mfa_required_all` | bool | `False` | deployment | specific | `admin.signup.edit` | weakening changes need confirmation |
 | `auth.allow_user_delete` | bool | `True` | deployment | specific | `admin.signup.edit` |  |
+| `sso.local_login` | bool | `True` | deployment | specific | `admin.sso.manage` | Turning this off sends everyone except owners to the identity provider. |
 
 ## Privacy & Retention
 
