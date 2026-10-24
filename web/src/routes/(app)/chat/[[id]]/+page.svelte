@@ -96,7 +96,7 @@
   }
   function onRoute(id: string | undefined) {
     if (id && id === skipLoad) { skipLoad = ''; return; }
-    if (id) { ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; }
+    if (id) { epoch++; live = null; ctrl = null; ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; }
     sheetList = false;
   }
   $effect(() => { const id = routeId; untrack(() => onRoute(id)); });
@@ -132,47 +132,57 @@
     skipLoad = c.id; goto(`/chat/${c.id}`, { replaceState: true });
     return c.id;
   }
+  // Each generation remembers the conversation and mode it started in. Starting a new chat (or opening another one) bumps
+  // `epoch`, after which a still-finishing generation may complete on the server but must not touch what is on screen.
+  let epoch = 0;
   async function run(mode: 'send' | 'regenerate' | 'edit', content: string, anchor: string | null) {
     if (busy || !modelId) return;
     sendError = ''; outcome = '';
+    const mine = epoch, noSave = ephemeral;
     live = { mode, anchor, userText: content, text: '', reasoning: '', status: 'sending', error: '', startedUser: false };
+    const cur = live;
+    let convId: string | null = null;
     try {
       let url: string, body: any;
-      if (ephemeral) {
+      if (noSave) {
         let hist = eph.map((m) => ({ role: m.role, content: m.content }));
         if (mode === 'regenerate') { while (hist.length && hist[hist.length - 1].role === 'assistant') hist.pop(); }
         else { hist.push({ role: 'user', content }); }
         url = '/api/chat/ephemeral/generate'; body = { messages: hist, model_id: modelId };
       } else {
         const id = await ensureConv(); if (!id) return;
+        convId = id;
         url = `/api/chat/conversations/${id}/generate`;
         body = mode === 'send' ? { mode, content, model_id: modelId, parent_id: path.length ? path[path.length - 1].id : null }
           : { mode, content: mode === 'edit' ? content : undefined, parent_id: anchor, model_id: modelId };
       }
       let final: any = null;
       ctrl = stream(url, body, (ev) => {
-        if (!live) return;
-        if (ev.type === 'start') { live.status = 'streaming'; live.startedUser = true; }
-        else if (ev.type === 'delta') { live.text += ev.content; live.reasoning += ev.reasoning; scrollEnd(); }
-        else if (ev.type === 'error') live.error = ev.message;
+        if (mine !== epoch) return;
+        if (ev.type === 'start') { cur.status = 'streaming'; cur.startedUser = true; }
+        else if (ev.type === 'delta') { cur.text += ev.content; cur.reasoning += ev.reasoning; scrollEnd(); }
+        else if (ev.type === 'error') cur.error = ev.message;
         else if (ev.type === 'done') final = ev;
       });
       await ctrl.done;
-      if (ephemeral) {
+      if (mine !== epoch) return; // the person moved on; the reply is saved server-side if it was a saved chat
+      if (noSave) {
         if (mode !== 'regenerate') eph.push({ id: 'u' + eph.length + Date.now(), parent_id: null, role: 'user', content, status: 'complete', created_at: 0, model: null, tech: {} });
         else { while (eph.length && eph[eph.length - 1].role === 'assistant') eph.pop(); }
-        const text = final?.content ?? live?.text ?? '';
-        if (text || live?.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: live?.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {} });
-      } else if (conv) {
-        if (live?.status === 'stopping') await new Promise((r) => setTimeout(r, 350));
-        await loadConv(conv.id); loadList();
+        const text = final?.content ?? cur.text ?? '';
+        if (text || cur.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: cur.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {} });
+      } else if (convId) {
+        if (cur.status === 'stopping') await new Promise((r) => setTimeout(r, 350));
+        if (mine !== epoch) return;
+        await loadConv(convId); loadList();
       }
-      if (live?.error) sendError = live.error;
-      outcome = live?.error ? `Reply failed. ${live.error}` : live?.status === 'stopping' || final?.status === 'stopped' ? 'Reply stopped' : 'Reply complete';
+      if (cur.error) sendError = cur.error;
+      outcome = cur.error ? `Reply failed. ${cur.error}` : cur.status === 'stopping' || final?.status === 'stopped' ? 'Reply stopped' : 'Reply complete';
     } catch (e) {
-      sendError = msg(e);
-      if (!ephemeral && conv && conv.messages.length === 0 && !live?.startedUser) { /* empty conversation stays; user can retry */ }
-    } finally { live = null; ctrl = null; scrollEnd(true); composer?.focus(); }
+      if (mine === epoch) sendError = msg(e);
+    } finally {
+      if (mine === epoch) { live = null; ctrl = null; scrollEnd(true); composer?.focus(); }
+    }
   }
   function submit() { if (busy) return; const body = input.trim(); if (!body && !files.length) return; const t = [...files.map((f) => `<file name="${f.name.replace(/"/g, '')}">\n${f.text}\n</file>`), body].filter(Boolean).join('\n\n'); if (t.length > ui.composer.max_chars) { sendError = `Messages are limited to ${ui.composer.max_chars.toLocaleString()} characters.`; return; } input = ''; files = []; fileNote = ''; autosize(); run('send', t, null); }
   function stop() { if (!live || !ctrl) return; live.status = 'stopping'; ctrl.abort(); }
@@ -187,7 +197,7 @@
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast('Copy is not available in this browser context.', 'bad'); } }
 
   // ---------- conversation actions ----------
-  function newChat(eph_ = false) { ephemeral = eph_; eph = []; conv = null; sendError = ''; if (routeId) goto('/chat'); sheetList = false; tick().then(() => composer?.focus()); }
+  function newChat(eph_ = false) { epoch++; live = null; ctrl = null; ephemeral = eph_; eph = []; conv = null; sendError = ''; if (routeId) goto('/chat'); sheetList = false; tick().then(() => composer?.focus()); }
   async function rename() { if (!conv || !renameText.trim()) return; try { await patch(`/api/chat/conversations/${conv.id}`, { title: renameText.trim() }); conv.title = renameText.trim(); renameOpen = false; loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function archive() { if (!conv) return; try { await patch(`/api/chat/conversations/${conv.id}`, { archived: !showArchived }); toast(showArchived ? 'Restored' : 'Archived'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function remove() { if (!conv) return; try { await del(`/api/chat/conversations/${conv.id}`); deleteOpen = false; toast('Conversation deleted'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }

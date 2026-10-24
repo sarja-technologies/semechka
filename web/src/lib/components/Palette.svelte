@@ -13,9 +13,10 @@
   $effect(() => { if (palette.open) { q = ''; sel = 0; remote = []; base = allCommands(); } else { ctl?.abort(); } });
 
   const local = $derived.by(() => {
-    const t = q.toLowerCase().trim();
-    if (!t) return base.filter((c) => c.group === 'Go to' || c.group === 'Actions').slice(0, 14);
-    return base.filter((c) => `${c.group} ${c.label} ${c.keywords ?? ''}`.toLowerCase().includes(t));
+    const words = q.toLowerCase().split(/[\s:]+/).filter(Boolean);
+    if (!words.length) return base.filter((c) => c.group === 'Go to' || c.group === 'Actions').slice(0, 14);
+    // every typed word must appear somewhere in the group, label or keywords, in any order ("theme carbon")
+    return base.filter((c) => { const hay = `${c.group} ${c.label} ${c.keywords ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
   });
   const results = $derived([...local, ...remote.filter((r) => !local.some((l) => l.id === r.id))].slice(0, 24));
 

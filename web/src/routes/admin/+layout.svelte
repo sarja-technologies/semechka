@@ -13,6 +13,11 @@
   $effect(() => { if (app.ready && app.me === null) goto(`/login?next=${encodeURIComponent(page.url.pathname)}`); else if (app.ready && app.me && !can('admin.overview')) goto('/'); });
   $effect(() => { page.url.pathname; menu = false; });
   const active = (p: any) => (p.exact ? page.url.pathname === p.href : page.url.pathname.startsWith(p.href));
+  // The section for the current URL, if it needs a permission this person lacks: say so instead of showing a failing page.
+  const forbidden = $derived.by(() => {
+    const here = ADMIN_PAGES.filter((p) => (p.exact ? page.url.pathname === p.href : page.url.pathname.startsWith(p.href))).sort((a, b) => b.href.length - a.href.length)[0];
+    return here && !can(here.perm) ? here : null;
+  });
   const mfaBlock = $derived(app.me?.mfa_enrolment_required);
 </script>
 {#if app.me && can('admin.overview')}
@@ -29,7 +34,10 @@
   </nav>
   <main id="main" tabindex="-1">
     {#if mfaBlock}<div class="notice warn" role="alert"><div>Your organisation requires multi-factor authentication for administrators. Admin features stay closed until you <a href="/account">set it up in your account</a>.</div></div>{/if}
-    {@render children()}
+    {#if forbidden}
+      <h1>{forbidden.label}</h1>
+      <div class="notice warn" role="status"><div><strong>You do not have access to this section.</strong> It needs the permission <code>{forbidden.perm}</code>, which your role does not include. Ask an administrator who manages roles if you need it.<div style="margin-top:8px"><a class="btn sm" href="/admin">Back to overview</a></div></div></div>
+    {:else}{@render children()}{/if}
   </main>
 </div>
 <Palette />
