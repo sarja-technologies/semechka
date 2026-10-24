@@ -61,7 +61,7 @@ def admin_catalog(ctx: Ctx = Depends(require(MANAGE))):
             "hidden": m.hidden, "sort": m.sort, "tags": m.tags or [], "reported_capabilities": m.capabilities or [],
             "capabilities": catalog_svc.capabilities(m), "profile": prof, "admin_profile": m.profile or {},
             "defaults": m.defaults or {}, "groups": member_of.get(m.id, []),
-            "external": bool(b and services.is_external(m, b)),
+            "external": bool(b and services.is_external(m, b)), "manual": bool((m.meta or {}).get("manual")),
             "media_modes": ((m.meta or {}).get("media") or {}).get("modes") or [],
             "grants": [_grant_out(g) for g in grants.get(m.id, [])]})
     return {"models": models,

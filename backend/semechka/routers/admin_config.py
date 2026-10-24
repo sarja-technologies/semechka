@@ -3,16 +3,26 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
 from .. import adapters, audit, perms, services, telemetry
 from ..backends_svc import adapter_for, sync_models
 from ..deps import Ctx, audit_ctx, current, require
-from ..models import (AuditEvent, Backend, Conversation, Model, ModelGrant, Role, SettingValue, Team, UsageEvent, User)
+from ..models import (
+    AuditEvent,
+    Backend,
+    Conversation,
+    Model,
+    ModelGrant,
+    Role,
+    SettingValue,
+    Team,
+    UsageEvent,
+    User,
+)
 from ..settings_reg import BY_ID, DEFS, SettingError
-from .admin_people import check_grantable
 from .me import ui_config
 
 router = APIRouter(prefix="/api/admin")
@@ -449,6 +459,57 @@ def _clean_grants(ctx, grants):
         seen.add((t, i))
         clean.append({"subject_type": t, "subject_id": i, "effect": e, "modes": modes})
     return clean
+
+
+class ManualModelIn(BaseModel):
+    backend_id: str
+    real_id: str = Field(min_length=1, max_length=300, pattern=r"^[^\x00-\x1f\x7f]+$")
+    alias: str | None = Field(default=None, min_length=1, max_length=120)
+    capabilities: list[str] = Field(default_factory=lambda: ["chat"], max_length=6)
+
+
+@router.post("/models")
+def register_model(body: ManualModelIn, ctx: Ctx = Depends(require("admin.models.manage"))):
+    """Register a model the backend does not list (some hosted APIs serve more than they report). Like a discovered
+    model it starts disabled and with no grants; sync never marks it missing because it was never discovered."""
+    from ..backends_svc import friendly_alias
+    b = ctx.s.get(Backend, body.backend_id)
+    if b is None:
+        raise _err(404, "not_found", "No such backend.")
+    rid = body.real_id.strip()
+    if ctx.s.execute(select(Model).where(Model.backend_id == b.id, Model.real_id == rid)).scalar_one_or_none():
+        raise _err(409, "exists", "That model is already in the catalogue for this backend.")
+    caps = sorted(set(body.capabilities))
+    if not caps or any(c not in ("chat", "vision", "tools", "image", "video", "embeddings") for c in caps):
+        raise _err(422, "invalid", "Capabilities must be chosen from chat, vision, tools, image, video, embeddings.")
+    m = Model(backend_id=b.id, real_id=rid, alias=(body.alias or friendly_alias(rid)).strip(), capabilities=caps,
+              meta={"manual": True, **({"external": True} if b.external else {})}, enabled=False)
+    ctx.s.add(m)
+    ctx.s.flush()
+    audit_ctx(ctx, "model.register", m.id, {"backend": b.id, "capabilities": caps})
+    return {"id": m.id}
+
+
+@router.delete("/models/{mid}")
+def unregister_model(mid: str, ctx: Ctx = Depends(require("admin.models.manage"))):
+    """Remove a manually registered model that nothing has used yet. Discovered or used models are hidden instead,
+    so conversations and usage keep naming the model they ran on."""
+    from ..media_models import MediaJob
+    from ..models import Message, ModelGroupMember
+    m = ctx.s.get(Model, mid)
+    if m is None:
+        raise _err(404, "not_found", "No such model.")
+    if not (m.meta or {}).get("manual"):
+        raise _err(409, "discovered", "Only models you registered by hand can be removed. Hide or disable this one instead.")
+    used = any(ctx.s.execute(select(t.id).where(t.model_id == mid).limit(1)).first() for t in (Message, UsageEvent, MediaJob))
+    if used:
+        raise _err(409, "in_use", "This model has already been used, so it is kept for the record. Hide or disable it instead.")
+    for row in [*ctx.s.execute(select(ModelGrant).where(ModelGrant.model_id == mid)).scalars(),
+                *ctx.s.execute(select(ModelGroupMember).where(ModelGroupMember.model_id == mid)).scalars()]:
+        ctx.s.delete(row)
+    ctx.s.delete(m)
+    audit_ctx(ctx, "model.unregister", mid, {})
+    return {"ok": True}
 
 
 class ModelBulk(BaseModel):

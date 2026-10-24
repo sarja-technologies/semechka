@@ -307,3 +307,29 @@ def test_personal_export_contains_my_data_only(owner, app):
     out = m.get("/api/me/export").json()
     blob = str(out)
     assert out["schema"] == "semechka.personal-export/1" and "export me" in blob and "not yours" not in blob
+
+
+def test_manual_registration_starts_closed_survives_sync_and_is_removable_only_while_unused(owner, app):
+    bid = owner.get("/api/admin/backends").json()[0]["id"]
+    r = owner.post("/api/admin/models", json={"backend_id": bid, "real_id": "fake-unlisted", "capabilities": ["chat"]})
+    assert r.status_code == 200, r.text
+    mid = r.json()["id"]
+    assert owner.post("/api/admin/models", json={"backend_id": bid, "real_id": "fake-unlisted"}).status_code == 409
+    assert owner.post("/api/admin/models", json={"backend_id": bid, "real_id": "x", "capabilities": ["admin"]}).status_code == 422
+    row = next(m for m in owner.get("/api/admin/models").json()["items"] if m["id"] == mid)
+    assert row["enabled"] is False and row["grants"] == [] and row["available"] is True
+    m = make_user(owner, app, "m@example.test")
+    assert mid not in [x["id"] for x in m.get("/api/models/catalog").json()["models"]]  # no grant, no use
+    assert owner.post(f"/api/admin/backends/{bid}/sync").status_code == 200
+    row = next(x for x in owner.get("/api/admin/models").json()["items"] if x["id"] == mid)
+    assert row["available"] is True  # the backend does not list it, but it was never discovered
+    owner.patch(f"/api/admin/models/{mid}", json={"enabled": True})
+    owner.put(f"/api/admin/models/{mid}/grants", json={"grants": [{"subject_type": "everyone", "subject_id": "", "effect": "allow"}]})
+    assert mid in [x["id"] for x in m.get("/api/models/catalog").json()["models"]]
+    say(m, new_conv(m, mid), mid)
+    assert owner.delete(f"/api/admin/models/{mid}").json()["detail"]["code"] == "in_use"
+    spare = owner.post("/api/admin/models", json={"backend_id": bid, "real_id": "fake-spare"}).json()["id"]
+    assert owner.delete(f"/api/admin/models/{spare}").status_code == 200
+    assert spare not in [x["id"] for x in owner.get("/api/admin/models").json()["items"]]
+    assert owner.delete(f"/api/admin/models/{model_id(owner)}").json()["detail"]["code"] == "discovered"
+    assert m.post("/api/admin/models", json={"backend_id": bid, "real_id": "nope"}).status_code == 403

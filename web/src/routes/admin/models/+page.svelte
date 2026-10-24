@@ -8,7 +8,10 @@
   import State from '$lib/components/admin/State.svelte';
   import Pager from '$lib/components/admin/Pager.svelte';
   import { errMsg, fmtBytes, fmtParams } from '$lib/components/admin/util';
-  import { loadRoles, loadTeams, loadUsers, type Opt } from '$lib/components/admin/lookup';
+  import { loadRoles, loadTeams, loadUsers, type Opt, type Rule } from '$lib/components/admin/lookup';
+  import CatalogBoard from '$lib/components/admin/CatalogBoard.svelte';
+  import GrantsEditor from '$lib/components/admin/GrantsEditor.svelte';
+  let tab = $state<'catalogue' | 'engine'>('catalogue');
   let rows = $state<any[]>([]); let total = $state(0); let loading = $state(true); let error = $state('');
   let q = $state(''); let tag = $state(''); let capability = $state(''); let backend = $state(''); let enabled = $state(''); let pg = $state(1); const per = 20;
   let backends = $state<any[]>([]); let roles = $state<Opt[]>([]); let teams = $state<Opt[]>([]); let users = $state<Opt[]>([]);
@@ -29,11 +32,8 @@
       const r = await post('/api/admin/models/bulk', body); bOpen = false; picked = new Set(); allMatching = false; toast(`${BL[bAct]}: ${r.done} models.`); load(); } catch (e) { bErr = errMsg(e); }
   }
   // edit
-  let eOpen = $state(false); let m = $state<any>(null); let e = $state<any>({}); let eErr = $state(''); let rules = $state<any[]>([]); let tagsText = $state(''); let nr = $state({ subject_type: 'team', subject_id: '', effect: 'allow' });
-  function edit(r: any) { m = r; e = { alias: r.alias, enabled: r.enabled, pinned: r.pinned, system_prompt: '', keepPrompt: true, max_tokens: r.gen_limits.max_tokens ?? '', temperature: r.gen_limits.temperature ?? '', allow_tools: r.allow_tools }; tagsText = (r.tags ?? []).join(', '); rules = r.grants.map((g: any) => ({ ...g })); eErr = ''; opLog = ''; eOpen = true; }
-  const subj = (t: string) => (t === 'role' ? roles : t === 'team' ? teams : users);
-  const label = (t: string, id: string) => subj(t).find((o) => o.id === id)?.label ?? id;
-  function addRule() { if (!nr.subject_id) return; if (!rules.find((r) => r.subject_type === nr.subject_type && r.subject_id === nr.subject_id)) rules = [...rules, { ...nr }]; nr.subject_id = ''; }
+  let eOpen = $state(false); let m = $state<any>(null); let e = $state<any>({}); let eErr = $state(''); let rules = $state<Rule[]>([]); let tagsText = $state('');
+  function edit(r: any) { m = r; e = { alias: r.alias, enabled: r.enabled, pinned: r.pinned, system_prompt: '', keepPrompt: true, max_tokens: r.gen_limits.max_tokens ?? '', temperature: r.gen_limits.temperature ?? '', allow_tools: r.allow_tools }; tagsText = (r.tags ?? []).join(', '); rules = r.grants.map((g: any) => ({ ...g, subject_id: g.subject_type === 'everyone' ? '*' : g.subject_id })); eErr = ''; opLog = ''; eOpen = true; }
   async function saveModel() {
     eErr = '';
     try {
@@ -41,7 +41,7 @@
       const body: any = { alias: e.alias, enabled: e.enabled, pinned: e.pinned, tags: tagsText.split(',').map((x: string) => x.trim()).filter(Boolean), gen_limits: gl, allow_tools: e.allow_tools };
       if (!e.keepPrompt) body.system_prompt = e.system_prompt;
       await patch(`/api/admin/models/${m.id}`, body);
-      await put(`/api/admin/models/${m.id}/grants`, { grants: rules.map(({ subject_type, subject_id, effect }) => ({ subject_type, subject_id, effect })) });
+      await put(`/api/admin/models/${m.id}/grants`, { grants: rules.map((r) => ({ ...r, subject_id: r.subject_type === 'everyone' ? '' : r.subject_id })) });
       eOpen = false; toast('Model saved.'); load();
     } catch (x) { eErr = errMsg(x); }
   }
@@ -49,7 +49,12 @@
   async function op(kind: string) { opBusy = true; opLog = ''; try { await post(`/api/admin/models/${m.id}/${kind}`); opLog = `${kind} requested and accepted by the backend.`; } catch (x: any) { opLog = x.code === 'forbidden' ? 'You do not have permission to load or unload models (ops.model.load).' : x.code === 'unsupported' ? `Not supported by this backend: ${x.message}` : errMsg(x); } opBusy = false; }
   const caps = ['chat', 'vision', 'tools', 'embeddings', 'image', 'video', 'audio'];
 </script>
-<Page title="Models & Aliases" lead="Discovered models stay disabled, with no one allowed, until you enable them and grant access. People see the alias; the real id is only shown to those with the matching technical field. A deny rule always wins.">
+<Page title="Models" lead="Discovered models stay off, with nobody allowed, until you turn them on and allow someone. Groups, order and icons only change how the chooser looks; access comes from each model's rules, and a deny always wins.">
+  <div class="tabs" role="tablist" aria-label="Models">
+    <button role="tab" aria-selected={tab === 'catalogue'} class:on={tab === 'catalogue'} onclick={() => (tab = 'catalogue')}>Catalogue</button>
+    <button role="tab" aria-selected={tab === 'engine'} class:on={tab === 'engine'} onclick={() => { tab = 'engine'; load(); }}>Engine settings and bulk access</button>
+  </div>
+  {#if tab === 'catalogue'}<CatalogBoard />{:else}
   <div class="row" style="margin-bottom:12px" role="search">
     <div style="flex:1 1 220px;max-width:300px"><label class="sr-only" for="mq">Search models</label><input id="mq" class="input" type="search" placeholder="Search alias or real id" bind:value={q} oninput={filt} /></div>
     <label class="sr-only" for="mt">Capability</label><select id="mt" class="input" style="max-width:160px" bind:value={capability} onchange={filt}><option value="">Any capability</option>{#each caps as c}<option>{c}</option>{/each}</select>
@@ -71,6 +76,7 @@
       <td>{#if !r.available}<span class="chip bad">missing on backend</span>{:else if r.enabled}<span class="chip ok">enabled</span>{:else}<span class="chip">disabled</span>{/if}</td>
       <td><button class="btn sm" onclick={() => edit(r)}>Edit</button></td></tr>{/each}</tbody></table></div>{/if}
   <Pager bind:page={pg} perPage={per} {total} onchange={() => { picked = new Set(); allMatching = false; load(); }} />
+  {/if}
 </Page>
 
 <Modal bind:open={bOpen} title="{BL[bAct]} — {count} {count === 1 ? 'model' : 'models'}?">
@@ -94,12 +100,7 @@
   <div class="row"><div class="field"><label for="emt">Max output tokens</label><input id="emt" class="input" type="number" min="1" bind:value={e.max_tokens} style="max-width:140px" /></div><div class="field"><label for="ete">Temperature</label><input id="ete" class="input" type="number" step="0.1" min="0" bind:value={e.temperature} style="max-width:120px" /></div></div>
 
   <fieldset class="fs"><legend>Who may use this model</legend>
-    <p class="hint" style="margin:0">No rule means nobody. Deny beats allow. To limit a model to two teams, remove the “Member” role rule and add two team allows.</p>
-    <table class="t"><caption class="sr-only">Access rules</caption><thead><tr><th>Subject</th><th>Rule</th><th></th></tr></thead><tbody>
-      {#each rules as r, i}<tr><td>{r.subject_type}: {label(r.subject_type, r.subject_id)}</td><td><select class="input" aria-label="Rule for {label(r.subject_type, r.subject_id)}" bind:value={r.effect} style="max-width:120px"><option>allow</option><option>deny</option></select></td><td><button class="btn sm" onclick={() => (rules = rules.filter((_, j) => j !== i))}>Remove</button></td></tr>{:else}<tr><td colspan="3" class="muted">No rules: nobody can use this model.</td></tr>{/each}</tbody></table>
-    <div class="row"><label class="sr-only" for="nt">Subject type</label><select id="nt" class="input" style="max-width:110px" bind:value={nr.subject_type} onchange={() => (nr.subject_id = '')}><option value="role">Role</option><option value="team">Team</option><option value="user">Person</option></select>
-      <label class="sr-only" for="ns">Subject</label><select id="ns" class="input" style="max-width:260px" bind:value={nr.subject_id}><option value="">Choose…</option>{#each subj(nr.subject_type) as o}<option value={o.id}>{o.label}</option>{/each}</select>
-      <label class="sr-only" for="ne">Effect</label><select id="ne" class="input" style="max-width:100px" bind:value={nr.effect}><option>allow</option><option>deny</option></select><button class="btn" onclick={addRule}>Add rule</button></div>
+    <GrantsEditor bind:rules {roles} {teams} {users} modes={['chat', 'code', 'vision', 'image', 'video']} />
   </fieldset>
 
   <fieldset class="fs"><legend>Operate</legend>
@@ -109,4 +110,4 @@
   {#if eErr}<p class="err" role="alert">{eErr}</p>{/if}{/if}
   {#snippet footer()}<button class="btn" onclick={() => (eOpen = false)}>Cancel</button><button class="btn primary" onclick={saveModel}>Save model</button>{/snippet}
 </Modal>
-<style>.fs { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); margin: 0 0 16px; display: grid; gap: 10px; padding: 12px; } legend { font-weight: 600; font-size: 13px; padding: 0 4px; } .fs :global(table.t) { border: 0; }</style>
+<style>.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; } .tabs button { all: unset; cursor: pointer; padding: 8px 12px; font-size: 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; } .tabs button.on { border-color: var(--accent); font-weight: 600; } .tabs button:focus-visible { outline: 2px solid var(--accent); } .fs { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); margin: 0 0 16px; display: grid; gap: 10px; padding: 12px; } legend { font-weight: 600; font-size: 13px; padding: 0 4px; } .fs :global(table.t) { border: 0; }</style>

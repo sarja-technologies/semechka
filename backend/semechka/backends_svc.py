@@ -50,10 +50,12 @@ async def sync_models(session_factory, st, backend_id: str) -> dict:
                             capabilities=d.capabilities, meta=meta, enabled=False))
                 added += 1
             else:
-                m.capabilities, m.meta, m.available = d.capabilities, {**(m.meta or {}), **meta}, True
+                # a hand-registered model the backend now lists becomes an ordinary discovered one
+                old = {k: v for k, v in (m.meta or {}).items() if k != "manual"}
+                m.capabilities, m.meta, m.available = d.capabilities, {**old, **meta}, True
                 updated += 1
         for rid, m in existing.items():
-            if rid not in seen:
+            if rid not in seen and not (m.meta or {}).get("manual"):
                 m.available = False
         s.commit()
     return {"found": len(found), "added": added, "updated": updated, "version": health.get("version")}

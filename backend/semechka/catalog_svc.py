@@ -102,6 +102,18 @@ PROFILE_FIELDS = ("provider", "family", "parameters", "quantization", "context_l
                   "icon_asset", "capabilities")
 
 
+def _param_label(n) -> str | None:
+    """A reported parameter count (e.g. 500000000) as people write it (0.5B, 120B, 350M)."""
+    if isinstance(n, str):
+        return n.strip()[:20] or None
+    if isinstance(n, bool) or not isinstance(n, (int, float)) or n <= 0:
+        return None
+    if n >= 1e9:
+        v = n / 1e9
+        return f"{v:.0f}B" if v >= 10 or v == int(v) else f"{v:.1f}B"
+    return f"{n / 1e6:.0f}M"
+
+
 def profile_of(m: Model, provider_icons: dict | None = None) -> dict:
     """Effective metadata with the source of every value: 'admin', 'backend' or 'name'. Unknown values are absent."""
     meta, prof = m.meta or {}, m.profile or {}
@@ -118,7 +130,7 @@ def profile_of(m: Model, provider_icons: dict | None = None) -> dict:
     put("provider", meta.get("provider") if meta.get("provider") in BY_PROVIDER else None, "backend")
     put("family", meta.get("family"), "backend")
     put("parameters", named.get("parameters"), "name")
-    put("parameters", meta.get("params_label") or meta.get("params"), "backend")
+    put("parameters", meta.get("params_label") or _param_label(meta.get("params")), "backend")
     put("quantization", named.get("quantization"), "name")
     put("quantization", meta.get("quantization"), "backend")
     put("context_length", meta.get("context"), "backend")
