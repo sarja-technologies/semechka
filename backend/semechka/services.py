@@ -12,9 +12,10 @@ from .settings_reg import BY_ID as SETTING_DEFS
 
 MODES = ["chat", "code", "image", "video", "audio", "knowledge", "agents"]
 # Modes whose backends are implemented in this release. Others report a truthful unsupported state.
-IMPLEMENTED_MODES = {"chat"}
+# code / knowledge / agents(assistants) run on the chat engine; image, video and audio need their own backends.
+IMPLEMENTED_MODES = {"chat", "code", "knowledge", "agents"}
 MODE_CAPABILITY = {"chat": "chat", "code": "chat", "image": "image", "video": "video", "audio": "audio",
-                   "knowledge": "embeddings", "agents": "tools"}
+                   "knowledge": "chat", "agents": "chat"}
 
 
 def seed(s) -> None:

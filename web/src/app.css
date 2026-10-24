@@ -123,6 +123,11 @@ table.t th button:focus-visible { outline: 2px solid var(--accent); }
 /* ---- prose / markdown in chat ---- */
 .prose { max-width: 72ch; overflow-wrap: anywhere; }
 .prose > :first-child { margin-top: 0; } .prose > :last-child { margin-bottom: 0; }
+.prose .codeblock { margin: 0 0 var(--s3); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.prose .codehead { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 2px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); font: 12px var(--mono); color: var(--fg-muted); }
+.prose .copy-code { font: 500 12px var(--font); min-height: 24px; padding: 0 8px; border: 1px solid transparent; background: transparent; color: var(--fg); border-radius: var(--radius-sm); cursor: pointer; }
+.prose .copy-code:hover { background: var(--surface); border-color: var(--border-strong); }
+.prose .codeblock pre { margin: 0; border: 0; border-radius: 0; }
 .prose pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--s3); overflow: auto; font: 13px/1.5 var(--mono); }
 .prose code { background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
 .prose pre code { background: none; padding: 0; }
@@ -135,3 +140,4 @@ table.t th button:focus-visible { outline: 2px solid var(--accent); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 140ms ease-out; } @keyframes fade { from { opacity: 0; } to { opacity: 1; } } }
+@media (pointer: coarse) { .prose .copy-code { min-height: 40px; padding: 0 12px; } }

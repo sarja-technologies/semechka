@@ -15,6 +15,7 @@ export const ADMIN_PAGES = [
   { href: '/admin/models', label: 'Models & Aliases', icon: 'cpu', perm: 'admin.models.manage' },
   { href: '/admin/backends', label: 'Backends', icon: 'server', perm: 'admin.backends.manage' },
   { href: '/admin/system', label: 'System & Nodes', icon: 'server', perm: 'admin.system.view' },
+  { href: '/admin/queue', label: 'Queue', icon: 'list', perm: 'admin.system.view' },
   { href: '/admin/registration', label: 'Registration & Sign-in', icon: 'lock', perm: 'admin.settings.view', cat: 'Registration & Sign-in' },
   { href: '/admin/privacy', label: 'Privacy & Retention', icon: 'shield', perm: 'admin.settings.view', cat: 'Privacy & Retention' },
   { href: '/admin/quotas', label: 'Quotas', icon: 'usage', perm: 'admin.settings.view', cat: 'Quotas & Scheduling' },

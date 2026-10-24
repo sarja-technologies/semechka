@@ -118,3 +118,24 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `access.public_url` | string | `` | deployment | specific | `admin.settings.edit` |  |
 | `system.telemetry_opt_in` | bool | `False` | deployment | specific | `admin.settings.edit` | needs capability `telemetry_sender` |
 
+## Quotas & Scheduling
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `queue.backend_concurrency` | int | `2` | deployment | specific | `admin.quotas.edit` | Lower values make people wait longer but protect the backend from overload. |
+| `queue.user_slots_per_backend` | int | `1` | deployment | specific | `admin.quotas.edit` |  |
+| `queue.wait_timeout_seconds` | int | `300` | deployment | specific | `admin.quotas.edit` |  |
+| `queue.max_depth` | int | `50` | deployment | specific | `admin.quotas.edit` |  |
+
+## Modes
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `knowledge.max_collections` | int | `20` | deployment, role, team, user | min | `admin.quotas.edit` |  |
+| `knowledge.max_docs_per_collection` | int | `200` | deployment | specific | `admin.quotas.edit` |  |
+| `knowledge.max_doc_kb` | int | `2048` | deployment | specific | `admin.quotas.edit` |  |
+| `knowledge.max_chunks_per_collection` | int | `20000` | deployment | specific | `admin.quotas.edit` |  |
+| `knowledge.top_k` | int | `5` | deployment, role, team | min | `admin.settings.edit` |  |
+| `knowledge.context_chars` | int | `6000` | deployment, role, team | min | `admin.settings.edit` |  |
+| `code.system_prompt` | text | `You are a careful programming assistant. Prefer correct, re | deployment | specific | `admin.settings.edit` |  |
+

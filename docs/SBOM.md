@@ -29,6 +29,7 @@ Generated 2026-10-24 by scripts/sbom.sh. Licences: check each package; this is a
 - pydantic_core==2.50.1
 - pydantic-settings==2.16.1
 - Pygments==2.21.0
+- pypdf==6.21.2
 - pyproject_hooks==1.3.3
 - pytest==9.1.1
 - pytest-asyncio==1.4.0

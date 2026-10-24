@@ -24,11 +24,13 @@ async def chat(req: Request):
     words = ["Hello", " from", " the", " fake", " model"]
     if "slow" in last:
         words = ["tick"] * 60
+    elif "medium" in last:
+        words = ["tick"] * 20  # about one second: long enough to hold a backend slot in queue tests
 
     async def gen():
         for w in words:
             yield "data: " + json.dumps({"choices": [{"delta": {"content": w}}]}) + "\n\n"
-            await asyncio.sleep(0.25 if "slow" in last else 0.01)
+            await asyncio.sleep(0.25 if "slow" in last else 0.05 if "medium" in last else 0.01)
         yield "data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}]}) + "\n\n"
         yield "data: " + json.dumps({"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": len(words)},
                                      "timings": {"predicted_per_second": 123.4, "prompt_per_second": 900.0}}) + "\n\n"

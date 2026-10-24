@@ -10,7 +10,7 @@
   const pct = (a?: number | null, b?: number | null) => (a != null && b ? Math.round((a / b) * 100) : null);
   const dur = (n: number) => (n > 3600 ? `${Math.floor(n / 3600)} h ${Math.floor((n % 3600) / 60)} min` : `${Math.floor(n / 60)} min`);
 </script>
-<Page title="System & Nodes" lead="Measured values from this host and its backends. This release manages a single node; there is no cluster scheduler or queue, so none is shown.">
+<Page title="System & Nodes" lead="Measured values from this host and its backends. This release manages a single node; there is no cluster scheduler. Requests waiting for a backend are on the Queue page.">
   {#snippet actions()}<button class="btn" onclick={load} disabled={loading}>Refresh</button>{#if at}<span class="muted small">Read at {at}</span>{/if}{/snippet}
   <State loading={loading && !s} {error} retry={load} />
   {#if s}

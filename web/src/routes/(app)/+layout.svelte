@@ -10,8 +10,9 @@
   let collapsed = $state(false), menu = $state(false), gkey = false;
   const nav = $derived<any[]>(app.me?.ui.nav ?? []);
   const path = $derived(page.url.pathname);
-  const href = (n: any) => (n.available ? (n.id === 'usage' ? '/usage' : n.id === 'help' ? '/help' : n.id === 'chat' ? '/chat' : `/unavailable/${n.id}`) : `/unavailable/${n.id}`);
-  const active = (n: any) => path.startsWith(href(n)) || (n.id === 'chat' && path.startsWith('/chat'));
+  const ROUTES: Record<string, string> = { usage: '/usage', help: '/help', chat: '/chat', code: '/code', knowledge: '/knowledge', agents: '/agents' }; // modes with a real page
+  const href = (n: any) => (n.available && ROUTES[n.id] ? ROUTES[n.id] : `/unavailable/${n.id}`);
+  const active = (n: any) => path.startsWith(href(n));
   const brand = $derived(app.brand);
   $effect(() => { if (app.me) collapsed = localStorageGet() ?? app.me.ui.sidebar_collapsed; });
   $effect(() => { if (app.me?.mfa_enrolment_required && path !== '/account') goto('/account', { replaceState: true }); });
