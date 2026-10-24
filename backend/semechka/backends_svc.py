@@ -18,7 +18,7 @@ def adapter_for(b: Backend, st) -> adapters.Adapter:
 def friendly_alias(real_id: str) -> str:
     base = real_id.split("/")[-1]
     base = re.sub(r"\.(gguf|bin)$", "", base, flags=re.I)
-    base = base.split(":", 1)[-1] if base.startswith(("local:", "endpoint:")) else base
+    base = base.split(":", 1)[-1] if base.startswith(("local:", "endpoint:", "image:", "video:")) else base
     return base[:100]
 
 

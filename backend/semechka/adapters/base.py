@@ -36,6 +36,7 @@ class Manifest:
     model_load: bool = False
     model_unload: bool = False
     model_install: bool = False
+    media: bool = False  # image/video generation jobs (media_* methods)
     system_telemetry: bool = False
     reports_usage_tokens: bool = False
     reports_timings: bool = False
@@ -80,3 +81,16 @@ class Adapter:
 
     async def unload(self, model: str) -> None:
         raise Unsupported("unloading models")
+
+
+# ---- media block (image / video jobs) -------------------------------------------------------------------
+# media_status() returns a normalised dict:
+#   {"status": "queued|running|completed|failed|cancelled", "progress": float|None, "text": str,
+#    "queue_position": int|None, "error": str|None,
+#    "outputs": [{"ref", "discard_id", "kind", "width", "height", "seed", "duration", "fps", "frames"}]}
+async def _media_unsupported(self, *a, **k):
+    raise Unsupported("image and video generation")
+
+
+for _name in ("media_submit", "media_status", "media_cancel", "media_fetch", "media_discard"):
+    setattr(Adapter, _name, _media_unsupported)

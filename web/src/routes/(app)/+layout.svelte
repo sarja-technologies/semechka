@@ -10,7 +10,7 @@
   let collapsed = $state(false), menu = $state(false), gkey = false;
   const nav = $derived<any[]>(app.me?.ui.nav ?? []);
   const path = $derived(page.url.pathname);
-  const href = (n: any) => (n.available ? (n.id === 'usage' ? '/usage' : n.id === 'help' ? '/help' : n.id === 'chat' ? '/chat' : `/unavailable/${n.id}`) : `/unavailable/${n.id}`);
+  const href = (n: any) => (n.available ? (n.id === 'usage' ? '/usage' : n.id === 'help' ? '/help' : n.id === 'chat' ? '/chat' : n.id === 'image' || n.id === 'video' ? `/${n.id}` : `/unavailable/${n.id}`) : `/unavailable/${n.id}`);
   const active = (n: any) => path.startsWith(href(n)) || (n.id === 'chat' && path.startsWith('/chat'));
   const brand = $derived(app.brand);
   $effect(() => { if (app.me) collapsed = localStorageGet() ?? app.me.ui.sidebar_collapsed; });

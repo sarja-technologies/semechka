@@ -17,18 +17,19 @@ import httpx
 
 from .base import Adapter, AdapterError, DiscoveredModel, Manifest
 from .openai_compat import _short
+from .sarness_media import SarnessMediaMixin
 
 
 def _h(key):
     return {"Authorization": f"Bearer {key}"} if key else {}
 
 
-class SarnessAdapter(Adapter):
+class SarnessAdapter(SarnessMediaMixin, Adapter):
     manifest = Manifest(
-        id="sarness", name="Sarness Engine", model_load=True, model_unload=True, system_telemetry=True,
+        id="sarness", name="Sarness Engine", model_load=True, model_unload=True, system_telemetry=True, media=True,
         reports_usage_tokens=True, reports_timings=True,
         model_metadata=["context", "size", "vram_estimate_mb"],
-        notes="Install of new models is done in Sarness itself. Image and video jobs are not wired in this release.")
+        notes="Install of new models is done in Sarness itself. Image and video generation use the engine's job queue; video is text-to-video only in this release.")
 
     async def health(self) -> dict:
         try:
@@ -69,6 +70,7 @@ class SarnessAdapter(Adapter):
                 m["ref"], caps, {k: v for k, v in meta.items() if v is not None},
                 external=not local or bool(self.options.get("external")),
                 loaded=(m["ref"].split(":", 1)[1] == loaded_model) if local and loaded_model is not None else None))
+        out.extend(await self.media_models())  # image/video models (own capabilities; never offered to chat)
         return out
 
     async def chat_stream(self, model, messages, params):
@@ -124,9 +126,13 @@ class SarnessAdapter(Adapter):
             return None
 
     async def load(self, model: str) -> None:
+        if model.startswith(("image:", "video:")):
+            raise AdapterError("Image and video models are loaded by the engine when a job needs them.", status=501, kind="unsupported")
         await self._post("/v1/llm/load", {"model_id": model.split(":", 1)[-1]})
 
     async def unload(self, model: str) -> None:
+        if model.startswith(("image:", "video:")):
+            raise AdapterError("Image and video models are unloaded by the engine itself.", status=501, kind="unsupported")
         await self._post("/v1/llm/unload", {"model_id": model.split(":", 1)[-1]})
 
     async def _post(self, path, body):
