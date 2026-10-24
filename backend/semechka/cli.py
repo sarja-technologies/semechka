@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 
 from . import __version__
+from . import migrations
 from .config import Config
 from .crypto import open_with_passphrase, seal_with_passphrase
 
@@ -66,7 +67,10 @@ def cmd_serve(a, cfg: Config):
                 cfg.web_dir = cand
                 break
     os.umask(0o077)  # database, uploads and backups are never group/world readable
-    app = create_app(cfg)
+    try:
+        app = create_app(cfg)
+    except migrations.SchemaTooNew as e:
+        raise SystemExit(f"Refusing to start: {e}")
     for f in cfg.data_dir.glob("semechka.db*"):
         os.chmod(f, 0o600)
     print(f"Semechka {__version__}")

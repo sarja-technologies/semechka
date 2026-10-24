@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from .config import Config
 from .crypto import Vault, load_or_create_master_key
+from . import migrations
 from .db import Database
 from .security import RateLimiter
 from .settings_svc import SettingsService
@@ -34,5 +35,6 @@ class AppState:
         cfg.ensure()
         db = Database(cfg.db_url)
         db.create_all()
+        migrations.apply(db)
         vault = Vault(load_or_create_master_key(cfg.key_path))
         return cls(cfg, db, vault, SettingsService(db, vault))

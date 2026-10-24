@@ -91,7 +91,12 @@ def mode_state(s, p: perms.Principal, st, mode: str) -> dict:
         return {"enabled": False, "reason": "Turned off by your administrator.", "code": "disabled"}
     if not p.can(f"mode.{mode}"):
         return {"enabled": False, "reason": "Your group has no access.", "code": "forbidden"}
-    if mode not in IMPLEMENTED_MODES:
+    if mode in ("image", "video"):  # media block: implemented exactly when a media-capable backend is connected
+        from . import media_svc
+        why = media_svc.unavailable_reason(s, mode)
+        if why:
+            return {"enabled": False, "reason": why, "code": "unsupported"}
+    elif mode not in IMPLEMENTED_MODES:
         return {"enabled": False, "reason": "Not available in this release.", "code": "unsupported"}
     if not accessible_models(s, p, st, mode):
         any_installed = s.execute(select(func.count()).select_from(Model).where(Model.enabled == True)).scalar()  # noqa: E712

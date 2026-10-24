@@ -128,7 +128,9 @@ def test_unsupported_modes_report_truthfully(owner, app):
     owner.put("/api/admin/roles/member", json={"label": "Member", "description": "", "rank": 100, "grants": ["mode.chat", "chat.attach", "chat.export", "ops.jobs.cancel_own", "mode.video"], "denies": []})
     me = m.get("/api/me").json()
     video = next(n for n in me["ui"]["nav"] if n["id"] == "video")
-    assert video["available"] is False and video["reason"] == "Not available in this release."
+    assert video["available"] is False and "No connected inference backend can generate video" in video["reason"]
+    audio_state = me["ui"]["modes"]["audio"]
+    assert audio_state["code"] in ("disabled", "forbidden", "unsupported")
     assert m.get("/api/chat/models", params={"mode": "video"}).status_code == 501
 
 

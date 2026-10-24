@@ -321,6 +321,24 @@ DEFS: list[Def] = [
     Def("system.telemetry_opt_in", SYS, "Anonymous usage telemetry", "Off. Semechka has no telemetry sender; this "
         "setting records intent only and is shown as 'not implemented'.", "bool", False, scopes=["deployment"],
         edit_perm="admin.settings.edit", requires="telemetry_sender"),
+    # ---- media (image and video generation) ----
+    Def("media.max_concurrent_jobs", Q, "Concurrent image/video jobs (per person)",
+        "How many generations one person may have queued or running at once.", "int", 2, min=1, max=16,
+        scopes=["deployment", "role", "team", "user"], merge="min", edit_perm="admin.quotas.edit"),
+    Def("media.daily_generations", Q, "Image/video generations per day (per person)", "0 means unlimited.", "int", 0,
+        min=0, max=10000, scopes=["deployment", "role", "team", "user"], merge="min_nonzero",
+        edit_perm="admin.quotas.edit"),
+    Def("media.max_assets", Q, "Saved images and videos (per person)",
+        "Maximum items in one person's gallery. New generations are refused when it is full. 0 means unlimited.",
+        "int", 200, min=0, max=100000, scopes=["deployment", "role", "team", "user"], merge="min_nonzero",
+        edit_perm="admin.quotas.edit"),
+    Def("media.default_image_size", Q, "Default image size (pixels)",
+        "Starting width and height in the image form, rounded and limited to what each model supports. 0 uses each "
+        "model's own default.", "int", 0, min=0, max=2048, scopes=["deployment", "role", "team"],
+        edit_perm="admin.settings.edit"),
+    Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
+        "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
+        scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
 ]
 
 BY_ID: dict[str, Def] = {d.id: d for d in DEFS}

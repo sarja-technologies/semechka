@@ -15,10 +15,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import delete, select
 
-from . import __version__, audit, services
+from . import __version__, audit, media_svc, services
 from .config import Config
 from .models import AuditEvent, Conversation, UsageEvent
-from .routers import admin_config, admin_people, auth, chat, me, misc, setup, sso  # sso: OIDC single sign-on
+from .routers import admin_config, admin_people, auth, chat, me, media, misc, setup, sso  # sso: OIDC single sign-on
 from .state import AppState
 
 log = logging.getLogger("semechka")
@@ -37,9 +37,11 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             print(f"\n  Semechka setup token (one time, expires when the owner account is created):\n    {token}\n"
                   f"  Also saved to {cfg.setup_token_path}\n", flush=True)
         task = asyncio.create_task(_sweeper(st)) if cfg.background else None
+        media_task = asyncio.create_task(media_svc.pump(st)) if cfg.background else None  # media block
         yield
-        if task:
-            task.cancel()
+        for t in (task, media_task):
+            if t:
+                t.cancel()
 
     app = FastAPI(title="Semechka", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json",
                   redoc_url=None)
@@ -78,7 +80,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, admin_people.router, admin_config.router, misc.router, sso.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, admin_people.router, admin_config.router, misc.router, sso.router):
         app.include_router(r)
 
     web = cfg.web_dir
@@ -129,4 +131,5 @@ def sweep_once(st: AppState) -> dict:
         n = len(expired)
         if n:
             audit.record(s, "", "retention.sweep", "", {"conversations_deleted": n})
+    media_svc.sweep(st)  # media block: asset and job retention
     return {"conversations": n, "usage_rows": n_usage}
