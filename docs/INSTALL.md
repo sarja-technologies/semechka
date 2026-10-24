@@ -26,3 +26,22 @@ SEMECHKA_WEB_DIR=web/build .venv/bin/semechka serve
 
 ## Network exposure
 Default is loopback only. To let other devices connect: Admin → Settings → "Network exposure" → LAN, then restart the service. Put an HTTPS reverse proxy in front before any use beyond a network you control.
+
+## Updating, rolling back, running more than one instance
+
+Re-running `./install.sh` from a newer package updates in place. Before it changes anything it writes a snapshot
+(database via the SQLite backup API, `master.key`, assets) to `<data>/pre-update/<time>-from-<version>/` and records the
+program under `<prefix>/releases/<version>/`. Data is never replaced by an update.
+
+```
+./install.sh --rollback                  # program back to the previous recorded release
+./install.sh --rollback --restore-data   # also restore the data snapshot taken before the last update
+```
+
+A program older than its database refuses to start (schema versioning), so rolling back across a schema change needs
+`--restore-data`. Only installs made with 0.2.0 or later record releases; seed `<prefix>/releases/<ver>/` with the old
+wheel to roll back to something older.
+
+Several independent instances can share one machine. Give each its own `--name`, `--prefix`, `--data` and `--port`
+(and `--host` to bind one LAN address instead of loopback); each gets its own systemd unit `semechka-<name>.service`,
+database, master key and session-cookie name. See [DEPLOYMENT_SPARK.md](DEPLOYMENT_SPARK.md) for a worked example.

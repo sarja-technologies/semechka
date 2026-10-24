@@ -67,7 +67,8 @@ creates the roles, teams, accounts, per-user overrides, model aliases/grants and
   member, support agent, technical reader (per-user override granting `tech.*`), restricted user (override denying
   technical fields, attachments and export), guest (low quotas, 7-day retention);
 - teams Research and Support (Support denied the Large model and export);
-- model aliases Quick, Balanced, Large and Coder over the engine's installed models, each with grants;
+- Knowledge (keyword search), assistants, the code workspace, image and video generation (Sketch: sdxl-turbo, Clip: wan2.2-ti2v-5b) and the generation queue, all enabled and working; audio is not available (the engine has no speech model) and `z-image-turbo` is not installed;
+- model aliases Quick (thinking off), Balanced, Large and Coder over the engine's installed models, each with grants;
 - registration by invitation only, signed-in sessions with an idle timeout, representative quotas, role-scoped
   retention, branding (Carbon theme), notice texts;
 - every mode that is actually implemented and has a backend model.
