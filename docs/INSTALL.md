@@ -24,6 +24,14 @@ SEMECHKA_WEB_DIR=web/build .venv/bin/semechka serve
 ## Day to day
 `semechka doctor` (checks this machine) · `semechka status` · `semechka backup` (encrypted, passphrase) · `semechka restore FILE [--force]` · `semechka update` (prints the safe procedure; never silent) · `semechka uninstall [--purge-data]`.
 
+## A disposable test instance
+`semechka reset --instance NAME` returns an instance to a factory-fresh first run (new database, master key and
+setup token; the program is unchanged). It works only on an instance that was marked disposable once with
+`semechka reset --instance NAME --designate`, asks you to type the name, and moves the old data into a checksummed
+backup beside the data directory instead of deleting it (`--restore DIR` puts it back). It needs the instance to
+run as a systemd user unit (what `install.sh --name NAME` creates) with a SQLite data directory. See
+[DEPLOYMENT_SPARK.md](DEPLOYMENT_SPARK.md) for the reference setup.
+
 ## Network exposure
 Default is loopback only. To let other devices connect: Admin → Settings → "Network exposure" → LAN, then restart the service. Put an HTTPS reverse proxy in front before any use beyond a network you control.
 

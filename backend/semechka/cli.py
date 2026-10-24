@@ -1,4 +1,4 @@
-"""`semechka` command line: serve, doctor, status, backup, restore, update, uninstall."""
+"""`semechka` command line: serve, doctor, status, backup, restore, update, uninstall, reset."""
 from __future__ import annotations
 
 import argparse
@@ -303,5 +303,11 @@ def main(argv=None):
     u = sub.add_parser("uninstall", help="remove, keeping data unless told otherwise")
     u.add_argument("--purge-data", action="store_true")
     u.set_defaults(fn=cmd_uninstall)
+    # Listed here for --help; its own parser handles the options (see reset.py).
+    sub.add_parser("reset", help="return a disposable instance to the first-run wizard (semechka reset --help)", add_help=False)
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["reset"]:
+        from . import reset
+        sys.exit(reset.main(argv[1:]))
     a = ap.parse_args(argv)
     a.fn(a, Config())

@@ -9,8 +9,8 @@ are the LAN addresses of that machine; replace them for yours.
 | OS | Ubuntu 24.04.5 LTS, kernel 7.0.0-1019-nvidia, `aarch64` |
 | Python | 3.12.3 (system) |
 | Service manager | systemd **user** units with lingering enabled (no root needed; starts at boot) |
-| Roasted | `http://192.168.20.193:8787`, installed clean; its owner has since completed the wizard (see below) |
-| Salted | `http://192.168.20.193:8788`, a fully configured test environment |
+| Roasted | `http://192.168.20.193:8787`, the **disposable** fresh-install sandbox; reset to the first-run wizard on demand |
+| Salted | `http://192.168.20.193:8788`, the **permanent** configured instance; never reset |
 | Sarness Engine (existing) | untouched; `sarness-engine.service`, 8742 (HTTP) and 8744 (SNP) |
 | Sarness Engine (for Semechka) | `semechka-sarness.service`, `127.0.0.1:8752`, own data dir, own token |
 
@@ -41,17 +41,43 @@ Instances share nothing except the inference engine: separate databases, master 
 messages, titles, secrets and assets), settings, accounts, session-cookie names (derived from each instance's key, because
 browsers share cookies across ports on one address), uploads/assets, audit chains and backups.
 
-## Roasted: the new-customer experience
+## Roasted: the disposable fresh-install sandbox
 
-Roasted was installed clean and left at the first-run wizard, so that it could be set up the way a new customer
-would. **Its owner has since done that.** The wizard was completed on 2026-10-24 at 19:31 AEDT, from a machine on the
-LAN and outside this repository's deployment work. It is now "Banana Corporation Private AI", with its own owner
-account, MFA required for administrators, and models of its owner's choosing. From that point it is an owner-managed
-instance. Deployment work does not sign in to it or change its settings, and `verify_deployment.py` checks only its
-public state (release, branding, refusal of further setup calls, persistence across a restart). The 0.3.0 upgrade
-kept its configuration (see DEPLOYMENT_EVIDENCE.md).
+**Convention:** Roasted exists to experience a brand-new installation, as often as wanted. Salted is the permanent,
+configured instance. A reset of Roasted never touches Salted.
 
-How a fresh install like Roasted is claimed: on first start the server writes a one-time owner setup token to
+Roasted's data directory carries the owner-only marker `.semechka-disposable.json`, written once with
+`semechka reset --instance roasted --designate`. Salted has no marker, and the reset command refuses any instance
+without one. To return Roasted to a factory-fresh first run (the installed release stays as it is):
+
+```
+ssh <spark>
+semechka reset --instance roasted            # shows what will be erased, then asks you to type "roasted"
+cat ~/semechka-deploy/roasted/data/setup-token
+```
+
+then open `http://192.168.20.193:8787`. What the command does:
+1. It stops `semechka-roasted.service`. It refuses if any other process has files open in Roasted's data directory,
+   or if that directory overlaps another instance's.
+2. It moves everything in `roasted/data` except the marker into
+   `roasted/data.reset-backups/<time>-before-reset/` (0700). The database's integrity is checked, every file is
+   listed in `SHA256SUMS` and read back, and a `manifest.json` records what was there. Nothing is deleted.
+3. It writes the engine hint (the key is read at that moment from `secrets/sarness.token`) and starts the service.
+   The unchanged 0.3.0 program then creates a new database, a new master key, so old session cookies are dead, and
+   a new one-time setup token.
+4. It checks: the wizard is open, the version is unchanged, there are no accounts, conversations or sessions, the
+   token file is owner-only, the master key is new, and the wizard's engine step reaches the engine.
+
+Undo a reset with the `--restore` command it prints. `semechka reset --list` shows which instances may be reset.
+Backups accumulate in `roasted/data.reset-backups/` and contain the old master key; delete old ones by hand when no
+longer needed. Nothing resets Roasted automatically: not a reboot, not a service restart, not an update.
+
+On this host, `semechka` is the standalone reset tool (`~/semechka-deploy/bin/semechka_reset.py`, from
+`backend/semechka/reset.py`), because the installed 0.3.0 program predates the subcommand. For everything else
+each instance has its own command, `semechka-roasted` and `semechka-salted`. In later releases the same code is
+also `semechka reset` inside each instance's program.
+
+How a fresh install is claimed: on first start the server writes a one-time owner setup token to
 `<data>/setup-token` (mode 0600) and refuses setup calls without it. Read it on the machine:
 
 ```

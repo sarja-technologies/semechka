@@ -2,6 +2,21 @@
 
 The newest release comes first. Nothing here contains a secret.
 
+## Roasted factory reset (2026-10-25)
+
+Roasted became the disposable fresh-install sandbox, and Salted the permanent configured instance (see
+DEPLOYMENT_SPARK.md). Its owner, who had set it up as "Banana Corporation Private AI", authorised erasing it.
+
+| Step | Result |
+| --- | --- |
+| Instance boundaries, from the units rather than the ports | Roasted: `semechka-roasted.service`, `roasted/data`, its own venv. Salted: `semechka-salted.service`, `salted/data`, its own venv. They share only the dedicated engine (127.0.0.1:8752). |
+| Independent backup before anything else | `backups/pre-reset-roasted-20261025-003806/`: database copied through the backup API (integrity ok, 1 user, 1 conversation), master key, the installer's pre-update snapshots, the unit file; 15 files in SHA256SUMS, 0700 |
+| `semechka reset --instance salted` | refused, because Salted is not designated disposable. Salted kept the same process and 0 restarts |
+| `semechka reset --instance roasted` | stopped, moved to `roasted/data.reset-backups/20261025-004324-before-reset/` (14 files, integrity ok, SHA256SUMS verified), started. Its own checks: wizard open, version 0.3.0 unchanged, 0 accounts, conversations and sessions, owner-only token, new master key, engine reachable from the wizard |
+| Independent checks afterwards | `/api/public`: needs_setup true, default brand. `/api/me` without a session: 401. Session cookie name changed with the key (old cookies are no longer recognised). A wrong setup token is refused (403). With the real token, the hardware step shows the GB10 and the engine reachable, and the engine-test step lists 26 models. Setup was **not** completed. The unit file is byte-identical, and no unit or cron job refers to the reset |
+| Browser (headless system Chrome, 1280 and 375 wide) | `/` goes to `/setup`, "Set up this server", token step of 9. No console errors, no failed requests, no old branding, no horizontal overflow |
+| Salted, fingerprinted before and after (read-only) | no difference: process and restart count; row counts of every table; digests of users, conversations, settings, master key and assets |
+
 ## 0.3.0 (2026-10-24)
 
 ### Order of work
@@ -82,7 +97,7 @@ Both production databases are at schema 5. No table has fewer rows than before. 
 38 passed, 0 failed
 ```
 
-**Roasted had been set up before this work.** It was expected to be at the first-run wizard. In fact its wizard was
+**Roasted had been set up before this work** (by its owner, as they later confirmed). It was expected to be at the first-run wizard. In fact its wizard was
 completed on 2026-10-24 at 19:31 AEDT from a machine on the LAN, before the 0.3.0 work began, and no step of this
 work called the setup API. Since then it has been treated as an owner-managed instance: the deployment never signed in
 to it, and the verifier checks only its public state. Its configuration came through the upgrade unchanged: the
