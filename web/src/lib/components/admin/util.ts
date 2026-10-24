@@ -14,6 +14,7 @@ export const ADMIN_PAGES = [
   { href: '/admin/visibility', label: 'Technical Visibility', icon: 'eye', perm: 'admin.users.view' },
   { href: '/admin/models', label: 'Models & Aliases', icon: 'cpu', perm: 'admin.models.manage' },
   { href: '/admin/backends', label: 'Backends', icon: 'server', perm: 'admin.backends.manage' },
+  { href: '/admin/sso', label: 'Single sign-on', icon: 'key', perm: 'admin.sso.manage' },
   { href: '/admin/system', label: 'System & Nodes', icon: 'server', perm: 'admin.system.view' },
   { href: '/admin/registration', label: 'Registration & Sign-in', icon: 'lock', perm: 'admin.settings.view', cat: 'Registration & Sign-in' },
   { href: '/admin/privacy', label: 'Privacy & Retention', icon: 'shield', perm: 'admin.settings.view', cat: 'Privacy & Retention' },

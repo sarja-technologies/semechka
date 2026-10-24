@@ -67,6 +67,9 @@ def _check_origin(request: Request):
 def signup(body: SignupIn, request: Request, response: Response, s=Depends(get_db), st: AppState = Depends(get_state)):
     ip = request.client.host if request.client else ""
     mode = st.settings.deployment(s, "signup.mode")
+    from .sso import sso_enforced
+    if sso_enforced(s, st):  # SSO: no password accounts when SSO is required
+        raise HTTPException(403, {"code": "signup_closed", "message": "Accounts are created through single sign-on."})
     if mode not in ("public", "domain", "invite"):
         raise HTTPException(403, {"code": "signup_closed", "message": "Accounts are created by your administrator."})
     email = _norm_email(body.email)
@@ -224,6 +227,9 @@ def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db)
                "pending_verification": "Confirm your email address first.",
                "suspended": "This account has been suspended. Contact your administrator."}.get(user.status, GENERIC_LOGIN_ERROR)
         raise HTTPException(403, {"code": user.status, "message": msg})
+    from .sso import local_login_blocked  # SSO: password sign-in may be turned off (owners excepted)
+    if local_login_blocked(s, st, user):
+        raise HTTPException(403, {"code": "sso_required", "message": "Your organisation uses single sign-on. Use the sign-in button for your identity provider."})
     if user.totp_enabled:
         if not body.totp:
             raise HTTPException(401, {"code": "mfa_required", "message": "Enter your authentication code."})

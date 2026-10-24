@@ -86,6 +86,7 @@ REGISTRY: list[Perm] = [
     _p("admin.system.view", "View system and node health", "Administration"),
     _p("admin.backup.manage", "Manage backups", "Administration"),
     _p("admin.preview_role", "Preview the product as another role", "Administration"),
+    _p("admin.sso.manage", "Configure single sign-on providers", "Administration"),  # SSO
 ]
 
 BY_ID: dict[str, Perm] = {p.id: p for p in REGISTRY}
