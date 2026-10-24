@@ -311,20 +311,25 @@ async def sync_backend(bid: str, ctx: Ctx = Depends(require("admin.backends.mana
     return r
 
 
-def _model_out(m: Model, b: Backend | None, grants: list[ModelGrant]) -> dict:
-    return {"id": m.id, "backend_id": m.backend_id, "backend": b.name if b else None, "runtime": b.adapter if b else None,
-            "real_id": m.real_id, "alias": m.alias, "enabled": m.enabled, "pinned": m.pinned, "tags": m.tags or [],
+def _model_out(m: Model, b: Backend | None, grants: list[ModelGrant], full_id: bool = False) -> dict:
+    # Backends such as llama.cpp report a server file path as the model id. Everyone sees the file name;
+    # the raw value is a technical field and is returned only to holders of tech.model.id.
+    out_id = {"real_id_full": m.real_id} if full_id and m.real_id != services.display_id(m.real_id) else {}
+    return {**out_id, "id": m.id, "backend_id": m.backend_id, "backend": b.name if b else None, "runtime": b.adapter if b else None,
+            "real_id": services.display_id(m.real_id), "alias": m.alias, "enabled": m.enabled, "pinned": m.pinned, "tags": m.tags or [],
             "capabilities": m.capabilities or [], "meta": m.meta or {}, "available": m.available,
             "system_prompt_set": bool(m.system_prompt), "gen_limits": m.gen_limits or {}, "allow_tools": m.allow_tools,
             "external": bool(b and (b.external or (m.meta or {}).get("external"))),
             "grants": [{"subject_type": g.subject_type, "subject_id": g.subject_id, "effect": g.effect} for g in grants]}
 
 
-def _model_query(q=None, tag=None, capability=None, backend=None, enabled=None):
+def _model_query(q=None, tag=None, capability=None, backend=None, enabled=None, search_raw_id=False):
     stmt = select(Model)
     if q:
         like = f"%{q.lower()}%"
-        stmt = stmt.where(or_(func.lower(Model.alias).like(like), func.lower(Model.real_id).like(like)))
+        # Searching the raw id would let a caller probe server paths they may not see.
+        stmt = stmt.where(or_(func.lower(Model.alias).like(like), func.lower(Model.real_id).like(like)) if search_raw_id
+                          else func.lower(Model.alias).like(like))
     if backend:
         stmt = stmt.where(Model.backend_id == backend)
     if enabled is not None:
@@ -336,7 +341,8 @@ def _model_query(q=None, tag=None, capability=None, backend=None, enabled=None):
 def list_admin_models(ctx: Ctx = Depends(require("admin.models.manage")), q: str | None = None, tag: str | None = None,
                       capability: str | None = None, backend: str | None = None, enabled: bool | None = None,
                       sort: str = "alias", page: int = 1, per_page: int = 25):
-    stmt, tag, capability = _model_query(q, tag, capability, backend, enabled)
+    full = ctx.principal.can("tech.model.id")
+    stmt, tag, capability = _model_query(q, tag, capability, backend, enabled, full)
     rows = ctx.s.execute(stmt.order_by(Model.alias)).scalars().all()
     if tag:
         rows = [m for m in rows if tag in (m.tags or [])]
@@ -351,7 +357,7 @@ def list_admin_models(ctx: Ctx = Depends(require("admin.models.manage")), q: str
     for g in ctx.s.execute(select(ModelGrant)).scalars():
         grants.setdefault(g.model_id, []).append(g)
     return {"total": total, "page": page, "per_page": per_page,
-            "items": [_model_out(m, backends.get(m.backend_id), grants.get(m.id, [])) for m in page_rows]}
+            "items": [_model_out(m, backends.get(m.backend_id), grants.get(m.id, []), full) for m in page_rows]}
 
 
 class ModelPatch(BaseModel):
@@ -450,7 +456,7 @@ def bulk_models(body: ModelBulk, ctx: Ctx = Depends(require("admin.models.manage
         models = [m for i in body.ids if (m := ctx.s.get(Model, i))]
     else:
         f = body.all_matching
-        stmt, tag, cap = _model_query(f.get("q"), f.get("tag"), f.get("capability"), f.get("backend"), f.get("enabled"))
+        stmt, tag, cap = _model_query(f.get("q"), f.get("tag"), f.get("capability"), f.get("backend"), f.get("enabled"), ctx.principal.can("tech.model.id"))
         models = ctx.s.execute(stmt).scalars().all()
         if tag:
             models = [m for m in models if tag in (m.tags or [])]

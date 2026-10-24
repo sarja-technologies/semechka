@@ -1,14 +1,16 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { post, put, del, get, ApiError } from '$lib/api';
   import { toast } from '$lib/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { errMsg } from './util';
   import { loadRoles, loadTeams, loadUsers, type Opt } from './lookup';
   let { s, onsaved }: { s: any; onsaved: () => void } = $props();
-  const uid = 'set-' + s.id.replace(/\W/g, '-');
+  const uid = $derived('set-' + s.id.replace(/\W/g, '-'));
   let scope = $state('deployment'); let scopeId = $state('');
   let opts = $state<Opt[]>([]);
-  let draft = $state<any>(toDraft(s.value));
+  // The editor starts from the saved value; later edits are the person's own until they save or reset.
+  let draft = $state<any>(untrack(() => toDraft(s.value)));
   let error = $state(''); let busy = $state(false);
   let confirmOpen = $state(false); let impact = $state<any>(null);
   let inspectUser = $state(''); let users = $state<Opt[]>([]); let eff = $state<any>(null);
@@ -20,7 +22,10 @@
     return draft;
   }
   const dirty = $derived.by(() => { if (s.secret) return draft !== ''; try { return JSON.stringify(fromDraft()) !== JSON.stringify(s.value); } catch { return true; } });
-  $effect(() => { s.value; draft = toDraft(s.value); });
+  // Re-sync the editor only when THIS setting's saved value changed. A reload caused by saving another setting must not
+  // throw away what the person is typing here.
+  let synced = untrack(() => JSON.stringify(s.value));
+  $effect(() => { const now = JSON.stringify(s.value); if (now !== synced) { synced = now; draft = toDraft(s.value); } });
   async function pickScope() {
     scopeId = ''; eff = null; error = '';
     opts = scope === 'role' ? await loadRoles() : scope === 'team' ? await loadTeams() : scope === 'user' ? (users = users.length ? users : await loadUsers()) : [];

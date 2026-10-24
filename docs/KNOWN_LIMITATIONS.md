@@ -15,7 +15,7 @@
 - Telemetry: NVIDIA via `nvidia-smi` and Linux `/proc` only. AMD/Intel/Apple accelerators report "unavailable". ARM64 has not been run.
 - PostgreSQL, Docker/Compose packaging and the GitHub Actions workflow were written but **not executed** on the authoring machine.
 - Rate limiting, settings cache and generation counters are in-process: run one worker. A restart clears limiter state.
-- Accessibility: automated and manual checks listed in DESIGN_REVIEW.md only; no screen-reader (NVDA/VoiceOver/Orca) pass and no independent audit.
+- Accessibility: axe-core (WCAG 2.2 A/AA) is clean on every route in all three themes, keyboard-only flows, focus management, reduced motion and touch-target size are tested in real Chrome (DESIGN_REVIEW.md, pass 2). **Not done:** no real screen-reader pass (NVDA, JAWS, VoiceOver, Orca: none available here), no independent audit, only Chrome driven (Firefox and Safari untested). The permission matrix scrolls horizontally inside its container on phones.
 - No independent security review or penetration test. Treat the threat model as the author's, not an assessment.
 
 **Can be advertised as working** (with tests): see REQUIREMENTS_TRACEABILITY.md rows marked VERIFIED.

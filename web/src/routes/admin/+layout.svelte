@@ -4,7 +4,8 @@
   import { app, can } from '$lib/session.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
-  import Palette from '$lib/components/admin/Palette.svelte';
+  import Palette from '$lib/components/Palette.svelte';
+  import { openPalette } from '$lib/palette.svelte';
   import { ADMIN_PAGES } from '$lib/components/admin/util';
   let { children } = $props();
   let menu = $state(false);
@@ -12,18 +13,20 @@
   $effect(() => { if (app.ready && app.me === null) goto(`/login?next=${encodeURIComponent(page.url.pathname)}`); else if (app.ready && app.me && !can('admin.overview')) goto('/'); });
   $effect(() => { page.url.pathname; menu = false; });
   const active = (p: any) => (p.exact ? page.url.pathname === p.href : page.url.pathname.startsWith(p.href));
+  // The section for the current URL, if it needs a permission this person lacks: say so instead of showing a failing page.
+  const forbidden = $derived.by(() => {
+    const here = ADMIN_PAGES.filter((p) => (p.exact ? page.url.pathname === p.href : page.url.pathname.startsWith(p.href))).sort((a, b) => b.href.length - a.href.length)[0];
+    return here && !can(here.perm) ? here : null;
+  });
   const mfaBlock = $derived(app.me?.mfa_enrolment_required);
-  let pal = $state(false);
-  function key(e: KeyboardEvent) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); pal = true; } }
 </script>
-<svelte:window onkeydown={key} />
 {#if app.me && can('admin.overview')}
 <div class="shell">
   <header class="top">
     <button class="btn ghost icon" aria-label="Admin sections" aria-expanded={menu} aria-controls="anav" onclick={() => (menu = !menu)}><Icon name="menu" /></button>
     <a href="/admin" class="brand"><Wordmark size={16} /> <span class="tag">Admin</span></a>
     <span class="spacer"></span>
-    <button class="btn sm" onclick={() => (pal = true)} aria-label="Open command palette"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
+    <button class="btn sm" onclick={openPalette} aria-keyshortcuts="Control+K Meta+K"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
     <a class="btn sm" href="/">Back to app</a>
   </header>
   <nav id="anav" class:open={menu} aria-label="Admin sections">
@@ -31,10 +34,13 @@
   </nav>
   <main id="main" tabindex="-1">
     {#if mfaBlock}<div class="notice warn" role="alert"><div>Your organisation requires multi-factor authentication for administrators. Admin features stay closed until you <a href="/account">set it up in your account</a>.</div></div>{/if}
-    {@render children()}
+    {#if forbidden}
+      <h1>{forbidden.label}</h1>
+      <div class="notice warn" role="status"><div><strong>You do not have access to this section.</strong> It needs the permission <code>{forbidden.perm}</code>, which your role does not include. Ask an administrator who manages roles if you need it.<div style="margin-top:8px"><a class="btn sm" href="/admin">Back to overview</a></div></div></div>
+    {:else}{@render children()}{/if}
   </main>
 </div>
-<Palette bind:open={pal} />
+<Palette />
 {/if}
 <style>
   .shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: 52px 1fr; min-height: 100vh; }

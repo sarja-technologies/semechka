@@ -15,7 +15,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `brand.logo_asset` | string | `` | deployment | specific | `admin.branding` |  |
 | `brand.favicon_asset` | string | `` | deployment | specific | `admin.branding` |  |
 | `brand.theme_default` | enum | `paper` | deployment, user | specific | `admin.branding` |  |
-| `brand.accent_light` | color | `#087F78` | deployment | specific | `admin.branding` |  |
+| `brand.accent_light` | color | `#087771` | deployment | specific | `admin.branding` |  |
 | `brand.accent_dark` | color | `#64BEB5` | deployment | specific | `admin.branding` |  |
 | `brand.radius` | int | `8` | deployment | specific | `admin.branding` |  |
 | `brand.density` | enum | `comfortable` | deployment, role, user | specific | `admin.branding` |  |

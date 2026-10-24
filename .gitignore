@@ -16,3 +16,7 @@ dist/
 screenshots/tmp/
 .claude/
 backend/build/
+web/.e2e-tmp/
+web/test-results/
+web/playwright-report/
+web/shots-out/

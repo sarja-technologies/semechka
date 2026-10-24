@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import logging
+import os
 import re
 import time
 from contextlib import asynccontextmanager
@@ -43,8 +44,10 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             if t:
                 t.cancel()
 
-    app = FastAPI(title="Semechka", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json",
-                  redoc_url=None)
+    app = FastAPI(title="Semechka", version=__version__, lifespan=lifespan, redoc_url=None,
+                  # The interactive API reference lists every route; it is off unless an operator asks for it.
+                  docs_url="/api/docs" if os.environ.get("SEMECHKA_API_DOCS") == "1" else None,
+                  openapi_url="/api/openapi.json" if os.environ.get("SEMECHKA_API_DOCS") == "1" else None)
     app.state.sem = st
 
     @app.middleware("http")

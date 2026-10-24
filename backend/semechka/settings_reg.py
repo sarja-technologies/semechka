@@ -70,13 +70,15 @@ def contrast(a: str, b: str) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
-def _accent(against: str):
+def _accent(*surfaces: str):
+    """An accent is used as text and as a fill, so it must reach 4.5:1 on every surface it can sit on in those themes."""
     def v(value):
         if not isinstance(value, str) or not _HEX.match(value):
             raise SettingError("Use a #RRGGBB colour.")
-        ratio = contrast(value, against)
+        worst = min(surfaces, key=lambda sfc: contrast(value, sfc))
+        ratio = contrast(value, worst)
         if ratio < 4.5:
-            raise SettingError(f"Contrast against the {against} surface is {ratio:.2f}:1; WCAG AA needs 4.5:1.")
+            raise SettingError(f"Contrast against {worst} is {ratio:.2f}:1; WCAG AA needs 4.5:1 on every surface the theme uses.")
         return value.upper()
     return v
 
@@ -96,6 +98,14 @@ def _url_or_blank(value):
         return ""
     if not re.match(r"^(https?://|mailto:)[^\s]+$", value):
         raise SettingError("Must start with https://, http:// or mailto:")
+    return value
+
+
+def _asset_id(value):
+    if value in ("", None):
+        return ""
+    if not re.fullmatch(r"[0-9a-f]{24}\.(png|webp|jpg|svg)", str(value)):
+        raise SettingError("Upload the image through the branding page; this is not a valid asset id.")
     return value
 
 
@@ -162,18 +172,18 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.branding", public=True, aliases=["title"],
         validator=lambda v: _strlen(v, 1, 60)),
     Def("brand.logo_asset", C, "Logo", "Uploaded logo asset id (SVG, PNG or WebP).", "string", "",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset"),
+        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
     Def("brand.favicon_asset", C, "Favicon", "Uploaded favicon asset id.", "string", "",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset"),
+        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
     Def("brand.theme_default", C, "Default theme", "Paper (light), Carbon (dark) or Graphite (dark grey).",
         "enum", "paper", choices=["paper", "carbon", "graphite", "system"], scopes=["deployment", "user"],
         edit_perm="admin.branding", public=True),
     Def("brand.accent_light", C, "Accent colour (light themes)",
-        "Primary action colour. Must reach 4.5:1 contrast on white.", "color", "#087F78",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#FFFFFF")),
+        "Primary action colour. Must reach 4.5:1 contrast on white and on the light-grey Paper surfaces.", "color", "#087771",
+        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#FFFFFF", "#F7F7F5", "#F0F1EE")),
     Def("brand.accent_dark", C, "Accent colour (dark themes)",
-        "Primary action colour. Must reach 4.5:1 contrast on the Carbon surface.", "color", "#64BEB5",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#1A1E1F")),
+        "Primary action colour. Must reach 4.5:1 contrast on the Carbon and Graphite surfaces.", "color", "#64BEB5",
+        scopes=["deployment"], edit_perm="admin.branding", public=True, validator=_accent("#1A1E1F", "#222728", "#303637", "#394041")),
     Def("brand.radius", C, "Corner radius", "Control and card corner radius in pixels.", "int", 8,
         min=0, max=16, scopes=["deployment"], edit_perm="admin.branding", public=True),
     Def("brand.density", C, "Density", "Row height and spacing.", "enum", "comfortable",

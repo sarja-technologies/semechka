@@ -6,11 +6,13 @@
   import { patch } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
+  import Palette from '$lib/components/Palette.svelte';
+  import { openPalette } from '$lib/palette.svelte';
+  import { navHref as href } from '$lib/nav';
   let { children } = $props();
   let collapsed = $state(false), menu = $state(false), gkey = false;
   const nav = $derived<any[]>(app.me?.ui.nav ?? []);
   const path = $derived(page.url.pathname);
-  const href = (n: any) => (n.available ? (n.id === 'usage' ? '/usage' : n.id === 'help' ? '/help' : n.id === 'chat' ? '/chat' : n.id === 'image' || n.id === 'video' ? `/${n.id}` : `/unavailable/${n.id}`) : `/unavailable/${n.id}`);
   const active = (n: any) => path.startsWith(href(n)) || (n.id === 'chat' && path.startsWith('/chat'));
   const brand = $derived(app.brand);
   $effect(() => { if (app.me) collapsed = localStorageGet() ?? app.me.ui.sidebar_collapsed; });
@@ -31,9 +33,10 @@
 {#if app.me}
 <div class="shell" class:collapsed>
   <aside class="rail" aria-label="Primary">
-    <div class="top"><a href="/" class="wm" aria-label="Home"><Wordmark size={17} /></a>
+    <div class="top"><a href="/" class="wm" title="Home"><Wordmark size={17} /></a>
       <button class="btn ghost icon sm collapse" onclick={toggleRail} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} aria-expanded={!collapsed}><Icon name="menu" /></button></div>
-    <nav>
+    <button class="item find" onclick={openPalette} aria-keyshortcuts="Control+K Meta+K" title="Search and commands (Ctrl+K)"><Icon name="search" /><span class="lbl grow">Search</span><kbd class="lbl tiny">Ctrl K</kbd></button>
+    <nav aria-label="Modes">
       {#each nav as n}
         <a href={href(n)} class="item" class:on={active(n)} class:dim={!n.available} aria-current={active(n) ? 'page' : undefined} title={n.available ? n.label : `${n.label}: ${n.reason}`}>
           <Icon name={n.id} /><span class="lbl">{n.label}</span>{#if !n.available}<span class="chip lbl tiny">Unavailable</span>{/if}
@@ -80,6 +83,7 @@
   </nav>
 </div>
 {/if}
+<Palette />
 <style>
   .shell { display: grid; grid-template-columns: var(--rail) 1fr; height: 100dvh; }
   .shell.collapsed { grid-template-columns: 56px 1fr; }
@@ -89,8 +93,10 @@
   nav { display: grid; gap: 2px; align-content: start; flex: 1; overflow: auto; }
   .item { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 10px; min-height: 38px; border-radius: var(--radius-sm); color: var(--fg); cursor: pointer; text-decoration: none; width: 100%; font-size: 14px; }
   .item:hover { background: var(--surface-2); } .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  /* Foreground text plus an accent bar: contrast does not depend on which accent an administrator chose. */
+  .item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
   .item.dim { color: var(--fg-muted); }
+  .find { margin-bottom: 8px; border: 1px solid var(--border); }
   .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bottom { display: grid; gap: 2px; position: relative; }
   .usr { position: relative; }

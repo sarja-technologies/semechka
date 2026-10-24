@@ -22,7 +22,7 @@
   let ephemeral = $state(false), eph = $state<Msg[]>([]);
   let live = $state<null | { mode: string; anchor: string | null; userText: string; text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; startedUser: boolean }>(null);
   let ctrl: { abort: () => void; done: Promise<void> } | null = null;
-  let input = $state(''), sendError = $state('');
+  let input = $state(''), sendError = $state(''), outcome = $state('');
   let files = $state<{ name: string; text: string }[]>([]), fileNote = $state('');
   const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|ya?ml|toml|ini|log|xml|html?|css|js|mjs|ts|tsx|jsx|py|rb|go|rs|c|h|cpp|hpp|java|kt|sh|bash|sql|svelte|vue|php|swift|cs)$/i;
   async function pickFiles(e: Event) {
@@ -96,12 +96,21 @@
   }
   function onRoute(id: string | undefined) {
     if (id && id === skipLoad) { skipLoad = ''; return; }
-    if (id) { ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; }
+    if (id) { epoch++; live = null; ctrl = null; ephemeral = false; eph = []; loadConv(id); } else { conv = null; convError = ''; }
     sheetList = false;
   }
   $effect(() => { const id = routeId; untrack(() => onRoute(id)); });
   $effect(() => { showArchived; untrack(loadList); });
   onMount(() => { loadModels(); });
+  // Deep links used by the command palette: ?new=<stamp>[&nosave=1][&model=<id>]
+  let lastNew = '';
+  $effect(() => {
+    const sp = page.url.searchParams, stamp = sp.get('new'), want = sp.get('model');
+    untrack(() => {
+      if (want && models.find((m) => m.id === want)) modelId = want;
+      if (stamp && stamp !== lastNew) { lastNew = stamp; newChat(sp.get('nosave') === '1' && canEph); if (want) modelId = want; goto('/chat', { replaceState: true }); }
+    });
+  });
 
   // resource readings only for people granted them, only while the drawer is open
   $effect(() => {
@@ -123,58 +132,72 @@
     skipLoad = c.id; goto(`/chat/${c.id}`, { replaceState: true });
     return c.id;
   }
+  // Each generation remembers the conversation and mode it started in. Starting a new chat (or opening another one) bumps
+  // `epoch`, after which a still-finishing generation may complete on the server but must not touch what is on screen.
+  let epoch = 0;
   async function run(mode: 'send' | 'regenerate' | 'edit', content: string, anchor: string | null) {
     if (busy || !modelId) return;
-    sendError = '';
+    sendError = ''; outcome = '';
+    const mine = epoch, noSave = ephemeral;
     live = { mode, anchor, userText: content, text: '', reasoning: '', status: 'sending', error: '', startedUser: false };
+    const cur = live;
+    let convId: string | null = null;
     try {
       let url: string, body: any;
-      if (ephemeral) {
+      if (noSave) {
         let hist = eph.map((m) => ({ role: m.role, content: m.content }));
         if (mode === 'regenerate') { while (hist.length && hist[hist.length - 1].role === 'assistant') hist.pop(); }
         else { hist.push({ role: 'user', content }); }
         url = '/api/chat/ephemeral/generate'; body = { messages: hist, model_id: modelId };
       } else {
         const id = await ensureConv(); if (!id) return;
+        convId = id;
         url = `/api/chat/conversations/${id}/generate`;
         body = mode === 'send' ? { mode, content, model_id: modelId, parent_id: path.length ? path[path.length - 1].id : null }
           : { mode, content: mode === 'edit' ? content : undefined, parent_id: anchor, model_id: modelId };
       }
       let final: any = null;
       ctrl = stream(url, body, (ev) => {
-        if (!live) return;
-        if (ev.type === 'start') { live.status = 'streaming'; live.startedUser = true; }
-        else if (ev.type === 'delta') { live.text += ev.content; live.reasoning += ev.reasoning; scrollEnd(); }
-        else if (ev.type === 'error') live.error = ev.message;
+        if (mine !== epoch) return;
+        if (ev.type === 'start') { cur.status = 'streaming'; cur.startedUser = true; }
+        else if (ev.type === 'delta') { cur.text += ev.content; cur.reasoning += ev.reasoning; scrollEnd(); }
+        else if (ev.type === 'error') cur.error = ev.message;
         else if (ev.type === 'done') final = ev;
       });
       await ctrl.done;
-      if (ephemeral) {
+      if (mine !== epoch) return; // the person moved on; the reply is saved server-side if it was a saved chat
+      if (noSave) {
         if (mode !== 'regenerate') eph.push({ id: 'u' + eph.length + Date.now(), parent_id: null, role: 'user', content, status: 'complete', created_at: 0, model: null, tech: {} });
         else { while (eph.length && eph[eph.length - 1].role === 'assistant') eph.pop(); }
-        const text = final?.content ?? live?.text ?? '';
-        if (text || live?.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: live?.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {} });
-      } else if (conv) {
-        if (live?.status === 'stopping') await new Promise((r) => setTimeout(r, 350));
-        await loadConv(conv.id); loadList();
+        const text = final?.content ?? cur.text ?? '';
+        if (text || cur.error) eph.push({ id: 'a' + eph.length + Date.now(), parent_id: null, role: 'assistant', content: text, status: cur.error ? 'error' : final?.status ?? 'stopped', created_at: 0, model: model?.alias ?? null, tech: final?.tech ?? {} });
+      } else if (convId) {
+        if (cur.status === 'stopping') await new Promise((r) => setTimeout(r, 350));
+        if (mine !== epoch) return;
+        await loadConv(convId); loadList();
       }
-      if (live?.error) sendError = live.error;
+      if (cur.error) sendError = cur.error;
+      outcome = cur.error ? `Reply failed. ${cur.error}` : cur.status === 'stopping' || final?.status === 'stopped' ? 'Reply stopped' : 'Reply complete';
     } catch (e) {
-      sendError = msg(e);
-      if (!ephemeral && conv && conv.messages.length === 0 && !live?.startedUser) { /* empty conversation stays; user can retry */ }
-    } finally { live = null; ctrl = null; scrollEnd(true); composer?.focus(); }
+      if (mine === epoch) sendError = msg(e);
+    } finally {
+      if (mine === epoch) { live = null; ctrl = null; scrollEnd(true); composer?.focus(); }
+    }
   }
   function submit() { if (busy) return; const body = input.trim(); if (!body && !files.length) return; const t = [...files.map((f) => `<file name="${f.name.replace(/"/g, '')}">\n${f.text}\n</file>`), body].filter(Boolean).join('\n\n'); if (t.length > ui.composer.max_chars) { sendError = `Messages are limited to ${ui.composer.max_chars.toLocaleString()} characters.`; return; } input = ''; files = []; fileNote = ''; autosize(); run('send', t, null); }
   function stop() { if (!live || !ctrl) return; live.status = 'stopping'; ctrl.abort(); }
   function key(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
-    else if (e.key === 'Escape' && busy) { e.preventDefault(); stop(); }
+  }
+  // Escape stops a running reply wherever focus is (the Stop button promises it); an open dialog keeps its own Escape.
+  function globalKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && busy && !document.querySelector('[role="dialog"]')) { e.preventDefault(); stop(); }
   }
   function autosize() { tick().then(() => { if (!composer) return; composer.style.height = 'auto'; composer.style.height = Math.min(composer.scrollHeight, 220) + 'px'; }); }
   async function copy(t: string) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast('Copy is not available in this browser context.', 'bad'); } }
 
   // ---------- conversation actions ----------
-  function newChat(eph_ = false) { ephemeral = eph_; eph = []; conv = null; sendError = ''; if (routeId) goto('/chat'); sheetList = false; tick().then(() => composer?.focus()); }
+  function newChat(eph_ = false) { epoch++; live = null; ctrl = null; ephemeral = eph_; eph = []; conv = null; sendError = ''; if (routeId) goto('/chat'); sheetList = false; tick().then(() => composer?.focus()); }
   async function rename() { if (!conv || !renameText.trim()) return; try { await patch(`/api/chat/conversations/${conv.id}`, { title: renameText.trim() }); conv.title = renameText.trim(); renameOpen = false; loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function archive() { if (!conv) return; try { await patch(`/api/chat/conversations/${conv.id}`, { archived: !showArchived }); toast(showArchived ? 'Restored' : 'Archived'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }
   async function remove() { if (!conv) return; try { await del(`/api/chat/conversations/${conv.id}`); deleteOpen = false; toast('Conversation deleted'); newChat(); loadList(); } catch (e) { toast(msg(e), 'bad'); } }
@@ -197,11 +220,12 @@
   const fieldsAvail = $derived(ui.tech.fields.length > 0);
 </script>
 
+<svelte:window onkeydown={globalKey} />
 {#if !ui.modes.chat.enabled}
   <div style="padding:24px;max-width:640px"><h1 style="margin-bottom:12px">Chat</h1><div class="notice warn" role="status"><div><strong>Chat is not available to you.</strong> {ui.modes.chat.reason}</div></div></div>
 {:else}
 <div class="chat" class:withdrawer={techOn}>
-  <aside class="list" class:sheet={sheetList} aria-label="Conversations">
+  <aside class="list" class:sheet={sheetList} class:closed={!sheetList} aria-label="Conversations">
     <div class="lh">
       <button class="btn primary grow" onclick={() => newChat(false)}><Icon name="plus" /> New chat</button>
       <button class="btn ghost icon sm sheetx" aria-label="Close conversation list" onclick={() => (sheetList = false)}><Icon name="x" /></button>
@@ -233,6 +257,8 @@
       {#if ui.tech.drawer}<button class="btn sm" class:primary={techOn} aria-pressed={techOn} onclick={toggleTech} title="Show technical details for replies"><Icon name="cpu" size={16} /> Technical details</button>{/if}
     </header>
 
+    <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
+    <div class="sr-only" role="status" aria-live="polite" data-chat-status>{live ? (live.status === 'stopping' ? 'Stopping' : 'Assistant is replying') : outcome}</div>
     <div class="scroll" bind:this={scroller}>
       <div class="col">
         {#if modelsError}
@@ -375,10 +401,11 @@
   @media (max-width: 1023px) {
     .chat, .chat.withdrawer { grid-template-columns: 1fr; }
     .list { position: fixed; z-index: 60; left: 0; top: 0; bottom: 0; width: min(320px, 88vw); transform: translateX(-102%); background: var(--surface); box-shadow: var(--shadow); }
-    .list.sheet { transform: none; } .sheetx { display: inline-flex; } .scrim { display: block; position: fixed; inset: 0; background: rgba(10,12,12,.5); z-index: 55; }
+    .list.closed { visibility: hidden; }
+    .list.sheet { transform: none; visibility: visible; } .sheetx { display: inline-flex; } .scrim { display: block; position: fixed; inset: 0; background: rgba(10,12,12,.5); z-index: 55; }
     .listbtn { display: inline-flex; }
     .drawer { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 45vh; border-top: 1px solid var(--border-strong); border-left: 0; box-shadow: var(--shadow); }
   }
-  @media (max-width: 719px) { .ch { padding: 8px; } .col { padding: 12px; } .msel { min-width: 0; flex: 1; } }
+  @media (max-width: 719px) { .ch { padding: 8px; } .col { padding: 12px; } .msel { min-width: 0; max-width: none; flex: 1 1 100%; } .cbar .spacer { display: none; } }
   @media (prefers-reduced-motion: no-preference) { .list { transition: transform 140ms ease-out; } }
 </style>
