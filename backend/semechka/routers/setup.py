@@ -18,7 +18,7 @@ from ..backends_svc import adapter_for, sync_models
 from ..crypto import sha256_hex
 from ..deps import get_db, get_state, issue_session
 from ..models import Backend, Meta, Model, ModelGrant, User, UserRole
-from ..presets import PRESETS
+from ..presets import CHOICES, PRESETS
 from ..settings_reg import BY_ID, SettingError
 from ..state import AppState
 
@@ -112,7 +112,7 @@ async def hardware(request: Request, s=Depends(get_db), st: AppState = Depends(g
             "gpus": gpus, "gpu_note": "nvidia-smi not found; only NVIDIA GPUs are detected in this release."
             if gpus is None else "", "backends": found, "adapters": [a.manifest.as_dict() for a in adapters.REGISTRY.values()],
             "presets": {k: {"label": v["label"], "description": v["description"], "settings": v["settings"]}
-                        for k, v in PRESETS.items()},
+                        for k, v in CHOICES.items()},
             "bind": {"host": st.cfg.host, "port": st.cfg.port}}
 
 
@@ -176,8 +176,8 @@ async def complete(body: CompleteIn, request: Request, response: Response, s=Dep
                    st: AppState = Depends(get_state)):
     _check_token(request, s, st)
     ip = request.client.host if request.client else ""
-    if body.preset not in PRESETS:
-        raise HTTPException(422, {"code": "invalid", "message": "Unknown preset."})
+    if body.preset not in CHOICES:
+        raise HTTPException(422, {"code": "invalid", "message": "Choose Personal, Business, Managed Private Hosting or Custom."})
     email = body.owner.email.strip().lower()
     if "@" not in email:
         raise HTTPException(422, {"code": "invalid", "message": "Enter a valid email address."})
@@ -188,8 +188,9 @@ async def complete(body: CompleteIn, request: Request, response: Response, s=Dep
         raise HTTPException(422, {"code": "weak_password", "message": problem})
 
     # Validate every setting before changing anything (atomic apply).
-    merged = dict(PRESETS[body.preset]["settings"])
+    merged = dict(CHOICES[body.preset]["settings"])
     merged.update(body.settings)
+    merged["deployment.preset"] = body.preset
     cleaned = {}
     for k, v in merged.items():
         try:
@@ -209,7 +210,7 @@ async def complete(body: CompleteIn, request: Request, response: Response, s=Dep
         st.settings.set(s, user.id, k, v, batch=batch, ip=ip, confirm_weaker=True)
     # preset role grants
     from ..models import Role
-    for rid, extra in PRESETS[body.preset]["role_grants"].items():
+    for rid, extra in CHOICES[body.preset]["role_grants"].items():
         r = s.get(Role, rid)
         if r:
             r.grants = sorted(set(list(r.grants or []) + extra))

@@ -233,12 +233,69 @@ def _down_5(conn: Connection, _c: Ctx) -> None:
             conn.execute(text("update users set prefs=:p where id=:i"), {"p": json.dumps(p), "i": uid})
 
 
+# ---- 6: model permissions split, model display settings ------------------------------------------
+# Permissions 0.4.0 introduces. Whoever could already edit the catalogue and its access rules (admin.models.manage)
+# could give themselves all of these, so the upgrade grants them to exactly those roles: nobody gains power.
+_PERMS_6 = ["admin.models.present", "admin.models.defaults", "models.view_all", "models.use_all", "models.status.view"]
+# Settings keys (or prefixes ending in '.') that only 0.4.0 understands; removed on downgrade.
+_SETTINGS_6 = ["models.display.", "deployment.preset", "chat.enter_sends", "chat.prompt_history"]
+
+
+def _rows(conn: Connection, table: str):
+    for rid, grants, denies in conn.execute(text(f'select {"id" if table != "user_overrides" else "user_id"}, grants, '
+                                                 f'denies from "{table}"')).fetchall():
+        g = json.loads(grants) if isinstance(grants, str) else (grants or [])
+        d = json.loads(denies) if isinstance(denies, str) else (denies or [])
+        yield rid, g or [], d or []
+
+
+def _up_6(conn: Connection, _c: Ctx) -> None:
+    from . import perms
+    added: dict[str, list[str]] = {}
+    for rid, grants, denies in _rows(conn, "roles"):
+        def holds(pid, grants=grants, denies=denies):
+            return any(perms._matches(x, pid, for_grant=True) for x in grants) and \
+                not any(perms._matches(x, pid, for_grant=False) for x in denies)
+        if not holds("admin.models.manage"):
+            continue
+        new = [pid for pid in _PERMS_6 if not holds(pid)]
+        if new:
+            conn.execute(text("update roles set grants=:g where id=:i"), {"g": json.dumps(grants + new), "i": rid})
+            added[rid] = new
+    conn.execute(text("delete from meta where key='m6_roles'"))
+    conn.execute(text("insert into meta(key, value) values ('m6_roles', :v)"), {"v": json.dumps(added)})
+
+
+def _down_6(conn: Connection, _c: Ctx) -> None:
+    # 0.3.0 does not know these permission ids: remove every mention, wherever an administrator put them since.
+    gone = set(_PERMS_6)
+    for table, key in (("roles", "id"), ("teams", "id"), ("user_overrides", "user_id")):
+        for rid, grants, denies in _rows(conn, table):
+            g2, d2 = [x for x in grants if x not in gone], [x for x in denies if x not in gone]
+            if (g2, d2) != (grants, denies):
+                conn.execute(text(f'update "{table}" set grants=:g, denies=:d where {key}=:i'),
+                             {"g": json.dumps(g2), "d": json.dumps(d2), "i": rid})
+    conn.execute(text("delete from meta where key='m6_roles'"))
+    for k in _SETTINGS_6:
+        conn.execute(text("delete from setting_values where key like :k" if k.endswith(".") else
+                          "delete from setting_values where key = :k"), {"k": k + "%" if k.endswith(".") else k})
+        conn.execute(text("delete from setting_revisions where key like :k" if k.endswith(".") else
+                          "delete from setting_revisions where key = :k"), {"k": k + "%" if k.endswith(".") else k})
+    for uid, p in _users_prefs(conn):  # 0.4.0 preferences 0.3.0 would carry around unused
+        if any(k in p for k in ("favourite_models", "model_view", "enter_sends")):
+            for k in ("favourite_models", "model_view", "enter_sends"):
+                p.pop(k, None)
+            conn.execute(text("update users set prefs=:p where id=:i"), {"p": json.dumps(p), "i": uid})
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
     3: Step("0.3.0: model registry (profiles, order, visibility, groups, mode-scoped access)", _up_3, _down_3),
     4: Step("0.3.0: MFA policy and recovery codes", _up_4, _down_4),
     5: Step("0.3.0: themes Light, Dark, Graphite and Custom", _up_5, _down_5),
+    6: Step("0.4.0: model permissions (see all, use restricted, presentation, defaults) and model display settings",
+            _up_6, _down_6),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

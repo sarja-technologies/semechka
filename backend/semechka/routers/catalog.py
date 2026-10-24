@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import catalog_svc, services
-from ..deps import Ctx, audit_ctx, current, require
+from ..deps import Ctx, audit_ctx, current, require, require_any
 from ..models import (
     Backend,
     Model,
@@ -24,7 +24,8 @@ from ..models import (
 from .misc import save_image_asset
 
 router = APIRouter(prefix="/api")
-MANAGE = "admin.models.manage"
+MANAGE = "admin.models.manage"  # enabling models and who may use them
+PRESENT = "admin.models.present"  # names, order, groups, pins, icons
 
 
 def _err(status, code, message):
@@ -41,7 +42,7 @@ def _grant_out(g: ModelGrant) -> dict:
 
 # ---- administrator ---------------------------------------------------------------------------------------
 @router.get("/admin/catalog")
-def admin_catalog(ctx: Ctx = Depends(require(MANAGE))):
+def admin_catalog(ctx: Ctx = Depends(require_any(MANAGE, PRESENT))):
     full = ctx.principal.can("tech.model.id")
     backends = {b.id: b for b in ctx.s.execute(select(Backend)).scalars()}
     grants = catalog_svc.grants_by_model(ctx.s)
@@ -80,7 +81,7 @@ class OrderIn(BaseModel):
 
 
 @router.put("/admin/catalog/order")
-def set_order(body: OrderIn, ctx: Ctx = Depends(require(MANAGE))):
+def set_order(body: OrderIn, ctx: Ctx = Depends(require(PRESENT))):
     """The chooser's order, exactly as given (never re-sorted alphabetically). Unlisted models keep their place after."""
     rows = {m.id: m for m in ctx.s.execute(select(Model)).scalars()}
     seen = []
@@ -106,7 +107,12 @@ class EntryPatch(BaseModel):
 
 
 @router.patch("/admin/catalog/models/{mid}")
-def patch_entry(mid: str, body: EntryPatch, ctx: Ctx = Depends(require(MANAGE))):
+def patch_entry(mid: str, body: EntryPatch, ctx: Ctx = Depends(require_any(PRESENT, MANAGE))):
+    # names, pins, visibility and descriptions are presentation; the context window a model loads with is operation
+    if (body.alias is not None or body.pinned is not None or body.hidden is not None or body.profile is not None):
+        ctx.need(PRESENT)
+    if body.defaults is not None:
+        ctx.need(MANAGE)
     m = ctx.s.get(Model, mid)
     if m is None:
         raise _err(404, "not_found", "No such model.")
@@ -135,7 +141,7 @@ def patch_entry(mid: str, body: EntryPatch, ctx: Ctx = Depends(require(MANAGE)))
 
 
 @router.post("/admin/catalog/icons")
-async def upload_icon(file: UploadFile = File(...), ctx: Ctx = Depends(require(MANAGE))):
+async def upload_icon(file: UploadFile = File(...), ctx: Ctx = Depends(require(PRESENT))):
     return await save_image_asset(ctx, file)
 
 
@@ -144,7 +150,7 @@ class ProviderIconIn(BaseModel):
 
 
 @router.put("/admin/catalog/providers/{pid}/icon")
-def set_provider_icon(pid: str, body: ProviderIconIn, ctx: Ctx = Depends(require(MANAGE))):
+def set_provider_icon(pid: str, body: ProviderIconIn, ctx: Ctx = Depends(require(PRESENT))):
     if pid not in catalog_svc.BY_PROVIDER:
         raise _err(404, "not_found", "Unknown provider.")
     icons = dict(_provider_icons(ctx))
@@ -186,7 +192,7 @@ def _own_group(ctx: Ctx, gid: str) -> ModelGroup:
 
 
 @router.post("/admin/catalog/groups")
-def create_group(body: GroupIn, ctx: Ctx = Depends(require(MANAGE))):
+def create_group(body: GroupIn, ctx: Ctx = Depends(require(PRESENT))):
     n = len(catalog_svc.groups(ctx.s))
     g = ModelGroup(name=body.name.strip(), description=body.description.strip(), collapsed=body.collapsed,
                    audience=_clean_audience(ctx, body.audience), sort=n)
@@ -197,7 +203,7 @@ def create_group(body: GroupIn, ctx: Ctx = Depends(require(MANAGE))):
 
 
 @router.patch("/admin/catalog/groups/{gid}")
-def update_group(gid: str, body: GroupIn, ctx: Ctx = Depends(require(MANAGE))):
+def update_group(gid: str, body: GroupIn, ctx: Ctx = Depends(require(PRESENT))):
     g = _own_group(ctx, gid)
     g.name, g.description, g.collapsed = body.name.strip(), body.description.strip(), body.collapsed
     g.audience = _clean_audience(ctx, body.audience)
@@ -206,7 +212,7 @@ def update_group(gid: str, body: GroupIn, ctx: Ctx = Depends(require(MANAGE))):
 
 
 @router.delete("/admin/catalog/groups/{gid}")
-def delete_group(gid: str, ctx: Ctx = Depends(require(MANAGE))):
+def delete_group(gid: str, ctx: Ctx = Depends(require(PRESENT))):
     """Removes the heading only. Its models stay in the catalogue and in any other group."""
     g = _own_group(ctx, gid)
     for mm in ctx.s.execute(select(ModelGroupMember).where(ModelGroupMember.group_id == gid)).scalars():
@@ -217,17 +223,18 @@ def delete_group(gid: str, ctx: Ctx = Depends(require(MANAGE))):
 
 
 @router.put("/admin/catalog/groups-order")
-def order_groups(body: OrderIn, ctx: Ctx = Depends(require(MANAGE))):
+def order_groups(body: OrderIn, ctx: Ctx = Depends(require(PRESENT))):
     gs = {g.id: g for g, _ in catalog_svc.groups(ctx.s)}
     if set(body.ids) - set(gs):
         raise _err(422, "invalid", "Unknown group in the order.")
     for i, gid in enumerate(dict.fromkeys(body.ids)):
         gs[gid].sort = i
+    audit_ctx(ctx, "catalog.groups.order", "", {"count": len(body.ids)})
     return {"ok": True}
 
 
 @router.put("/admin/catalog/groups/{gid}/members")
-def set_members(gid: str, body: OrderIn, ctx: Ctx = Depends(require(MANAGE))):
+def set_members(gid: str, body: OrderIn, ctx: Ctx = Depends(require(PRESENT))):
     """The group's models in display order. A model may belong to any number of groups."""
     _own_group(ctx, gid)
     known = set(ctx.s.execute(select(Model.id)).scalars())
@@ -250,7 +257,7 @@ class CatalogBulk(BaseModel):
 
 
 @router.post("/admin/catalog/bulk")
-def catalog_bulk(body: CatalogBulk, ctx: Ctx = Depends(require(MANAGE))):
+def catalog_bulk(body: CatalogBulk, ctx: Ctx = Depends(require(PRESENT))):
     models = [m for i in dict.fromkeys(body.ids) if (m := ctx.s.get(Model, i))]
     if len(models) != len(set(body.ids)):
         raise _err(422, "invalid", "Unknown model.")

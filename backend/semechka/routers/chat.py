@@ -19,7 +19,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from .. import attachments_svc, audit, chat_context, chat_svc, media_svc, services
+from .. import attachments_svc, audit, catalog_svc, chat_context, chat_svc, media_svc, services
 from ..adapters import AdapterError
 from ..backends_svc import adapter_for
 from ..deps import Ctx, current
@@ -107,12 +107,14 @@ def list_models(ctx: Ctx = Depends(current), mode: str = "chat"):
         raise HTTPException(422, {"code": "invalid", "message": "Unknown mode."})
     _need_mode(ctx, mode)
     out = []
+    grants = catalog_svc.grants_by_model(ctx.s)
     for m, b in services.accessible_models(ctx.s, ctx.principal, ctx.st, mode):
         tagged = "code" in [t.lower() for t in (m.tags or [])]
         named = any(w in m.alias.lower() for w in ("code", "coder"))
         out.append({"id": m.id, "alias": m.alias, "pinned": m.pinned, "tags": m.tags or [],
                     "code_hint": "tagged for code by your administrator" if tagged else ("the name suggests code" if named else None),
                     "capabilities": m.capabilities or [], "external": services.is_external(m, b),
+                    "restricted": services.is_restricted(ctx.s, ctx.principal, m, mode, grants.get(m.id, [])),
                     "tech": services.filter_tech(ctx.principal, _model_tech(m, b))})
     return out
 

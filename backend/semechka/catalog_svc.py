@@ -207,6 +207,12 @@ def decide(grants: list[ModelGrant], p: perms.Principal, mode: str) -> tuple[boo
     return True, ""
 
 
+def denied(grants: list[ModelGrant], p: perms.Principal, mode: str) -> bool:
+    """An explicit deny rule applies to this person for this mode."""
+    keys = subject_keys(p)
+    return any(g.effect == "deny" and (g.subject_type, g.subject_id) in keys and grant_applies(g, mode) for g in grants)
+
+
 def grants_by_model(s) -> dict[str, list[ModelGrant]]:
     out: dict[str, list[ModelGrant]] = {}
     for g in s.execute(select(ModelGrant)).scalars():

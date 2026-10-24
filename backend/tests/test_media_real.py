@@ -36,7 +36,7 @@ def _stack(app, st, models):
     tok = ensure_setup_token(st)
     r = api.post("/api/setup/complete", headers={"x-setup-token": tok}, json={
         "owner": {"email": "o@example.test", "password": PW, "display_name": "O"}, "preset": "business",
-        "settings": {"modes.image.enabled": True, "modes.video.enabled": True},
+        "settings": {"modes.image.enabled": True, "modes.video.enabled": True, "auth.mfa_policy": "optional"},
         "backend": {"adapter": "sarness", "base_url": URL, "api_key": TOKEN}, "enable_models": models})
     assert r.status_code == 200 and r.json()["models_enabled"] == len(models), r.text
     api.csrf = api.get("/api/me").json()["csrf"]

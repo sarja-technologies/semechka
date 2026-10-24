@@ -285,6 +285,12 @@ DEFS: list[Def] = [
         scopes=["deployment", "role", "team"], merge="false_wins"),
     Def("chat.max_input_chars", U, "Maximum message length", "Characters per message.", "int", 32000,
         min=100, max=1000000, scopes=["deployment", "role", "team"], merge="min"),
+    Def("chat.enter_sends", U, "Enter sends the message", "On: Enter sends and Shift+Enter starts a new line. Off: "
+        "Enter starts a new line and Ctrl+Enter (Cmd+Enter on a Mac) sends. People can change it for themselves.",
+        "bool", True, scopes=["deployment", "role", "team", "user"]),
+    Def("chat.prompt_history", U, "Recall earlier messages with Alt+Up", "Off by default. When on, Alt+Up and Alt+Down "
+        "in an empty composer step through the messages you sent in this conversation. Plain Up and Down always move "
+        "the cursor.", "bool", False, scopes=["deployment", "role", "team", "user"]),
     # ---- registration & sign-in ----
     Def("signup.mode", S_, "Registration mode", "How people get an account.", "enum", "admin",
         choices=["public", "domain", "invite", "admin", "sso"], scopes=["deployment"], edit_perm="admin.signup.edit",
@@ -479,12 +485,36 @@ DEFS: list[Def] = [
         choices=["composer", "header", "sidebar"], scopes=["deployment", "role", "team"], edit_perm="admin.navigation"),
     # ---- default models (by role, team and person; each must also be usable by them) ----
     *[Def(f"models.default.{op}", N, f"Default model: {lbl}", "Used when a person has not chosen one. A model they cannot "
-          "use is skipped.", "string", "", scopes=["deployment", "role", "team", "user"], edit_perm="admin.models.manage",
+          "use is skipped.", "string", "", scopes=["deployment", "role", "team", "user"], edit_perm="admin.models.defaults",
           validator=lambda v: _strlen(v, 0, 32)) for op, lbl in [
         ("chat", "chat"), ("vision", "image analysis"), ("code", "code"), ("image", "image generation"), ("video", "video generation")]],
+    # ---- how models are listed (presentation only; who may use a model is decided by access rules) ----
+    Def("models.display.names", N, "Model names shown", "alias: the name an administrator gave it. real: the name the "
+        "engine reports. both: the alias with the real name beneath it. A model without an alias always shows its real "
+        "name. Aliases never replace the real identifier the engine is called with.", "enum", "both",
+        choices=["alias", "real", "both"], scopes=["deployment", "role", "team"], edit_perm="admin.models.present",
+        aliases=["model label", "raw model names", "friendly names"]),
+    Def("models.display.group_by", N, "Group models by", "groups: the administrator's own headings. family: the "
+        "developer (Qwen, OpenAI, ...). capability: what a model can do. engine: the server it runs on. size: parameter "
+        "count. none: one list.", "enum", "groups", choices=["groups", "family", "capability", "engine", "size", "none"],
+        scopes=["deployment", "role", "team", "user"], edit_perm="admin.models.present"),
+    Def("models.display.sort", N, "Sort models", "custom: the administrator's order. name: alphabetical. size_desc / "
+        "size_asc: by parameter count where it is known (unknown sizes last). context: by context window. There is no "
+        "automatic quality ranking: use custom order to rank.", "enum", "custom",
+        choices=["custom", "name", "size_desc", "size_asc", "context"], scopes=["deployment", "role", "team", "user"],
+        edit_perm="admin.models.present"),
+    Def("models.display.pinned_first", N, "Pinned models first", "Recommended (pinned) models are listed above the rest.",
+        "bool", True, scopes=["deployment", "role", "team"], edit_perm="admin.models.present"),
+    Def("models.display.view", N, "Model picker detail", "compact: name and developer. detailed: also size, "
+        "quantisation, context and status, as far as the person may see them. People can switch for themselves.",
+        "enum", "compact", choices=["compact", "detailed"], scopes=["deployment", "role", "team"],
+        edit_perm="admin.models.present"),
+    Def("deployment.preset", SYS, "Deployment preset", "The starting point chosen in the setup wizard (personal, "
+        "business, managed or custom). Recorded for reference; changing it changes no other setting.", "enum", "",
+        choices=["", "personal", "business", "managed", "custom"], edit_perm="admin.settings.edit"),
     Def("models.provider_icons", N, "Provider icons", "Uploaded icons that replace the lettermark for every model of a "
         "provider (for example, your licensed copy of a vendor logo). Edited on the Models page.", "json", {},
-        edit_perm="admin.models.manage", validator=lambda v: _provider_icons(v)),
+        edit_perm="admin.models.present", validator=lambda v: _provider_icons(v)),
     # ---- privacy additions ----
     Def("privacy.user_delete_conversations", P, "People may delete their own conversations", "When off, conversations "
         "are removed only by the retention policy.", "bool", True, scopes=["deployment", "role", "team"], merge="false_wins",

@@ -134,7 +134,10 @@ def test_images_reach_only_models_that_can_see_and_may_be_used_for_it(owner, app
     assert parts[0]["type"] == "text" and parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
     grants = owner.get("/api/admin/catalog").json()["models"]
     g = next(m for m in grants if m["id"] == mid)["grants"]
-    owner.put(f"/api/admin/models/{mid}/grants", json={"grants": [{**x, "modes": ["chat"]} for x in g]})
+    # the owner may use restricted models (models.use_all), so a grant limited to chat does not stop them; an explicit
+    # deny for vision does, because a deny always wins
+    owner.put(f"/api/admin/models/{mid}/grants", json={"grants": [{**x, "modes": ["chat"]} for x in g] + [
+        {"subject_type": "everyone", "subject_id": "*", "effect": "deny", "modes": ["vision"]}]})
     fakebackend.calls.clear()
     say(owner, cid, mid, "Once more", attachments=[att["id"]])
     assert isinstance(fakebackend.calls[-1]["messages"][-1]["content"], str)

@@ -119,6 +119,19 @@ def require(perm: str) -> Callable:
     return dep
 
 
+def require_any(*perm_ids: str) -> Callable:
+    """Holding any one of the permissions is enough (e.g. a page shared by two kinds of administrator)."""
+    def dep(ctx: Ctx = Depends(current)) -> Ctx:
+        held = [p for p in perm_ids if ctx.principal.can(p)]
+        if not held:
+            ctx.need(perm_ids[0])
+        if any(p.startswith("admin.") for p in held) and mfa_required_for(ctx) and not ctx.user.totp_enabled:
+            raise HTTPException(403, {"code": "mfa_required",
+                                      "message": "Set up multi-factor authentication before using admin features."})
+        return ctx
+    return dep
+
+
 def mfa_required_for(ctx: Ctx) -> bool:
     return services.mfa_required(ctx.s, ctx.st, ctx.principal)
 

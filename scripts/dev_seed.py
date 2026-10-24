@@ -45,7 +45,7 @@ def main():
     token = (Path(a.data) / "setup-token").read_text().strip()
     body = {"owner": {"email": "owner@demo.test", "password": PW, "display_name": "Olga Owner"}, "preset": "business",
             "settings": {"brand.org_name": "Banana Corporation", "brand.app_name": "Banana Corporation Private AI", "brand.short_name": "Banana AI",
-                         "brand.tab_title": "Banana AI", "signup.mode": "invite", "nav.suggested_prompts": ["Summarise this paragraph in two sentences", "Draft a polite reply declining a meeting", "Explain what a hash chain is"]}}
+                         "brand.tab_title": "Banana AI", "signup.mode": "invite", "auth.mfa_policy": "optional", "nav.suggested_prompts": ["Summarise this paragraph in two sentences", "Draft a polite reply declining a meeting", "Explain what a hash chain is"]}}
     if a.backend:
         ad, url = a.backend.split("=", 1)
         probe = owner.call("POST", "/api/setup/backend-test", {"adapter": ad, "base_url": url}, {"x-setup-token": token})

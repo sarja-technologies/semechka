@@ -60,7 +60,8 @@ def model_access(s, p: perms.Principal, m: Model, backend: Backend, st, mode: st
     """(allowed, reason). `mode` is a product mode or 'vision' (chat with an image). Deny always wins over allow; no
     grant means no access; a grant limited to other modes does not apply."""
     from . import catalog_svc
-    if not m.enabled or not m.available or not backend.enabled:
+    use_all = p.can("models.use_all")  # restricted models too; an explicit deny still wins
+    if not m.available or not backend.enabled or (not m.enabled and not use_all):
         return False, "This model is not available."
     mode = mode or "chat"
     caps = catalog_svc.capabilities(m)
@@ -70,7 +71,7 @@ def model_access(s, p: perms.Principal, m: Model, backend: Backend, st, mode: st
     if grants is None:
         grants = list(s.execute(select(ModelGrant).where(ModelGrant.model_id == m.id)).scalars())
     ok, why = catalog_svc.decide(grants, p, GRANT_MODE[mode])
-    if not ok:
+    if not ok and not (use_all and not catalog_svc.denied(grants, p, GRANT_MODE[mode])):
         return False, why
     if is_external(m, backend) and not st.settings.deployment(s, "privacy.external_egress"):
         return False, "This model runs on an external service, which your organisation has turned off."
@@ -82,18 +83,25 @@ def is_external(m: Model, backend: Backend) -> bool:
 
 
 def accessible_models(s, p: perms.Principal, st, mode: str = "chat", *, include_hidden: bool = True) -> list[tuple[Model, Backend]]:
-    """Models this person may use for `mode`, in the administrator's order."""
+    """Models this person may use for `mode`, in the administrator's order: those offered to them first, then the
+    restricted ones they may still use because they hold models.use_all."""
     from . import catalog_svc
     backends = {b.id: b for b in s.execute(select(Backend)).scalars()}
     by_model = catalog_svc.grants_by_model(s)
-    out = []
+    offered, restricted = [], []
     for m in catalog_svc.ordered_models(s):
         if m.hidden and not include_hidden:
             continue
         b = backends.get(m.backend_id)
         if b and model_access(s, p, m, b, st, mode, by_model.get(m.id, []))[0]:
-            out.append((m, b))
-    return out
+            (restricted if is_restricted(s, p, m, mode, by_model.get(m.id, [])) else offered).append((m, b))
+    return offered + restricted
+
+
+def is_restricted(s, p: perms.Principal, m: Model, mode: str, grants: list[ModelGrant]) -> bool:
+    """True when the person can use the model only because of models.use_all (it is not offered to them)."""
+    from . import catalog_svc
+    return not m.enabled or not catalog_svc.decide(grants, p, GRANT_MODE.get(mode, mode))[0]
 
 
 # ---- modes ----------------------------------------------------------------------------------------

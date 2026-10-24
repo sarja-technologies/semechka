@@ -125,7 +125,8 @@ def owner(app, st, cfg, fake_url):
         "owner": {"email": "owner@example.test", "password": PW, "display_name": "Olga Owner"},
         "preset": "business",
         "settings": {"brand.org_name": "Banana Corporation", "brand.app_name": "Banana Corporation Private AI",
-                     "brand.tab_title": "Banana AI", "signup.mode": "admin", "privacy.chat_retention_days": 30},
+                     "brand.tab_title": "Banana AI", "signup.mode": "admin", "privacy.chat_retention_days": 30,
+                     "auth.mfa_policy": "optional"},  # MFA behaviour is tested on its own, not inherited from the preset
         "backend": {"adapter": "openai_compat", "base_url": fake_url, "external": False},
         "enable_models": ["fake-small"], "smoke_model": "fake-small"})
     assert r.status_code == 200, r.text
@@ -164,7 +165,8 @@ def mo(app, st, sarness_url):
     token = ensure_setup_token(st)
     r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
         "owner": {"email": "owner@example.test", "password": PW, "display_name": "Olga Owner"}, "preset": "business",
-        "settings": {"modes.image.enabled": True, "modes.video.enabled": True, "privacy.chat_retention_days": 30},
+        "settings": {"modes.image.enabled": True, "modes.video.enabled": True, "privacy.chat_retention_days": 30,
+                     "auth.mfa_policy": "optional"},
         "backend": {"adapter": "sarness", "base_url": sarness_url, "api_key": fs.TOKEN},
         "enable_models": ["local:fake-chat", "image:fake-turbo", "video:fake-clip"], "smoke_model": "local:fake-chat"})
     assert r.status_code == 200, r.text

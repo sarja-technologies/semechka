@@ -7,8 +7,8 @@
 import os
 
 import pytest
-
 from semechka import adapters
+
 from .conftest import PW, Api, make_user
 
 LLAMA = os.environ.get("SEMECHKA_REAL_LLAMA_URL")
@@ -26,6 +26,19 @@ async def _collect(ad, model):
     return text, done
 
 
+
+TECH = ["tech.model.id", "tech.model.family", "tech.model.params", "tech.model.quant", "tech.model.context",
+        "tech.runtime.name", "tech.gen.params", "tech.usage.tokens", "tech.perf.*", "ops.gen.edit_params"]
+
+
+def grant_member_tech(api):
+    """Members see technical fields, as an administrator would set it up on the Roles page."""
+    m = next(r for r in api.get("/api/admin/roles").json() if r["id"] == "member")
+    r = api.put("/api/admin/roles/member", json={"label": m["label"], "description": m["description"], "rank": m["rank"],
+                                                  "grants": sorted(set(m["grants"] + TECH)), "denies": m["denies"]})
+    assert r.status_code == 200, r.text
+
+
 @pytest.mark.skipif(not LLAMA, reason="no llama.cpp server configured")
 async def test_llama_cpp_adapter_discovers_and_streams():
     ad = adapters.make("openai_compat", LLAMA)
@@ -38,6 +51,7 @@ async def test_llama_cpp_adapter_discovers_and_streams():
 
 
 @pytest.mark.skipif(not LLAMA, reason="no llama.cpp server configured")
+
 def test_full_stack_against_llama_cpp(app, st, cfg):
     from semechka.routers.setup import ensure_setup_token
     api = Api(app)
@@ -45,11 +59,12 @@ def test_full_stack_against_llama_cpp(app, st, cfg):
     probe = api.post("/api/setup/backend-test", headers={"x-setup-token": token}, json={"adapter": "openai_compat", "base_url": LLAMA})
     real_id = probe.json()["models"][0]["real_id"]
     r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
-        "owner": {"email": "o@example.test", "password": PW, "display_name": "O"}, "preset": "research",
+        "owner": {"email": "o@example.test", "password": PW, "display_name": "O"}, "preset": "custom",
         "backend": {"adapter": "openai_compat", "base_url": LLAMA}, "enable_models": [real_id], "smoke_model": real_id})
     assert r.status_code == 200 and r.json()["smoke"]["ok"], r.text
     api.csrf = api.get("/api/me").json()["csrf"]
-    m = make_user(api, app, "r@example.test")  # research preset gives Members technical read fields
+    grant_member_tech(api)
+    m = make_user(api, app, "r@example.test")
     mid = m.get("/api/chat/models").json()[0]["id"]
     cid = m.post("/api/chat/conversations", json={"model_id": mid}).json()["id"]
     status, ev = m.stream(f"/api/chat/conversations/{cid}/generate", {"mode": "send", "content": "Name one colour.", "model_id": mid, "params": {"max_tokens": 16}})
@@ -93,10 +108,11 @@ def test_full_stack_against_sarness_engine(app, st, cfg):
     ref = probe["models"][0]["real_id"]
     assert ref.startswith("local:") and probe["models"][0]["external"] is False
     r = api.post("/api/setup/complete", headers={"x-setup-token": token}, json={
-        "owner": {"email": "o@example.test", "password": PW, "display_name": "O"}, "preset": "research",
+        "owner": {"email": "o@example.test", "password": PW, "display_name": "O"}, "preset": "custom",
         "backend": {"adapter": "sarness", "base_url": SARNESS, "api_key": tok}, "enable_models": [ref], "smoke_model": ref})
     assert r.status_code == 200 and r.json()["smoke"]["ok"], r.text
     api.csrf = api.get("/api/me").json()["csrf"]
+    grant_member_tech(api)
     m = make_user(api, app, "r@example.test")
     mid = m.get("/api/chat/models").json()[0]["id"]
     cid = m.post("/api/chat/conversations", json={"model_id": mid}).json()["id"]
