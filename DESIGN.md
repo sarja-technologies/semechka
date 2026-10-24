@@ -1,7 +1,7 @@
 # Semechka — DESIGN.md (design contract)
 
 Semechka is a tool people use every day for work. It should look like a well-made instrument, not a landing page.
-This file is the contract. `web/src/app.css` holds the tokens; nothing in the UI may use a colour, radius or font
+This file is the contract. `theme/tokens.json` holds the tokens (see Colour); nothing in the UI may use a colour, radius or font
 that is not defined there (admin-chosen brand values arrive as CSS variables and are validated server-side).
 
 ## Identity
@@ -11,22 +11,40 @@ that is not defined there (admin-chosen brand values arrive as CSS variables and
   no exclamation marks, no emoji. Errors name the cause ("The model backend is not reachable") rather than "Something went wrong".
 
 ## Colour
-Three first-party profiles (all tokens editable by an admin; accent is contrast-checked to 4.5:1):
+Exactly four themes: **Light**, **Dark**, **Graphite** (a dark grey for long sessions) and the organisation's
+**Custom** theme. The single source is `backend/semechka/theme/tokens.json`, which is copied identically to
+`web/src/lib/theme/tokens.json`; design-lint fails if they differ. It lists 27 tokens in
+6 groups, the three presets, and 23 contrast pairs. The runtime writes the active
+theme's tokens onto `:root`.
 
-| token | Paper | Carbon | Graphite |
+| token | Light | Dark | Graphite |
 |---|---|---|---|
-| `--bg` | #F7F7F5 | #111415 | #252A2A |
-| `--surface` | #FFFFFF | #1A1E1F | #303637 |
-| `--fg` | #202322 | #F0F2EF | #E9ECE8 |
-| `--border` | #D9DBD7 | #343838 | #475150 |
-| `--accent` | #087771 | #64BEB5 | #64BEB5 |
-| `--danger` | #C83C36 | (lifted for contrast) | |
-| `--success` | #267E59 | | |
-| `--warn` | #A36A12 | | |
+| `--brand` | #2B2F31 | #ECEDEA | #E6E8E4 |
+| `--accent` | #0B6E69 | #6CC3B9 | #7CC9BF |
+| `--bg` | #F7F7F5 | #141617 | #24282A |
+| `--bg-2` | #EEEFEC | #1C1F20 | #2B3032 |
+| `--sidebar-bg` | #EFEFEC | #101213 | #1F2325 |
+| `--card-bg` | #FFFFFF | #1B1E1F | #2C3133 |
+| `--user-msg-bg` | #E9EAE6 | #262A2B | #353B3D |
+| `--fg` | #1D2021 | #ECEDEA | #E8EAE6 |
+| `--fg-muted` | #5C6264 | #9EA4A2 | #A9B0AD |
+| `--border` | #DCDDD9 | #2D3132 | #3D4345 |
+| `--border-strong` | #878C89 | #61676A | #737A7D |
+| `--btn-primary-bg` | #2B2F31 | #ECEDEA | #E6E8E4 |
+| `--link` | #0B6E69 | #6CC3B9 | #7CC9BF |
+| `--success` | #23744F | #55C595 | #5CC99A |
+| `--warn` | #875A0F | #D9A441 | #DCAA4A |
+| `--danger` | #BC3631 | #EF6D67 | #F38E8A |
+| `--info` | #36698A | #7DB3D4 | #84B9D9 |
+
+The **Custom** theme is built in Administration → Theme. It starts from a preset, can re-derive surfaces from three
+base colours (brand, secondary brand, accent), takes overrides per token, and has separate light and dark versions.
+Publishing refuses any contrast pair below its minimum (4.5:1 for text, 3:1 for focus rings and control outlines).
+`scripts/contrast_check.py` checks the same pairs for the three presets in CI. Text colours are never derived.
 
 Hard bans for every first-party default, hover, focus, selection and chart colour: purple, violet, lavender, lilac, indigo,
 gradients of any kind, glass/blur panels, glow, 3D blobs, sparkle/orb iconography, emoji as icons, fake gauges, invented
-numbers, confetti, parallax, staggered fade-in. A unit test (`test_default_palette_is_not_purple`) checks the accent hue; the
+numbers, confetti, parallax, staggered fade-in. A unit test (`test_presets_meet_contrast_and_default_palette_is_not_purple`) checks every preset colour's hue and contrast; the
 CSS lint in `scripts/design-lint.sh` greps the stylesheet and components for forbidden hue ranges, `gradient(` and `backdrop-filter`.
 
 Accent is for the one primary action per view, links, focus rings and the active nav item. It is never decoration.

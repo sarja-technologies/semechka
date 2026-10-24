@@ -4,8 +4,8 @@ Requirements: Linux (x86_64 verified; ARM64 untested), Python 3.11+, 2 GiB RAM f
 
 ## 1. Verify, then run (recommended)
 ```
-sha256sum -c semechka-0.2.0.tar.gz.sha256
-tar xzf semechka-0.2.0.tar.gz && cd semechka-0.2.0
+sha256sum -c semechka-0.3.0.tar.gz.sha256
+tar xzf semechka-0.3.0.tar.gz && cd semechka-0.3.0
 ./install.sh --check      # preflight only: changes nothing
 ./install.sh              # installs a private venv + a systemd *user* service, loopback only
 ```
