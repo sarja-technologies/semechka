@@ -23,7 +23,7 @@
 
 ## Interface, themes and frontends (0.3.0)
 - **Themes:** exactly four (Light, Dark, Graphite, Custom). A Custom theme cannot be published while any listed colour pair is below its contrast minimum, but text over uploaded logos or images is not checked. Custom CSS is bounded (see CUSTOM_FRONTEND.md) and can still make the chat interface ugly; it cannot reach administration or sign-in pages.
-- **Model icons:** no third-party logos are bundled (MODEL_ICONS.md). Until an administrator uploads icons, models show lettermarks.
+- **Model icons:** from 0.4.0 only the developer logos whose owners allow this use are bundled (MODEL_ICONS.md); OpenAI, Meta, Microsoft, NVIDIA, Stability AI, Google and developers without a published mark get lettermarks unless an administrator uploads an icon.
 - **Catalogue ordering:** drag and drop on a very long list relies on the browser scrolling while dragging. Up and down buttons and keyboard moves work everywhere.
 - **Replacement frontends** must be served from the same origin as the API: there is no CORS and no API-token authentication for third-party clients. The example frontend renders text only (no Markdown) and does not cover media, attachments or folders.
 - **Conversation access by administrators** is off by default. When an organisation enables it, it is audited and shown to the person, but the person is not notified in real time.
@@ -39,3 +39,31 @@
 - Progress is polled (about every 2 s in the browser, every 3 s server side). A job survives a Semechka restart; the in-memory result of a no-save job does not.
 - Since 0.3.0, pictures and videos are made inside the conversation; `/image` and `/video` only open a new conversation ready for that kind of turn. Making, editing and animating in the thread are tested against a fake engine (`test_media_chat.py`). The real-engine check is recorded in DEPLOYMENT_EVIDENCE.md.
 - Video was exercised once on a real engine at a deliberately tiny size (smallest resolution, 5 frames, 4 steps). Longer or larger clips, and the 80+ GB models (e.g. LTX-2.3), were not run.
+
+## Model management, picker and interface (0.4.0)
+- **Load and unload** work only with the Sarness Engine. Only chat models can be loaded ahead of time; picture and video
+  models load when first used, and Semechka can only free their memory. Engine 0.4.0 holds one chat model at a time,
+  so loading one replaces the other.
+- **Protecting replies in progress:** Semechka refuses a load or unload while the engine reports a reply streaming (from
+  any client) or while this server has a reply about to start on another model. The check and the load are separate
+  calls and the engine has no reservation, so a reply another client starts in the moment between them can still be
+  cut off by the engine.
+- **No load progress:** the engine reports no percentage for loading a model, so the panel shows the operation as
+  running with the time it started. During the tests engine 0.4.0 reported 0 % progress for picture and video jobs
+  until they finished, and that is what is shown.
+- **Memory figures are the engine's own estimates.** A load is refused only when the estimate exceeds the engine's total
+  memory. The engine may stop an idle picture/video worker to make room, which Semechka reports but cannot prevent.
+  After a picture or video model is freed, the engine keeps its worker process running (memory in use stayed about
+  5 GB above the starting level in the test); Semechka has no control to stop the worker.
+- **Other clients' engine jobs** appear with their kind, model and status only; their prompts and titles never do.
+- **Model operators without `admin.users.view`** can edit models but cannot pick roles, teams or people in a model's
+  access rules, because those lists need that permission.
+- **The picker ranks nothing.** Sorting by size or context uses what the engine reports; models that report nothing
+  sort last. There is no quality or speed ranking.
+- **Names:** a model whose alias is still the one made from its identifier shows the engine's display name. The
+  quantisation part of that name is shown only with `tech.model.quant`, and identifiers only with `tech.model.id`.
+- **Prompt history** (Alt+Up/Down, off by default) recalls messages from the open conversation and from this browser
+  tab, not from other conversations.
+- **The Codex-inspired layout** was compared with screenshots of the OpenAI Codex app only, not side by side with the
+  app itself, and was checked in Chrome only.
+

@@ -42,10 +42,15 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `ops.model.select_actual` — Choose the underlying model/node | yes | yes | – | yes | – | – | – | – | – |
 | `ops.model.load` — Load / unload models | yes | yes | – | yes | – | – | – | – | – |
 | `ops.model.install` — Install / remove models | yes | yes | – | yes | – | – | – | – | – |
+| `ops.queue.view` — See the engine queue | yes | yes | – | yes | yes | – | – | – | – |
 | `ops.jobs.cancel_own` — Cancel own jobs | yes | yes | yes | – | yes | – | yes | yes | – |
 | `ops.jobs.cancel_others` — Cancel other people's jobs | yes | yes | – | – | yes | – | – | – | – |
 | `ops.jobs.reprioritise` — Change queue priority | yes | yes | – | – | yes | – | – | – | – |
 | `ops.node.manage` — Manage nodes | yes | yes | – | – | – | – | – | – | – |
+| **Models** | | | | | | | | | |
+| `models.view_all` — See every installed model | yes | yes | – | yes | – | – | – | – | – |
+| `models.use_all` — Use restricted models | yes | yes | – | yes | – | – | – | – | – |
+| `models.status.view` — See which models are loaded | yes | yes | – | yes | – | – | – | – | – |
 | **Administration** | | | | | | | | | |
 | `admin.overview` — Open the admin console | yes | yes | yes | yes | yes | yes | yes | – | – |
 | `admin.branding` — Edit identity and branding | yes | yes | yes | – | – | – | – | – | – |
@@ -55,7 +60,9 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.users.invite` — Create invitations | yes | yes | yes | – | – | – | yes | – | – |
 | `admin.teams.manage` — Manage teams | yes | yes | yes | – | – | – | yes | – | – |
 | `admin.roles.manage` — Edit roles and permissions | yes | yes | – | – | – | – | – | – | – |
-| `admin.models.manage` — Edit model catalogue, aliases and access | yes | yes | – | yes | – | – | – | – | – |
+| `admin.models.manage` — Enable models and control who may use them | yes | yes | – | yes | – | – | – | – | – |
+| `admin.models.present` — Rename, order, group and pin models | yes | yes | – | yes | – | – | – | – | – |
+| `admin.models.defaults` — Choose default models | yes | yes | – | yes | – | – | – | – | – |
 | `admin.backends.manage` — Manage inference backends | yes | yes | – | yes | – | – | – | – | – |
 | `admin.policy.edit` — Edit privacy, retention and policy settings | yes | yes | yes | – | – | – | – | – | – |
 | `admin.signup.edit` — Edit registration and sign-in settings | yes | yes | yes | – | – | – | – | – | – |

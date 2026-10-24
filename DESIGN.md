@@ -17,20 +17,24 @@ Exactly four themes: **Light**, **Dark**, **Graphite** (a dark grey for long ses
 6 groups, the three presets, and 23 contrast pairs. The runtime writes the active
 theme's tokens onto `:root`.
 
+From 0.4.0 Light and Dark are neutral: an off-white page and a charcoal (never pure black) page, with surfaces told
+apart by small steps in lightness rather than borders or colour. The table below is generated from `tokens.json`.
+
 | token | Light | Dark | Graphite |
 |---|---|---|---|
-| `--brand` | #2B2F31 | #ECEDEA | #E6E8E4 |
+| `--brand` | #1F1F1F | #ECECEC | #E6E8E4 |
 | `--accent` | #0B6E69 | #6CC3B9 | #7CC9BF |
-| `--bg` | #F7F7F5 | #141617 | #24282A |
-| `--bg-2` | #EEEFEC | #1C1F20 | #2B3032 |
-| `--sidebar-bg` | #EFEFEC | #101213 | #1F2325 |
-| `--card-bg` | #FFFFFF | #1B1E1F | #2C3133 |
-| `--user-msg-bg` | #E9EAE6 | #262A2B | #353B3D |
-| `--fg` | #1D2021 | #ECEDEA | #E8EAE6 |
-| `--fg-muted` | #5C6264 | #9EA4A2 | #A9B0AD |
-| `--border` | #DCDDD9 | #2D3132 | #3D4345 |
-| `--border-strong` | #878C89 | #61676A | #737A7D |
-| `--btn-primary-bg` | #2B2F31 | #ECEDEA | #E6E8E4 |
+| `--bg` | #FAFAF9 | #191919 | #24282A |
+| `--bg-2` | #F1F1F0 | #222222 | #2B3032 |
+| `--sidebar-bg` | #F3F3F2 | #151515 | #1F2325 |
+| `--composer-bg` | #FFFFFF | #232323 | #2E3335 |
+| `--card-bg` | #FFFFFF | #212121 | #2C3133 |
+| `--user-msg-bg` | #EEEEEC | #2B2B2B | #353B3D |
+| `--fg` | #171717 | #ECECEC | #E8EAE6 |
+| `--fg-muted` | #5E5E5E | #9C9C9C | #A9B0AD |
+| `--border` | #E5E5E3 | #2D2D2D | #3D4345 |
+| `--border-strong` | #8A8A87 | #6B6B6B | #737A7D |
+| `--btn-primary-bg` | #1F1F1F | #ECECEC | #E6E8E4 |
 | `--link` | #0B6E69 | #6CC3B9 | #7CC9BF |
 | `--success` | #23744F | #55C595 | #5CC99A |
 | `--warn` | #875A0F | #D9A441 | #DCAA4A |
@@ -51,21 +55,29 @@ Accent is for the one primary action per view, links, focus rings and the active
 Charts and status use semantic colours **plus** a label or shape, never colour alone.
 
 ## Type
-IBM Plex Sans (UI) and IBM Plex Mono (identifiers, numbers in tables, technical values), self-hosted via @fontsource (SIL OFL).
-Scale (px): 12 / 13 / 14 (base) / 16 / 20 / 26. Line-height 1.45 body, 1.2 headings. Tabular figures on every number column.
-Max reading width 72ch in chat and prose. Technical values (model IDs, tokens/s) are always set in Plex Mono.
+The device's own interface font by default (0.4.0); administrators can choose another (IBM Plex Sans, System interface font, Humanist (system), Serif (system)). IBM Plex Mono for
+identifiers, numbers in tables and technical values, self-hosted via @fontsource (SIL OFL).
+Scale (px): 12 / 13 / 14 (base) / 16 / 20 / 28 (the empty-chat welcome, regular weight). Line-height 1.5 body, 1.2
+headings. Tabular figures on every number column. Chat column up to 768 px (640 / 1000 with the width setting).
 
 ## Space, shape, density
-- 4 px base, steps 4/8/12/16/24/32/48. Radius 6 px controls, 8 px panels (`--radius`, admin-editable 0–16). No pills except
-  status chips (radius 4). Cards are used only when a block needs its own boundary; otherwise a hairline divider.
-- Hairline 1 px borders. Shadows only for floating layers (menus, dialogs): one soft 0 8px 24px rgba(0,0,0,.12).
+- 4 px base, steps 4/8/12/16/24/32/48. `--radius` 10 px (admin-editable 0–16) for controls and panels, `--radius-sm`
+  8 px for rows, `--radius-menu` for popovers, `--radius-composer` (twice `--radius`) for the composer and suggestion
+  cards. Fully round shapes are kept for: status chips, segmented switches, the model picker trigger, and the
+  composer's circular buttons (attach, settings, send/stop). Cards are used only when a block needs its own boundary.
+- Hairline 1 px borders. Shadows: `--shadow` for floating layers (menus, dialogs), `--shadow-sm` for the composer and
+  buttons; both are set per light/dark variant.
 - Density: comfortable (row 44 px) and compact (row 32 px); admin default and per-person override. Touch targets ≥ 40 px on touch.
 
 ## Layout rules
-- App shell: left rail 232 px (collapsible to a 56 px icon rail; becomes a bottom bar of ≤ 5 items under 720 px),
-  content region, optional right panel (technical drawer, protection panel) that becomes a sheet under 1024 px.
-- Chat: single column ≤ 72ch, composer pinned, one primary action (Send ↔ Stop). Model picker shows friendly names only unless the
-  person holds technical fields. The protection badge sits beside the composer.
+- App shell: a full-height sidebar (260 px, resizable, a sheet under 720 px) with New conversation, search, conversation
+  history and the pages; beside it a slim 48 px header and the content region, with an optional right panel (technical
+  drawer) that becomes a sheet under 1100 px.
+- Chat: one centred column; your messages in a rounded bubble on the right, replies as unboxed text under the model's
+  name. The composer is pinned at the bottom: text on top, then + (attach), the mode switch and the model picker, and a
+  round send button that becomes Stop while a reply runs. The empty chat puts a one-line welcome just above it.
+- Model picker: the server arranges and filters it (names, grouping, order, what each person may see); the picker only
+  shows it, searches it and saves personal choices. Unknown details are left out, never guessed.
 - Admin: section nav on the left, dense forms and tables on the right. Tables: sticky header, sortable, filter row, pagination,
   checkbox column with "this page" vs "all N matching" selection, keyboard row focus, honest loading / empty / error states.
 - Every empty state says what the thing is and the one action that fills it. No illustrations, no stock imagery.
@@ -75,8 +87,9 @@ Max reading width 72ch in chat and prose. Technical values (model IDs, tokens/s)
 - Optimistic UI only when the server has confirmed; otherwise show a pending state. No fake progress bars or wait times:
   progress appears only when the backend reports it. Queue state says "sent straight to the backend" when there is no queue.
 - Motion: 120–160 ms opacity/transform for state changes only; `prefers-reduced-motion` disables all of it.
-- Keyboard: `/` focuses search, `Ctrl/⌘+K` opens the command palette (settings search), `Enter` sends, `Shift+Enter` newline, `Esc` stops
-  generation or closes a layer, `g` then `c/a` jumps to chat/admin. Every control is reachable and visibly focused (2 px accent ring,
+- Keyboard: `/` focuses search, `Ctrl/⌘+K` opens the command palette (settings search), `Enter` sends and `Shift+Enter`
+  starts a new line (with *Enter sends* off: `Enter` is a new line and `Ctrl/⌘+Enter` sends), the arrow keys always move
+  the caret (earlier messages come back only with `Alt+↑/↓`, when prompt history is on), `Esc` stops generation or closes a layer, `g` then `c/a` jumps to chat/admin. Every control is reachable and visibly focused (2 px accent ring,
   2 px offset). Skip link on every page.
 - A disabled control always explains why (title text + visible hint) — no inert decorative switches.
 

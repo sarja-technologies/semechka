@@ -49,7 +49,7 @@ program under `<prefix>/releases/<version>/`. Data is never replaced by an updat
 
 A program older than its database refuses to start (schema versioning), so rolling back across a schema change needs
 `--restore-data`. If you already rolled back the program alone and it refuses to start, run `--restore-data` on its
-own. `--rollback` never moves to a newer release. The data a restore replaces is kept next to it as `*.after-update`. Only installs made with 0.2.0 or later record releases; seed `<prefix>/releases/<ver>/` with the old
+own. A restore takes the newest snapshot from that release whose data the installed program can open: the label names the program that was installed, so after a program-only rollback and another update a `from-<old>` snapshot can hold data the newer program already migrated, and such snapshots are skipped (the installer says so). `--rollback` never moves to a newer release. The data a restore replaces is kept next to it as `*.after-update`. Only installs made with 0.2.0 or later record releases; seed `<prefix>/releases/<ver>/` with the old
 wheel to roll back to something older.
 
 Several independent instances can share one machine. Give each its own `--name`, `--prefix`, `--data` and `--port`

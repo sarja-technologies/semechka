@@ -4,12 +4,12 @@ A configurable, private AI platform for your own infrastructure. By Sarja Techno
 
 Semechka is a web application you install on a Linux server. It sits in front of the inference engine you already run (llama.cpp, vLLM, Ollama, or Sarness Engine) and adds accounts, roles, per-model access, branding, retention and privacy controls, and a chat interface. Everyone sees a simple chat by default; administrators can reveal as much technical detail as they choose to selected people, **without** giving them any control over infrastructure.
 
-> **Status: 0.3.0, early.** Single organisation, single node. Chat with pictures and videos made in the same conversation (Sarness Engine), keyword-search knowledge, assistants, a code chat workspace, a generation queue and OIDC single sign-on are built. Audio, autonomous agents with tools, code execution, clustering, SAML/SCIM and a content-policy engine are **not built**. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) and [docs/REQUIREMENTS_TRACEABILITY.md](docs/REQUIREMENTS_TRACEABILITY.md). It has had no independent security review.
+> **Status: 0.4.0, early.** Single organisation, single node. Chat with pictures and videos made in the same conversation (Sarness Engine), a model picker and load/unload panel built on what the engine really reports, keyword-search knowledge, assistants, a code chat workspace, a generation queue and OIDC single sign-on are built. Audio, autonomous agents with tools, code execution, clustering, SAML/SCIM and a content-policy engine are **not built**. See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) and [docs/REQUIREMENTS_TRACEABILITY.md](docs/REQUIREMENTS_TRACEABILITY.md). It has had no independent security review.
 
 ## Quick start
 ```
-./scripts/package.sh                    # builds dist/semechka-0.3.0.tar.gz (+ SHA-256)
-cd dist && sha256sum -c semechka-0.3.0.tar.gz.sha256 && tar xzf semechka-0.3.0.tar.gz && cd semechka-0.3.0
+./scripts/package.sh                    # builds dist/semechka-0.4.0.tar.gz (+ SHA-256)
+cd dist && sha256sum -c semechka-0.4.0.tar.gz.sha256 && tar xzf semechka-0.4.0.tar.gz && cd semechka-0.4.0
 ./install.sh                            # private venv + systemd user service, loopback only
 ```
 Open the printed URL, enter the one-time setup token, and follow the wizard. Details: [docs/INSTALL.md](docs/INSTALL.md).

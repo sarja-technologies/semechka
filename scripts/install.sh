@@ -29,9 +29,20 @@ PROBE="${HOST:-127.0.0.1}"; [ "$PROBE" = "0.0.0.0" ] && PROBE=127.0.0.1
 # --rollback --restore-data   the same, plus the data snapshot taken before the update from that release
 # --restore-data (alone)      keep the installed program and restore the snapshot taken before the update from it:
 #                             for when the program was already rolled back and refuses to start on the newer data
+snap_schema() { "$PREFIX/venv/bin/python" -c 'import sqlite3, sys
+r = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True).execute("select value from meta where key=?", ("schema_version",)).fetchone()
+print(r[0] if r else 0)' "$1" 2>/dev/null || echo 0; }
 restore_snapshot() {  # $1 = the version the snapshot was taken from
-  SNAP=$(ls -d "$DATA"/pre-update/*-from-"$1" 2>/dev/null | sort | tail -1 || true)
-  [ -n "$SNAP" ] || { echo "No data snapshot taken before an update from $1 was found in $DATA/pre-update. Data untouched."; return 1; }
+  # the label names the program that was installed, not the data: after a program-only rollback and a re-update,
+  # a "from-<old>" snapshot can hold data already migrated by the newer program. Take the newest one the program can open.
+  MAX=$("$PREFIX/venv/bin/python" -c 'from semechka import migrations; print(migrations.SCHEMA_VERSION)' 2>/dev/null || echo 0)
+  SNAP=""
+  while IFS= read -r s; do
+    have=$(snap_schema "$s/semechka.db")
+    if [ "$MAX" -eq 0 ] || [ "$have" -le "$MAX" ]; then SNAP="$s"; break; fi
+    echo "  [ -- ] skipping $s: its data is at schema $have, newer than this program understands ($MAX)"
+  done < <(ls -d "$DATA"/pre-update/*-from-"$1" 2>/dev/null | sort -r)
+  [ -n "$SNAP" ] || { echo "No data snapshot taken before an update from $1 that this program can open was found in $DATA/pre-update. Data untouched."; return 1; }
   for f in semechka.db semechka.db-wal semechka.db-shm; do [ -e "$DATA/$f" ] && mv "$DATA/$f" "$DATA/$f.after-update"; done
   cp -p "$SNAP/semechka.db" "$DATA/semechka.db"; cp -p "$SNAP/master.key" "$DATA/master.key"
   [ -d "$SNAP/assets" ] && { rm -rf "$DATA/assets.after-update"; [ -d "$DATA/assets" ] && mv "$DATA/assets" "$DATA/assets.after-update"; cp -a "$SNAP/assets" "$DATA/assets"; }

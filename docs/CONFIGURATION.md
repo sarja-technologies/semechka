@@ -24,12 +24,12 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `theme.user_choice` | bool | `True` | deployment | specific | `admin.branding` |  |
 | `theme.custom` | json | *(computed)* | deployment | specific | `admin.branding` |  |
 | `theme.draft` | json | *(computed)* | deployment | specific | `admin.branding` |  |
-| `theme.font` | enum | `plex` | deployment | specific | `admin.branding` |  |
+| `theme.font` | enum | `system` | deployment | specific | `admin.branding` |  |
 | `theme.font_size` | int | `14` | deployment | specific | `admin.branding` |  |
 | `theme.custom_css` | text | `` | deployment | specific | `admin.branding` |  |
 | `layout.user_align` | enum | `right` | deployment | specific | `admin.branding` |  |
 | `layout.message_width` | enum | `normal` | deployment | specific | `admin.branding` |  |
-| `layout.sidebar_width` | int | `272` | deployment | specific | `admin.branding` |  |
+| `layout.sidebar_width` | int | `260` | deployment | specific | `admin.branding` |  |
 
 ## Identity & Branding
 
@@ -40,8 +40,8 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `brand.header_text` | string | `` | deployment | specific | `admin.branding` |  |
 | `brand.logo_dark_asset` | string | `` | deployment | specific | `admin.branding` |  |
 | `brand.logo_height` | int | `24` | deployment | specific | `admin.branding` |  |
-| `brand.header_height` | int | `52` | deployment | specific | `admin.branding` |  |
-| `brand.header_padding` | int | `16` | deployment | specific | `admin.branding` |  |
+| `brand.header_height` | int | `48` | deployment | specific | `admin.branding` |  |
+| `brand.header_padding` | int | `12` | deployment | specific | `admin.branding` |  |
 | `brand.logo_gap` | int | `8` | deployment | specific | `admin.branding` |  |
 | `brand.header_text_size` | int | `15` | deployment | specific | `admin.branding` |  |
 | `brand.header_text_weight` | enum | `600` | deployment | specific | `admin.branding` |  |
@@ -50,7 +50,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `brand.login_logo` | bool | `True` | deployment | specific | `admin.branding` |  |
 | `brand.welcome_title` | string | `` | deployment, role, team | specific | `admin.branding` |  |
 | `brand.welcome_text` | text | `` | deployment, role, team | specific | `admin.branding` |  |
-| `brand.radius` | int | `8` | deployment | specific | `admin.branding` |  |
+| `brand.radius` | int | `10` | deployment | specific | `admin.branding` |  |
 | `brand.density` | enum | `comfortable` | deployment, role, user | specific | `admin.branding` |  |
 | `brand.footer_text` | text | `` | deployment | specific | `admin.branding` |  |
 | `brand.support_url` | string | `` | deployment | specific | `admin.branding` |  |
@@ -86,6 +86,8 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `chat.branching` | bool | `True` | deployment, role, team | false_wins | `admin.settings.edit` |  |
 | `chat.export` | bool | `True` | deployment, role, team | false_wins | `admin.settings.edit` |  |
 | `chat.max_input_chars` | int | `32000` | deployment, role, team | min | `admin.settings.edit` |  |
+| `chat.enter_sends` | bool | `True` | deployment, role, team | specific | `admin.settings.edit` |  |
+| `chat.prompt_history` | bool | `False` | deployment, role, team | specific | `admin.settings.edit` |  |
 
 ## Registration & Sign-in
 
@@ -208,12 +210,29 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 
 | ID | Type | Default | Scopes | Merge | Edit permission | Notes |
 |---|---|---|---|---|---|---|
-| `models.default.chat` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
-| `models.default.vision` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
-| `models.default.code` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
-| `models.default.image` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
-| `models.default.video` | string | `` | deployment, role, team, user | specific | `admin.models.manage` |  |
-| `models.provider_icons` | json | `{}` | deployment | specific | `admin.models.manage` |  |
+| `models.default.chat` | string | `` | deployment, role, team, user | specific | `admin.models.defaults` |  |
+| `models.default.vision` | string | `` | deployment, role, team, user | specific | `admin.models.defaults` |  |
+| `models.default.code` | string | `` | deployment, role, team, user | specific | `admin.models.defaults` |  |
+| `models.default.image` | string | `` | deployment, role, team, user | specific | `admin.models.defaults` |  |
+| `models.default.video` | string | `` | deployment, role, team, user | specific | `admin.models.defaults` |  |
+| `models.display.names` | enum | `both` | deployment, role, team | specific | `admin.models.present` |  |
+| `models.display.group_by` | enum | `groups` | deployment, role, team | specific | `admin.models.present` |  |
+| `models.display.sort` | enum | `custom` | deployment, role, team | specific | `admin.models.present` |  |
+| `models.developer_logos` | bool | `True` | deployment | specific | `admin.models.present` |  |
+| `models.display.pinned_first` | bool | `True` | deployment, role, team | specific | `admin.models.present` |  |
+| `models.display.view` | enum | `compact` | deployment, role, team | specific | `admin.models.present` |  |
+
+## System
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `deployment.preset` | enum | `` | deployment | specific | `admin.settings.edit` |  |
+
+## Layout & Navigation
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `models.provider_icons` | json | `{}` | deployment | specific | `admin.models.present` |  |
 
 ## Privacy & Retention
 
