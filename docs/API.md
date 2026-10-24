@@ -134,7 +134,7 @@ For `operation: "image"` or `"video"`, the answer is plain JSON (`{message, user
 queued. `message.media` is the job. Poll `GET /api/media/jobs/{job_id}` until `status` is `completed`, `failed` or
 `cancelled`, then show each entry of `assets` from `GET /api/media/assets/{asset_id}/content`. Cancel with
 `POST /api/media/jobs/{job_id}/cancel`. To edit or animate an existing picture, pass its id as `source_id`. Limits and
-sizes per model come from `GET /api/media/options`.
+sizes per model come from `GET /api/media/options?kind=image|video`.
 
 ### Attachments
 

@@ -34,12 +34,14 @@ Re-running `./install.sh` from a newer package updates in place. Before it chang
 program under `<prefix>/releases/<version>/`. Data is never replaced by an update.
 
 ```
-./install.sh --rollback                  # program back to the previous recorded release
-./install.sh --rollback --restore-data   # also restore the data snapshot taken before the last update
+./install.sh --rollback                  # program back to the newest recorded release older than the installed one
+./install.sh --rollback --restore-data   # the same, plus the data snapshot taken before the update from that release
+./install.sh --restore-data              # keep the installed program; restore the snapshot taken before updating from it
 ```
 
 A program older than its database refuses to start (schema versioning), so rolling back across a schema change needs
-`--restore-data`. Only installs made with 0.2.0 or later record releases; seed `<prefix>/releases/<ver>/` with the old
+`--restore-data`. If you already rolled back the program alone and it refuses to start, run `--restore-data` on its
+own. `--rollback` never moves to a newer release. The data a restore replaces is kept next to it as `*.after-update`. Only installs made with 0.2.0 or later record releases; seed `<prefix>/releases/<ver>/` with the old
 wheel to roll back to something older.
 
 Several independent instances can share one machine. Give each its own `--name`, `--prefix`, `--data` and `--port`

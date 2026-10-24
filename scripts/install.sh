@@ -14,7 +14,7 @@ NAME=""; HOST="${SEMECHKA_HOST:-}"
 DRY=0; NO_SERVICE=0; ROLLBACK=0; RESTORE_DATA=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-usage() { echo "Usage: install.sh [--check] [--no-service] [--rollback [--restore-data]] [--name NAME] [--prefix DIR] [--data DIR] [--port N] [--host ADDR]"; echo "  --name NAME   run a second, independent instance (own unit semechka-NAME, own command, own data)"; echo "  --host ADDR   bind address, e.g. a LAN IP (default: follows the Network exposure setting, loopback at first)"; exit "${1:-0}"; }
+usage() { echo "Usage: install.sh [--check] [--no-service] [--rollback] [--restore-data] [--name NAME] [--prefix DIR] [--data DIR] [--port N] [--host ADDR]"; echo "  --name NAME   run a second, independent instance (own unit semechka-NAME, own command, own data)"; echo "  --host ADDR   bind address, e.g. a LAN IP (default: follows the Network exposure setting, loopback at first)"; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do case "$1" in
   --check) DRY=1;; --no-service) NO_SERVICE=1;; --prefix) PREFIX="$2"; shift;; --data) DATA="$2"; shift;; --port) PORT="$2"; shift;; --name) NAME="$2"; shift;; --rollback) ROLLBACK=1;; --restore-data) RESTORE_DATA=1;; --host) HOST="$2"; shift;;
   -h|--help) usage 0;; *) echo "Unknown option: $1" >&2; usage 2;; esac; shift; done
@@ -25,25 +25,39 @@ case "$NAME" in ""|[a-z0-9-]*) ;; *) echo "--name must be lowercase letters, dig
 SUFFIX=""; [ -n "$NAME" ] && SUFFIX="-$NAME"
 PROBE="${HOST:-127.0.0.1}"; [ "$PROBE" = "0.0.0.0" ] && PROBE=127.0.0.1
 # ---- rollback: reinstall the previous recorded version; optionally restore the data snapshot taken before the update
-if [ "$ROLLBACK" -eq 1 ]; then
+# --rollback                  program back to the newest recorded release OLDER than the installed one (never forward)
+# --rollback --restore-data   the same, plus the data snapshot taken before the update from that release
+# --restore-data (alone)      keep the installed program and restore the snapshot taken before the update from it:
+#                             for when the program was already rolled back and refuses to start on the newer data
+restore_snapshot() {  # $1 = the version the snapshot was taken from
+  SNAP=$(ls -d "$DATA"/pre-update/*-from-"$1" 2>/dev/null | sort | tail -1 || true)
+  [ -n "$SNAP" ] || { echo "No data snapshot taken before an update from $1 was found in $DATA/pre-update. Data untouched."; return 1; }
+  for f in semechka.db semechka.db-wal semechka.db-shm; do [ -e "$DATA/$f" ] && mv "$DATA/$f" "$DATA/$f.after-update"; done
+  cp -p "$SNAP/semechka.db" "$DATA/semechka.db"; cp -p "$SNAP/master.key" "$DATA/master.key"
+  [ -d "$SNAP/assets" ] && { rm -rf "$DATA/assets.after-update"; [ -d "$DATA/assets" ] && mv "$DATA/assets" "$DATA/assets.after-update"; cp -a "$SNAP/assets" "$DATA/assets"; }
+  echo "  [ ok ] data restored from $SNAP (the data it replaced is kept as *.after-update)"
+}
+if [ "$ROLLBACK" -eq 1 ] || [ "$RESTORE_DATA" -eq 1 ]; then
   [ -x "$PREFIX/venv/bin/semechka" ] || { echo "Nothing installed at $PREFIX"; exit 1; }
   CUR=$("$PREFIX/venv/bin/semechka" --version | awk '{print $NF}')
-  PREV=$(ls "$PREFIX/releases" 2>/dev/null | grep -v "^$CUR\$" | sort -V | tail -1 || true)
-  [ -n "$PREV" ] || { echo "No earlier version is recorded in $PREFIX/releases"; exit 1; }
-  echo "Rolling back $CUR -> $PREV"
-  systemctl --user stop "semechka$SUFFIX.service" 2>/dev/null || true
-  "$PREFIX/venv/bin/pip" install --quiet --force-reinstall "$PREFIX"/releases/"$PREV"/semechka-*.whl
-  if [ "$RESTORE_DATA" -eq 1 ]; then
-    SNAP=$(ls -d "$DATA"/pre-update/*-from-"$PREV" 2>/dev/null | sort | tail -1 || true)
-    [ -n "$SNAP" ] || { echo "No data snapshot taken before an update from $PREV was found. Program rolled back; data untouched."; exit 1; }
-    for f in semechka.db semechka.db-wal semechka.db-shm; do [ -e "$DATA/$f" ] && mv "$DATA/$f" "$DATA/$f.after-update"; done
-    cp -p "$SNAP/semechka.db" "$DATA/semechka.db"; cp -p "$SNAP/master.key" "$DATA/master.key"
-    [ -d "$SNAP/assets" ] && { rm -rf "$DATA/assets.after-update"; [ -d "$DATA/assets" ] && mv "$DATA/assets" "$DATA/assets.after-update"; cp -a "$SNAP/assets" "$DATA/assets"; }
-    echo "  [ ok ] data restored from $SNAP (changes made since the update are kept as *.after-update)"
+  TARGET="$CUR"
+  if [ "$ROLLBACK" -eq 1 ]; then
+    TARGET=$(ls "$PREFIX/releases" 2>/dev/null | while read -r v; do
+      [ "$v" != "$CUR" ] && [ "$(printf '%s\n%s\n' "$v" "$CUR" | sort -V | head -1)" = "$v" ] && echo "$v"; done | sort -V | tail -1 || true)
+    [ -n "$TARGET" ] || { echo "No version older than $CUR is recorded in $PREFIX/releases. To restore data for $CUR, use --restore-data alone."; exit 1; }
   fi
+  systemctl --user stop "semechka$SUFFIX.service" 2>/dev/null || true
+  if [ "$TARGET" != "$CUR" ]; then
+    echo "Rolling back $CUR -> $TARGET"
+    "$PREFIX/venv/bin/pip" install --quiet --force-reinstall "$PREFIX"/releases/"$TARGET"/semechka-*.whl
+  else
+    echo "Keeping the installed program ($CUR); restoring its data"
+  fi
+  RC=0
+  [ "$RESTORE_DATA" -eq 1 ] && { restore_snapshot "$TARGET" || RC=1; }
   systemctl --user start "semechka$SUFFIX.service" 2>/dev/null || true
   echo "  [ ok ] now running $("$PREFIX/venv/bin/semechka" --version)"
-  exit 0
+  exit $RC
 fi
 
 echo "Semechka installer — preflight"
@@ -136,16 +150,22 @@ UNIT
   systemctl --user daemon-reload && systemctl --user enable semechka$SUFFIX.service && systemctl --user restart semechka$SUFFIX.service
   ok "service enabled (systemctl --user status semechka$SUFFIX)"
   for _ in $(seq 1 30); do curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
+elif [ "$NO_SERVICE" -eq 1 ]; then
+  ok "no service installed (--no-service): start it with  SEMECHKA_DATA_DIR=$DATA $PREFIX/venv/bin/semechka serve --port $PORT"
 else
-  warn "no systemd user session: start it with  SEMECHKA_DATA_DIR=$DATA semechka serve --port $PORT"
+  warn "no systemd user session: start it with  SEMECHKA_DATA_DIR=$DATA $PREFIX/venv/bin/semechka serve --port $PORT"
 fi
 
 echo
-if curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1; then
+if [ "$NO_SERVICE" -eq 1 ]; then
+  echo "Installed (no service was started)."
+elif curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1; then
   echo "Semechka is running."
   echo "  Open:         http://$PROBE:$PORT"
-  echo "  Setup token:  $(cat "$DATA/setup-token" 2>/dev/null || echo '(not created yet)')   (one time; file: $DATA/setup-token)"
-  echo "  Next:         the browser wizard creates the owner account, connects a model backend and sets privacy defaults."
+  if [ -f "$DATA/setup-token" ]; then
+    echo "  Setup token:  $(cat "$DATA/setup-token")   (one time; file: $DATA/setup-token)"
+    echo "  Next:         the browser wizard creates the owner account, connects a model backend and sets privacy defaults."
+  fi
 else
   echo "Installed, but the service is not answering on port $PORT yet. Run: semechka doctor"
 fi

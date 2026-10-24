@@ -106,7 +106,8 @@ Roll an instance back (program only, or program plus the pre-update data snapsho
 ```
 
 A program older than its database refuses to start (schema versioning), so a rollback after a schema change
-needs `--restore-data`.
+needs `--restore-data`. After a program-only rollback that refuses to start, run the same command with
+`--restore-data` alone (no `--rollback`).
 
 ## Network exposure
 
