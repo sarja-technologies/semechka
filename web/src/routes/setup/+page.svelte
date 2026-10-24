@@ -17,19 +17,19 @@
     'access.exposure': 'loopback', 'signup.mode': 'invite', 'signup.require_approval': true, 'signup.allowed_domains': [], 'auth.mfa_required_admins': false
   });
   let domainsText = $state('');
-  let be = $state({ on: true, adapter: 'openai_compat', base_url: '', api_key: '', external: false, name: 'Primary backend' });
+  let be = $state({ on: true, adapter: 'openai_compat', base_url: '', api_key: '', external: false, hint_id: '', name: 'Primary backend' });
   let probe = $state<any>(null), enable = $state<string[]>([]), smoke = $state('');
   let techPreset = $state('simple'), result = $state<any>(null);
 
   function pickPreset(k: string) { preset = k; Object.assign(v, hw.presets[k].settings); domainsText = (v['signup.allowed_domains'] ?? []).join(', '); }
   async function start() {
     busy = true; error = '';
-    try { setSetupToken(token.trim()); hw = await get('/api/setup/hardware'); pickPreset(preset); const found = hw.backends.find((b: any) => b.reachable); if (found) { be.adapter = found.adapter; be.base_url = found.base_url; } step = 1; }
+    try { setSetupToken(token.trim()); hw = await get('/api/setup/hardware'); pickPreset(preset); const found = hw.backends.find((b: any) => b.reachable); if (found) { be.adapter = found.adapter; be.base_url = found.base_url; be.hint_id = found.hint_id ?? ''; } step = 1; }
     catch (e) { setSetupToken(''); error = e instanceof ApiError ? e.message : 'Could not reach the server.'; } finally { busy = false; }
   }
   async function testBackend() {
     busy = true; error = ''; probe = null;
-    try { probe = await post('/api/setup/backend-test', { adapter: be.adapter, base_url: be.base_url, api_key: be.api_key || null, external: be.external }); enable = probe.health.ok ? probe.models.filter((m: any) => m.capabilities.includes('chat')).map((m: any) => m.real_id) : []; smoke = enable[0] ?? ''; }
+    try { probe = await post('/api/setup/backend-test', { adapter: be.adapter, base_url: be.base_url, api_key: be.api_key || null, external: be.external, hint_id: be.hint_id || null }); enable = probe.health.ok ? probe.models.filter((m: any) => m.capabilities.includes('chat')).map((m: any) => m.real_id) : []; smoke = enable[0] ?? ''; }
     catch (e) { error = e instanceof ApiError ? e.message : 'Test failed.'; } finally { busy = false; }
   }
   const idOk = $derived(owner.display_name.trim() && owner.email.includes('@') && owner.password.length >= 12 && v['brand.org_name'].trim() && v['brand.app_name'].trim());
@@ -43,7 +43,7 @@
     busy = true; error = '';
     try {
       const body: any = { owner, preset, settings: settingsPayload() };
-      if (be.on && probe?.health.ok) { body.backend = { adapter: be.adapter, base_url: be.base_url, api_key: be.api_key || null, external: be.external }; body.backend_name = be.name; body.enable_models = enable; body.smoke_model = smoke || null; }
+      if (be.on && probe?.health.ok) { body.backend = { adapter: be.adapter, base_url: be.base_url, api_key: be.api_key || null, external: be.external, hint_id: be.hint_id || null }; body.backend_name = be.name; body.enable_models = enable; body.smoke_model = smoke || null; }
       result = await post('/api/setup/complete', body);
       setSetupToken('');
       await loadPublic(); await loadMe();
@@ -133,8 +133,9 @@
     {#if be.on}
       <div class="grid">
         <div class="field"><label for="ad">Engine type</label><select id="ad" class="input" bind:value={be.adapter}>{#each hw.adapters as a}<option value={a.id}>{a.name}</option>{/each}</select></div>
-        <div class="field"><label for="bu">Address</label><input id="bu" class="input mono" bind:value={be.base_url} placeholder="http://127.0.0.1:8080/v1" /></div>
-        <div class="field"><label for="bk">API key / token (optional)</label><input id="bk" class="input" type="password" bind:value={be.api_key} autocomplete="off" /><span class="hint">Stored encrypted; never shown again.</span></div>
+        <div class="field"><label for="bu">Address</label><input id="bu" class="input mono" bind:value={be.base_url} oninput={() => (be.hint_id = "")} placeholder="http://127.0.0.1:8080/v1" /></div>
+        {#if be.hint_id}<div class="field"><span class="label">API key / token</span><span class="hint">Supplied by the installer for this address. It stays on the server and is never shown here.</span></div>
+        {:else}<div class="field"><label for="bk">API key / token (optional)</label><input id="bk" class="input" type="password" bind:value={be.api_key} autocomplete="off" /><span class="hint">Stored encrypted; never shown again.</span></div>{/if}
       </div>
       <label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" bind:checked={be.external} /> This engine is an external service outside my network</label>
       <p class="hint">{hw.adapters.find((a: any) => a.id === be.adapter)?.notes}</p>

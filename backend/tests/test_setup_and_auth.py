@@ -154,3 +154,30 @@ def test_password_change_revokes_other_sessions(owner, app):
     r = owner.post("/api/auth/password", json={"current": PW, "new": "a brand new long passphrase"})
     assert r.status_code == 200
     assert other.get("/api/me").status_code == 401
+
+
+def test_installer_backend_hint_keeps_key_server_side_and_is_removed_after_setup(app, st, fake_url):
+    import json
+    import os
+    from semechka.routers.setup import ensure_setup_token
+    token = ensure_setup_token(st)
+    p = st.cfg.data_dir / "backend-hints.json"
+    p.write_text(json.dumps([{"id": "spark", "adapter": "openai_compat", "label": "Engine from installer",
+                              "base_url": fake_url, "api_key": "installer-secret-key"}]))
+    api = Api(app)
+    h = {"x-setup-token": token}
+    # a hints file other users can read is ignored
+    os.chmod(p, 0o644)
+    assert not [b for b in api.get("/api/setup/hardware", headers=h).json()["backends"] if b.get("hint_id")]
+    os.chmod(p, 0o600)
+    hw = api.get("/api/setup/hardware", headers=h)
+    found = [b for b in hw.json()["backends"] if b.get("hint_id") == "spark"]
+    assert found and found[0]["reachable"] and "installer-secret-key" not in hw.text
+    probe = api.post("/api/setup/backend-test", headers=h, json={"adapter": "x", "base_url": "http://ignored.invalid", "hint_id": "spark"})
+    assert probe.status_code == 200 and probe.json()["health"]["ok"] and probe.json()["models"]
+    assert "installer-secret-key" not in probe.text
+    assert api.post("/api/setup/backend-test", headers=h, json={"adapter": "x", "base_url": "http://a", "hint_id": "nope"}).status_code == 422
+    body = {"owner": {"email": "a@example.test", "password": PW, "display_name": "A"}, "preset": "personal",
+            "backend": {"adapter": "x", "base_url": "http://ignored.invalid", "hint_id": "spark"}}
+    assert api.post("/api/setup/complete", headers=h, json=body).status_code == 200
+    assert not p.exists()  # plaintext key file is deleted once the key is stored encrypted

@@ -14,3 +14,4 @@ dist/
 .env.*
 /data/
 screenshots/tmp/
+.claude/

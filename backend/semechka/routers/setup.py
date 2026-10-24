@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import secrets
 import socket
@@ -66,6 +67,23 @@ _CANDIDATES = [
 ]
 
 
+def load_hints(st: AppState) -> dict[str, dict]:
+    """Installer-provisioned engine hints: data_dir/backend-hints.json (0600). The key never leaves the server;
+    the wizard only sees an id. The file is removed when setup completes."""
+    p = st.cfg.data_dir / "backend-hints.json"
+    try:
+        if p.stat().st_mode & 0o077:
+            return {}  # refuse a hints file that other users can read
+        rows = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for r in rows if isinstance(rows, list) else []:
+        if isinstance(r, dict) and r.get("id") and r.get("adapter") in adapters.REGISTRY and str(r.get("base_url", "")).startswith(("http://", "https://")):
+            out[str(r["id"])] = r
+    return out
+
+
 @router.get("/status")
 def status(s=Depends(get_db)):
     return {"needs_setup": needs_setup(s)}
@@ -75,8 +93,15 @@ def status(s=Depends(get_db)):
 async def hardware(request: Request, s=Depends(get_db), st: AppState = Depends(get_state)):
     _check_token(request, s, st)
     found = []
+    for hid, hint in load_hints(st).items():
+        ad = adapters.make(hint["adapter"], hint["base_url"].rstrip("/"), hint.get("api_key"))
+        h = await ad.health()
+        found.append({"adapter": hint["adapter"], "label": hint.get("label") or hint["adapter"], "base_url": hint["base_url"],
+                      "reachable": h["ok"], "detail": h["detail"], "hint_id": hid})
     async with httpx.AsyncClient(timeout=1.5) as c:
         for adapter_id, label, url in _CANDIDATES:
+            if any(f["base_url"].rstrip("/") == url.rstrip("/") for f in found):
+                continue
             ad = adapters.make(adapter_id, url)
             h = await ad.health()
             if h["ok"] or "rejected" in h["detail"]:
@@ -96,11 +121,22 @@ class BackendProbe(BaseModel):
     base_url: str = Field(max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
     external: bool = False
+    hint_id: str | None = Field(default=None, max_length=80)  # use the installer-provisioned connection
+
+
+def _resolve_probe(b: BackendProbe, st: AppState) -> BackendProbe:
+    if not b.hint_id:
+        return b
+    hint = load_hints(st).get(b.hint_id)
+    if not hint:
+        raise HTTPException(422, {"code": "invalid", "message": "That installer-provided connection no longer exists."})
+    return BackendProbe(adapter=hint["adapter"], base_url=hint["base_url"], api_key=hint.get("api_key"), external=False)
 
 
 @router.post("/backend-test")
 async def backend_test(body: BackendProbe, request: Request, s=Depends(get_db), st: AppState = Depends(get_state)):
     _check_token(request, s, st)
+    body = _resolve_probe(body, st)
     _validate_url(body.base_url)
     ad = adapters.make(body.adapter, body.base_url, body.api_key, {"external": body.external})
     h = await ad.health()
@@ -180,6 +216,7 @@ async def complete(body: CompleteIn, request: Request, response: Response, s=Dep
     result = {"models_enabled": 0, "smoke": None}
     backend_id = None
     if body.backend:
+        body.backend = _resolve_probe(body.backend, st)
         _validate_url(body.backend.base_url)
         b = Backend(name=body.backend_name[:120], adapter=body.backend.adapter, base_url=body.backend.base_url.rstrip("/"),
                     api_key_enc=st.vault.encrypt(body.backend.api_key, "backend") if body.backend.api_key else None,
@@ -193,10 +230,11 @@ async def complete(body: CompleteIn, request: Request, response: Response, s=Dep
     if row:
         s.delete(row)
     s.commit()
-    try:
-        st.cfg.setup_token_path.unlink()
-    except FileNotFoundError:
-        pass
+    for leftover in (st.cfg.setup_token_path, st.cfg.data_dir / "backend-hints.json"):
+        try:
+            leftover.unlink()
+        except FileNotFoundError:
+            pass
     if backend_id:
         try:
             await sync_models(st.db.session, st, backend_id)
