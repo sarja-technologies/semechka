@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { get, patch, put, post, del, qs } from '$lib/api';
   import { toast } from '$lib/toast.svelte';
+  import { app, can } from '$lib/session.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Page from '$lib/components/admin/Page.svelte';
   import State from '$lib/components/admin/State.svelte';
@@ -19,8 +20,7 @@
   let exPerm = $state('mode.image'); let ex = $state<any>(null); let exModel = $state(''); let exm = $state<any>(null); let exErr = $state('');
   async function load() {
     try {
-      const r = await get('/api/admin/users' + qs({ per_page: 200 })); u = r.items.find((x: any) => x.id === id);
-      if (!u) { error = 'No such person.'; loading = false; return; }
+      u = await get(`/api/admin/users/${id}`); loadSessions();
       name = u.display_name; status = u.status === 'suspended' ? 'suspended' : 'active'; rsel = u.roles.map((x: any) => x.id); tsel = u.teams.map((x: any) => x.id);
       const o = await get(`/api/admin/users/${id}/override`); grants = o.grants; denies = o.denies;
     } catch (e) { error = errMsg(e); }
@@ -32,6 +32,15 @@
   async function approve() { try { await patch(`/api/admin/users/${id}`, { status: 'active' }); toast('Approved.'); load(); } catch (e) { profErr = errMsg(e); } }
   async function setPw() { pErr = ''; try { await post(`/api/admin/users/${id}/password`, { password: pw }); pw = ''; toast('Password set; their other sessions were signed out.'); } catch (e) { pErr = errMsg(e); } }
   async function saveOv() { ovErr = ''; try { await put(`/api/admin/users/${id}/override`, { grants, denies }); toast('Override saved.'); } catch (e) { ovErr = errMsg(e); } }
+  // sign-in and security: sessions (never their tokens), ending them, and resetting a lost second factor
+  let sessions = $state<any[] | null>(null), mfaOpen = $state(false), mfaReason = $state(''), mfaErr = $state(''), endOpen = $state(false);
+  async function loadSessions() { try { sessions = await get(`/api/admin/users/${id}/sessions`); } catch { sessions = null; } }
+  async function resetMfa() {
+    mfaErr = '';
+    try { const r = await post(`/api/admin/users/${id}/mfa-reset`, { reason: mfaReason }); mfaOpen = false; mfaReason = ''; toast(`Two-step sign-in removed; ${r.sessions_ended} session${r.sessions_ended === 1 ? '' : 's'} ended.`); load(); }
+    catch (e) { mfaErr = errMsg(e); }
+  }
+  async function endSessions() { endOpen = false; try { const r = await post(`/api/admin/users/${id}/sessions/end`); toast(`${r.sessions_ended} session${r.sessions_ended === 1 ? '' : 's'} ended.`); loadSessions(); } catch (e) { toast(errMsg(e), 'bad'); } }
   async function remove() { try { await del(`/api/admin/users/${id}`); toast('Account deleted.'); goto('/admin/people'); } catch (e) { profErr = errMsg(e); delOpen = false; } }
   async function explain() { exErr = ''; ex = null; try { ex = await get('/api/admin/explain/permission' + qs({ user_id: id, permission: exPerm })); } catch (e) { exErr = errMsg(e); } }
   async function explainModel() { exErr = ''; exm = null; if (!exModel) return; try { exm = await get('/api/admin/explain/model' + qs({ user_id: id, model_id: exModel })); } catch (e) { exErr = errMsg(e); } }
@@ -63,9 +72,31 @@
       {#if exm}<div class="notice {exm.allowed ? 'ok' : 'bad'}" style="margin-top:12px"><div><strong>{exm.allowed ? 'Allowed' : 'Denied'}.</strong> {exm.reason}<ol style="margin:8px 0 0;padding-left:20px">{#each exm.steps as s}<li>{s.rule}: <strong>{s.result}</strong>{#if s.detail} <span class="muted">— {s.detail}</span>{/if}</li>{/each}</ol></div></div>{/if}
       {#if exErr}<p class="err" role="alert">{exErr}</p>{/if}</div></section>
 
+    <section class="panel"><div class="panel-h"><h3>Sign-in and security</h3><span class="chip {u.mfa ? 'ok' : ''}">Two-step sign-in {u.mfa ? 'on' : 'off'}</span></div><div class="panel-b stack">
+      {#if u.mfa && can('admin.users.manage') && u.id !== app.me?.user.id}
+        <div class="row"><p class="grow small" style="margin:0">If {u.display_name} lost their authenticator and their recovery codes, remove the second factor so they can sign in with their password and set it up again. Their sessions end, and the reason is recorded.</p><button class="btn" onclick={() => { mfaErr = ''; mfaOpen = true; }}>Reset two-step sign-in…</button></div>
+      {/if}
+      <div>
+        <div class="row"><strong class="grow small">Signed-in devices</strong>{#if sessions?.length && can('admin.users.manage')}<button class="btn sm" onclick={() => (endOpen = true)}>Sign out everywhere</button>{/if}</div>
+        {#if sessions === null}<p class="hint">Not available.</p>
+        {:else if !sessions.length}<p class="small muted">No active sessions.</p>
+        {:else}<div class="tablewrap"><table class="t"><caption class="sr-only">Active sessions of {u.display_name}</caption><thead><tr><th>Browser</th><th>Address</th><th>Last active</th><th>Expires</th></tr></thead><tbody>
+          {#each sessions as s (s.id)}<tr><td class="wrap small">{s.ua?.slice(0, 70) || 'Unknown'}</td><td class="mono">{s.ip}</td><td>{fmtTime(s.last_seen)}</td><td>{fmtTime(s.expires_at)}</td></tr>{/each}
+        </tbody></table></div>{/if}
+      </div>
+      {#if can('admin.content.read')}<p class="small" style="margin:0"><a href={`/admin/content?user=${u.id}`}>View this person's conversations</a> <span class="muted">(requires a stated reason; recorded and shown to them)</span></p>{/if}
+    </div></section>
+
     <section class="panel"><div class="panel-h"><h3>Password</h3></div><div class="panel-b"><div class="field"><label for="np">New password</label><input id="np" class="input" type="password" autocomplete="new-password" bind:value={pw} style="max-width:360px" /><span class="hint">Signs the person out everywhere. The policy minimum length applies.</span></div>{#if pErr}<p class="err" role="alert">{pErr}</p>{/if}<button class="btn" disabled={!pw} onclick={setPw}>Set password</button></div></section>
     <section class="panel"><div class="panel-h"><h3>Delete account</h3></div><div class="panel-b"><p>Removes the account and its saved conversations.</p><button class="btn danger" onclick={() => (delOpen = true)}>Delete {u.display_name}…</button></div></section>
   </div>
+  <Modal bind:open={mfaOpen} title="Reset two-step sign-in for {u.display_name}?">
+    <p class="small">Only do this after confirming who is asking, outside this system (in person, or by a call to a number you already have). Whoever controls their password can then sign in until they set up a new factor.</p>
+    {#if mfaErr}<div class="notice bad" role="alert"><div>{mfaErr}</div></div>{/if}
+    <div class="field"><label for="mr">Reason (recorded in the audit log)</label><input id="mr" class="input" maxlength="300" bind:value={mfaReason} placeholder="e.g. Phone lost, identity confirmed by phone call" /></div>
+    {#snippet footer()}<button class="btn" onclick={() => (mfaOpen = false)}>Cancel</button><button class="btn danger solid" onclick={resetMfa} disabled={mfaReason.trim().length < 3}>Reset</button>{/snippet}
+  </Modal>
+  <Modal bind:open={endOpen} title="Sign {u.display_name} out everywhere?"><p>Every session ends; they need to sign in again. Your own session is not affected.</p>{#snippet footer()}<button class="btn" onclick={() => (endOpen = false)}>Cancel</button><button class="btn primary" onclick={endSessions}>Sign out everywhere</button>{/snippet}</Modal>
   <Modal bind:open={delOpen} title="Delete {u.display_name}?"><p>This deletes <strong>{u.email}</strong> and everything they saved. It cannot be undone.</p>{#snippet footer()}<button class="btn" onclick={() => (delOpen = false)}>Cancel</button><button class="btn danger solid" onclick={remove}>Delete account</button>{/snippet}</Modal>
   {/if}
 </Page>

@@ -26,5 +26,6 @@ export const ADMIN_PAGES = [
   { href: '/admin/settings', label: 'All settings', icon: 'search', perm: 'admin.settings.view' },
   { href: '/admin/history', label: 'History & Rollback', icon: 'history', perm: 'admin.settings.view' },
   { href: '/admin/transfer', label: 'Import / Export', icon: 'download', perm: 'admin.settings.view' },
+  { href: '/admin/content', label: 'Conversation access', icon: 'lock', perm: 'admin.content.read' },
   { href: '/admin/audit', label: 'Activity / Audit', icon: 'log', perm: 'admin.audit.view' }
 ];
