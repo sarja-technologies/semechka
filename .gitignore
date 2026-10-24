@@ -15,3 +15,4 @@ dist/
 /data/
 screenshots/tmp/
 .claude/
+backend/build/

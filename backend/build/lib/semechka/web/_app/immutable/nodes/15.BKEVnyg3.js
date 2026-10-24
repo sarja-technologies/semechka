@@ -1,1 +1,0 @@
-import"../chunks/ByCVYlhC.js";import"../chunks/Bdp7-CnU.js";import{t as e}from"../chunks/Zs9FInCQ.js";import{t}from"../chunks/K4krT4xU.js";function n(n){e(n,{title:`Email`,lead:`Email is sent only when an SMTP host and sender are configured. The password is write-only.`,children:(e,n)=>{t(e,{categories:[`Email`],searchable:!1})},$$slots:{default:!0}})}export{n as component};
