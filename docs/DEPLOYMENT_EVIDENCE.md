@@ -39,7 +39,7 @@ process 61700 (running since 22 October) and the dedicated engine still runs fro
 first-run wizard (0 users), offering Personal, Business, Managed Private Hosting and Custom, with the installer's engine
 connection; a wrong setup token gets 403. The wizard was **not** completed.
 
-`spark_salted_check_040.py` against production Salted (signs in as the test accounts; the one conversation it creates
+`scripts/spark_salted_check.py` against production Salted (signs in as the test accounts; the one conversation it creates
 is deleted again):
 
 ```
