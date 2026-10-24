@@ -257,6 +257,11 @@ DEFS: list[Def] = [
         edit_perm="admin.signup.edit", lowers_privacy=_lower_if_bool_true_to_false),
     Def("auth.allow_user_delete", S_, "Let people delete their own account", "", "bool", True,
         scopes=["deployment"], edit_perm="admin.signup.edit"),
+    # ---- single sign-on (SSO slice) ----
+    Def("sso.local_login", S_, "Allow password sign-in", "When off and a single sign-on provider is enabled, only owners can "
+        "still sign in with a password (the break-glass path). Everyone else must use single sign-on.", "bool", True,
+        scopes=["deployment"], edit_perm="admin.sso.manage",
+        effect="Turning this off sends everyone except owners to the identity provider."),
     # ---- privacy & retention ----
     Def("privacy.mode", P, "Privacy mode", "Standard private (encrypted history, governed access), user-"
         "controlled history, or enterprise-managed. No-save conversations are a separate permission.", "enum",

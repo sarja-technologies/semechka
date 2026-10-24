@@ -66,6 +66,7 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.system.view` — View system and node health | yes | yes | – | yes | yes | – | – | – | – |
 | `admin.backup.manage` — Manage backups | yes | yes | – | – | – | – | – | – | – |
 | `admin.preview_role` — Preview the product as another role | yes | yes | yes | – | – | – | – | – | – |
+| `admin.sso.manage` — Configure single sign-on providers | yes | yes | – | – | – | – | – | – | – |
 
 ## Technical-visibility presets (editable shortcuts)
 

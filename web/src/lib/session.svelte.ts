@@ -36,7 +36,13 @@ export async function loadMe(): Promise<boolean> {
   }
 }
 
-export async function logout() { try { await post('/api/auth/logout'); } catch { /* already signed out */ } app.me = null; setCsrf(''); }
+export async function logout() {
+  // The SSO endpoint ends the local session for everyone and says where to go if the identity provider has its own sign-out.
+  let redirect: string | null = null;
+  try { redirect = (await post('/api/sso/logout'))?.redirect ?? null; } catch { /* already signed out */ }
+  app.me = null; setCsrf('');
+  if (redirect && typeof location !== 'undefined') location.assign(redirect);
+}
 
 /** Apply organisation branding as CSS variables and document title. All values were validated by the server. */
 export function applyBrand(b: Brand, ui?: any) {

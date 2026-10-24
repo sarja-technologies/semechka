@@ -14,6 +14,11 @@
   const m = (e: unknown) => (e instanceof ApiError ? e.message : 'Something unexpected happened.');
   async function loadSessions() { try { sessions = await get('/api/auth/sessions'); } catch (e) { sessErr = m(e); } }
   onMount(loadSessions);
+  // SSO: connections to identity providers (explicit linking; nothing is ever linked automatically)
+  let ssoInfo = $state<any>({ linked: [], available: [], has_password: true });
+  async function loadSso() { try { ssoInfo = await get('/api/sso/identities'); } catch { /* optional */ } }
+  onMount(loadSso);
+  async function unlink(id: number) { try { await del(`/api/sso/identities/${id}`); toast('Disconnected.'); loadSso(); } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not disconnect.', 'bad'); } }
   async function saveProfile(e: Event) { e.preventDefault(); try { await patch('/api/me', { display_name: name, ...(theme ? { theme } : {}), ...(density ? { density } : {}) }); await loadMe(); toast('Saved'); } catch (x) { toast(m(x), 'bad'); } }
   async function changePw(e: Event) { e.preventDefault(); pwErr = ''; try { const r = await post('/api/auth/password', { current: cur, new: nw }); setCsrf(r.csrf); await loadMe(); cur = nw = ''; toast('Password changed. Other sessions were signed out.'); loadSessions(); } catch (x) { pwErr = m(x); } }
   async function beginMfa() { mfaErr = ''; try { mfa = await post('/api/auth/mfa/begin'); } catch (x) { mfaErr = m(x); } }
@@ -50,6 +55,15 @@
       <form onsubmit={confirmMfa} style="margin-top:12px"><div class="field"><label for="mc">Code</label><input id="mc" class="input mono" inputmode="numeric" maxlength="8" bind:value={code} autocomplete="one-time-code" style="max-width:160px" /></div><button class="btn primary" disabled={!code}>Confirm and turn on</button></form>
     {:else}<p class="small">Adds a second step at sign-in. Recommended for anyone with administration access.</p><button class="btn primary" onclick={beginMfa}>Set up</button>{/if}
   </div></section>
+
+  {#if ssoInfo.available.length || ssoInfo.linked.length}
+  <section class="panel"><div class="panel-h"><h2 style="font-size:16px">Single sign-on</h2></div><div class="panel-b">
+    <p class="small">Connect your account to your organisation’s identity provider so you can sign in with it. You must be signed in here with your current method; nothing is connected automatically.</p>
+    {#if ssoInfo.linked.length}<ul class="plain">{#each ssoInfo.linked as l (l.id)}<li class="row"><span class="grow">{l.provider}</span><button class="btn sm" onclick={() => unlink(l.id)} disabled={!ssoInfo.has_password}>Disconnect</button></li>{/each}</ul>
+      {#if !ssoInfo.has_password}<p class="hint">This account has no password, so it cannot be disconnected.</p>{/if}{/if}
+    <div class="row">{#each ssoInfo.available.filter((a: any) => !ssoInfo.linked.some((l: any) => l.provider_id === a.id)) as a (a.id)}<a class="btn" href={`/api/sso/${a.id}/start?link=1&return_to=/account`} data-sveltekit-reload>Connect {a.name}</a>{/each}</div>
+  </div></section>
+  {/if}
 
   <section class="panel"><div class="panel-h"><h2 style="font-size:16px">Signed-in devices</h2></div><div class="panel-b">
     {#if sessErr}<div class="notice bad">{sessErr}</div>{/if}
