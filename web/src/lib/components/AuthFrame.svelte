@@ -6,7 +6,7 @@
 </script>
 <main id="main" class="auth">
   <div class="box" class:wide>
-    <div class="brand"><Wordmark size={22} /></div>
+    <div class="brand"><Wordmark size={22} logo={app.brand.login_logo !== false} /></div>
     <h1>{title}</h1>
     {@render children()}
     {#if app.brand.signin_message}<p class="hint note">{app.brand.signin_message}</p>{/if}

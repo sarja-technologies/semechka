@@ -65,7 +65,7 @@
   const next = () => { error = ''; step++; window.scrollTo(0, 0); }, back = () => { error = ''; step--; };
 </script>
 <main id="main" class="wiz">
-  <header><Wordmark size={20} /><span class="muted small">First-run setup</span></header>
+  <header><Wordmark size={20} fallback /><span class="muted small">First-run setup</span></header>
   {#if step < 9}
     <ol class="steps" aria-label="Setup progress">{#each STEPS as s, i}<li class:on={i === step} class:done={i < step} aria-current={i === step ? 'step' : undefined}><span class="n mono">{i}</span><span class="t">{s}</span></li>{/each}</ol>
   {/if}

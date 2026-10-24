@@ -72,5 +72,4 @@
   .s[aria-pressed='true'] { outline: 2px solid var(--fg); outline-offset: 1px; }
   .s:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .hint, .err { margin: 0; }
-  .linkish { all: unset; cursor: pointer; color: var(--link); text-decoration: underline; }
 </style>

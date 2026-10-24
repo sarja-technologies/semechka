@@ -130,6 +130,7 @@ def me(ctx: Ctx = Depends(current)):
         "permissions": p.all_allowed(),
         "admin": services.is_admin_like(p),
         "mfa_enrolment_required": bool(mfa_required_for(ctx) and not ctx.user.totp_enabled),
+        "can_delete_account": bool(st.settings.deployment(s, "auth.allow_user_delete")),
         "csrf": ctx.session.csrf,
         "ui": ui_config(s, st, p, prefs=ctx.user.prefs or {}),
     }
