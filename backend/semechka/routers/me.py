@@ -166,6 +166,8 @@ def update_me(body: PrefsIn, ctx: Ctx = Depends(current)):
         if not ctx.st.settings.value_for(ctx.s, "theme.user_choice", ctx.principal):
             raise HTTPException(403, {"code": "disabled", "message": "Your organisation sets one theme for everyone."})
         prefs["theme"] = body.theme
+    elif "theme" in body.model_fields_set:  # an explicit null goes back to the organisation's default
+        prefs.pop("theme", None)
     if body.density is not None:
         if body.density not in ("comfortable", "compact"):
             raise HTTPException(422, {"code": "invalid", "message": "Unknown density."})

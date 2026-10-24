@@ -143,7 +143,9 @@
             <ModelIcon icon={m.icon} label={name(m)} size={20} />
             <span class="mn"><strong>{name(m)}</strong><span class="tiny muted">{m.alias !== name(m) ? `${m.alias} · ` : ''}{KIND[k]}{m.meta?.vram_estimate_mb ? ` · about ${gb(m.meta.vram_estimate_mb)}` : m.meta?.size_bytes ? ` · ${gb(Math.round(m.meta.size_bytes / 1048576))} on disk` : ''}{m.enabled ? '' : ' · off for people'}</span></span>
             {#if st === 'loaded'}<span class="chip ok">Loaded</span>{:else if st === 'working'}<span class="chip info">Working…</span>{/if}
-            {#if operate}<button class="btn sm" aria-expanded={open === m.id} onclick={() => ask(m)} disabled={st === 'working'}>{st === 'loaded' ? 'Unload…' : k === 'media' ? 'Free memory…' : 'Load…'}</button>{/if}
+            {#if k === 'other'}<span class="tiny muted">Remote: nothing to load</span>
+            {:else if k === 'media' && st !== 'loaded' && st !== 'working'}<span class="tiny muted">Loads when someone uses it</span>
+            {:else if operate}<button class="btn sm" aria-expanded={open === m.id} onclick={() => ask(m)} disabled={st === 'working'}>{st === 'loaded' ? (k === 'media' ? 'Free memory…' : 'Unload…') : 'Load…'}</button>{/if}
           </div>
           {#if open === m.id}
             <div class="chk">

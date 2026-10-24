@@ -182,6 +182,16 @@ def test_enter_sends_and_prompt_history_follow_the_setting_until_a_person_choose
     assert comp()["enter_sends"] is False and comp()["prompt_history"] is True
 
 
+def test_a_null_theme_goes_back_to_the_organisation_default(mo):
+    prefs = lambda: mo.get("/api/me").json()["user"]["prefs"]  # noqa: E731
+    assert mo.patch("/api/me", json={"theme": "dark"}).status_code == 200
+    assert prefs()["theme"] == "dark"
+    assert mo.patch("/api/me", json={"density": "compact"}).status_code == 200  # leaving it out keeps it
+    assert prefs()["theme"] == "dark"
+    assert mo.patch("/api/me", json={"theme": None}).status_code == 200
+    assert "theme" not in prefs()
+
+
 def test_real_names_never_fall_back_to_an_identifier_for_people_without_tech_model_id(mo, st, app):
     member = make_user(mo, app, "m3@example.test")
     assert mo.put("/api/admin/settings/models.display.names", json={"value": "real"}).status_code == 200
