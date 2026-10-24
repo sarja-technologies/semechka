@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import audit, mailer, security, services
-from ..deps import COOKIE, Ctx, current, get_db, get_state, issue_session, optional_ctx
+from ..deps import Ctx, current, get_db, get_state, issue_session, optional_ctx
 from ..models import EmailToken, Invite, Role, SessionRow, User, UserRole
 from ..state import AppState
 
@@ -246,7 +246,7 @@ def logout(request: Request, response: Response, s=Depends(get_db), ctx: Ctx | N
         if not secrets.compare_digest(sent, ctx.session.csrf):
             raise HTTPException(403, {"code": "csrf", "message": "Missing or invalid CSRF token."})
         s.delete(s.get(SessionRow, ctx.session.id_hash))
-    response.delete_cookie(COOKIE, path="/")
+    response.delete_cookie(request.app.state.sem.cookie_name, path="/")
     return {"ok": True}
 
 
@@ -334,5 +334,5 @@ def delete_me(body: dict, response: Response, ctx: Ctx = Depends(current)):
         raise HTTPException(409, {"code": "last_owner", "message": "You are the only owner. Assign another owner first."})
     audit.record(ctx.s, ctx.user.id, "account.delete", ctx.user.id, {}, ctx.ip)
     ctx.s.delete(ctx.user)
-    response.delete_cookie(COOKIE, path="/")
+    response.delete_cookie(ctx.st.cookie_name, path="/")
     return {"ok": True}

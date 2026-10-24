@@ -10,16 +10,19 @@ set -euo pipefail
 PREFIX="${SEMECHKA_PREFIX:-$HOME/.local/share/semechka-app}"
 DATA="${SEMECHKA_DATA_DIR:-$HOME/.local/share/semechka}"
 PORT="${SEMECHKA_PORT:-8780}"
+NAME=""; HOST="${SEMECHKA_HOST:-}"
 DRY=0; NO_SERVICE=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-usage() { echo "Usage: install.sh [--check] [--no-service] [--prefix DIR] [--data DIR] [--port N]"; exit "${1:-0}"; }
+usage() { echo "Usage: install.sh [--check] [--no-service] [--name NAME] [--prefix DIR] [--data DIR] [--port N] [--host ADDR]"; echo "  --name NAME   run a second, independent instance (own unit semechka-NAME, own command, own data)"; echo "  --host ADDR   bind address, e.g. a LAN IP (default: follows the Network exposure setting, loopback at first)"; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do case "$1" in
-  --check) DRY=1;; --no-service) NO_SERVICE=1;; --prefix) PREFIX="$2"; shift;; --data) DATA="$2"; shift;; --port) PORT="$2"; shift;;
+  --check) DRY=1;; --no-service) NO_SERVICE=1;; --prefix) PREFIX="$2"; shift;; --data) DATA="$2"; shift;; --port) PORT="$2"; shift;; --name) NAME="$2"; shift;; --host) HOST="$2"; shift;;
   -h|--help) usage 0;; *) echo "Unknown option: $1" >&2; usage 2;; esac; shift; done
 
 ok() { printf '  [ ok ] %s\n' "$*"; }; warn() { printf '  [warn] %s\n' "$*"; }; bad() { printf '  [FAIL] %s\n' "$*"; FAIL=1; }
 FAIL=0
+case "$NAME" in ""|[a-z0-9-]*) ;; *) echo "--name must be lowercase letters, digits and dashes" >&2; exit 2;; esac
+SUFFIX=""; [ -n "$NAME" ] && SUFFIX="-$NAME"
 echo "Semechka installer — preflight"
 
 [ "$(uname -s)" = "Linux" ] && ok "Linux $(uname -m)" || bad "Linux is required (found $(uname -s))"
@@ -63,20 +66,21 @@ echo; echo "Installing to $PREFIX (data in $DATA)"
 "$PREFIX/venv/bin/pip" install --quiet --upgrade pip
 "$PREFIX/venv/bin/pip" install --quiet "$WHEEL"
 mkdir -p "$DATA" && chmod 700 "$DATA"
-mkdir -p "$HOME/.local/bin" && ln -sf "$PREFIX/venv/bin/semechka" "$HOME/.local/bin/semechka"
+mkdir -p "$HOME/.local/bin" && ln -sf "$PREFIX/venv/bin/semechka" "$HOME/.local/bin/semechka$SUFFIX"
 ok "installed $("$PREFIX/venv/bin/semechka" --version)"
 
 if [ "$NO_SERVICE" -eq 0 ] && command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
-  UNIT="$HOME/.config/systemd/user/semechka.service"; mkdir -p "$(dirname "$UNIT")"
+  UNIT="$HOME/.config/systemd/user/semechka$SUFFIX.service"; mkdir -p "$(dirname "$UNIT")"
   cat > "$UNIT" <<UNIT
 [Unit]
-Description=Semechka
+Description=Semechka${NAME:+ ($NAME)}
 After=network.target
 
 [Service]
 Environment=SEMECHKA_DATA_DIR=$DATA
 Environment=SEMECHKA_PORT=$PORT
-ExecStart=$PREFIX/venv/bin/semechka serve
+${HOST:+Environment=SEMECHKA_HOST=$HOST
+}ExecStart=$PREFIX/venv/bin/semechka serve
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true
@@ -87,8 +91,8 @@ ProtectHome=read-only
 [Install]
 WantedBy=default.target
 UNIT
-  systemctl --user daemon-reload && systemctl --user enable --now semechka.service
-  ok "service enabled (systemctl --user status semechka)"
+  systemctl --user daemon-reload && systemctl --user enable --now semechka$SUFFIX.service
+  ok "service enabled (systemctl --user status semechka$SUFFIX)"
   for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
 else
   warn "no systemd user session: start it with  SEMECHKA_DATA_DIR=$DATA semechka serve --port $PORT"

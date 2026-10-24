@@ -14,7 +14,6 @@ from .models import SessionRow, User
 from .perms import Principal
 from .state import AppState
 
-COOKIE = "semechka_session"
 
 
 def get_state(request: Request) -> AppState:
@@ -64,13 +63,13 @@ def issue_session(s, st: AppState, request: Request, response: Response, user: U
                      ip=client_ip(request), ua=(request.headers.get("user-agent") or "")[:200], mfa_ok=mfa_ok)
     s.add(row)
     secure = st.cfg.cookie_mode == "1" or (st.cfg.cookie_mode == "auto" and is_https(request))
-    response.set_cookie(COOKIE, token, httponly=True, samesite="lax", secure=secure, path="/",
+    response.set_cookie(st.cookie_name, token, httponly=True, samesite="lax", secure=secure, path="/",
                         max_age=int(hours * 3600))
     return row
 
 
 def _load(request: Request, s, st: AppState, *, require_mfa=True) -> Ctx | None:
-    token = request.cookies.get(COOKIE)
+    token = request.cookies.get(st.cookie_name)
     if not token:
         return None
     row = s.get(SessionRow, hashlib.sha256(token.encode()).hexdigest())

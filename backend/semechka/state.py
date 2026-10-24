@@ -23,6 +23,12 @@ class AppState:
     started: float = field(default_factory=time.time)
     stop_events: dict[str, asyncio.Event] = field(default_factory=dict)
 
+    @property
+    def cookie_name(self) -> str:
+        """Per-instance session cookie. Browsers share cookies across ports on one host, so two instances
+        on the same address must not use the same name. Derived from this instance's own master key."""
+        return "smk_" + self.vault.mac("session-cookie-name", "cookie")[:10]
+
     @classmethod
     def build(cls, cfg: Config) -> "AppState":
         cfg.ensure()
