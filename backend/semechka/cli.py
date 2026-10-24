@@ -224,13 +224,16 @@ def cmd_restore(a, cfg: Config):
 
 
 def cmd_update(a, cfg: Config):
-    print(f"Installed version: {__version__}")
-    print("Semechka does not update itself silently.\n"
-          "  1. semechka backup\n"
-          "  2. Docker Compose install:  docker compose pull && docker compose up -d\n"
-          "     pip install:             pip install --upgrade semechka\n"
+    print(f"Installed version: {__version__}   (data schema {migrations.SCHEMA_VERSION})")
+    print("Semechka does not update itself silently. To update:\n"
+          "  1. Download the new release tarball and verify it:  sha256sum -c semechka-X.Y.Z.tar.gz.sha256\n"
+          "  2. Extract it and run its install.sh with the same --prefix/--data (and --name) you installed with.\n"
+          "     The installer first saves a consistent snapshot of your database and key under <data>/pre-update/,\n"
+          "     installs the new program, restarts the service and applies any database migrations once.\n"
           "  3. semechka doctor\n"
-          "Rollback: reinstall the previous version and run `semechka restore <backup> --force`.")
+          "Rollback: run install.sh --rollback (program only) or --rollback --restore-data (program and the snapshot).\n"
+          "A program older than its data refuses to start rather than risk corrupting it.\n"
+          "Docker Compose installs: docker compose pull && docker compose up -d  (take `semechka backup` first).")
 
 
 def cmd_uninstall(a, cfg: Config):
