@@ -53,4 +53,11 @@ export function applyBrand(b: Brand, ui?: any) {
   const accent = dark ? b.accent_dark : b.accent_light;
   if (accent) { root.style.setProperty('--accent', accent); root.style.setProperty('--accent-soft', `color-mix(in srgb, ${accent} 14%, var(--surface))`); }
   if (b.tab_title) document.title = b.tab_title;
+  // The administrator's favicon replaces the built-in one; removing it restores the built-in one.
+  const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (icon) {
+    icon.dataset.builtin ??= icon.getAttribute('href') ?? '/favicon.svg';
+    icon.removeAttribute('type');
+    icon.setAttribute('href', b.favicon_asset ? `/api/assets/${b.favicon_asset}` : icon.dataset.builtin);
+  }
 }

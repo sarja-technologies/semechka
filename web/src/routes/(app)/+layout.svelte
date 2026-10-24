@@ -33,7 +33,7 @@
 {#if app.me}
 <div class="shell" class:collapsed>
   <aside class="rail" aria-label="Primary">
-    <div class="top"><a href="/" class="wm" aria-label="Home"><Wordmark size={17} /></a>
+    <div class="top"><a href="/" class="wm" title="Home"><Wordmark size={17} /></a>
       <button class="btn ghost icon sm collapse" onclick={toggleRail} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} aria-expanded={!collapsed}><Icon name="menu" /></button></div>
     <button class="item find" onclick={openPalette} aria-keyshortcuts="Control+K Meta+K" title="Search and commands (Ctrl+K)"><Icon name="search" /><span class="lbl grow">Search</span><kbd class="lbl tiny">Ctrl K</kbd></button>
     <nav aria-label="Modes">
@@ -93,7 +93,8 @@
   nav { display: grid; gap: 2px; align-content: start; flex: 1; overflow: auto; }
   .item { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 10px; min-height: 38px; border-radius: var(--radius-sm); color: var(--fg); cursor: pointer; text-decoration: none; width: 100%; font-size: 14px; }
   .item:hover { background: var(--surface-2); } .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  /* Foreground text plus an accent bar: contrast does not depend on which accent an administrator chose. */
+  .item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
   .item.dim { color: var(--fg-muted); }
   .find { margin-bottom: 8px; border: 1px solid var(--border); }
   .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

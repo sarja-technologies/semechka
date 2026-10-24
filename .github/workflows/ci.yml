@@ -25,6 +25,19 @@ jobs:
       - run: pnpm build
         working-directory: web
       - run: ./scripts/design-lint.sh
+      - run: python3 scripts/contrast_check.py
+  e2e:
+    runs-on: ubuntu-latest   # ships Google Chrome; the suite uses it and downloads no browser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable && python -m venv .venv && .venv/bin/pip install -e backend
+      - run: pnpm install --frozen-lockfile && pnpm build && pnpm e2e
+        working-directory: web
+        env: { SEMECHKA_PY: "${{ github.workspace }}/.venv/bin/python" }
   secrets:
     runs-on: ubuntu-latest
     steps:

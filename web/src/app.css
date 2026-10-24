@@ -7,15 +7,15 @@
 /* ---- tokens: Paper (default), Carbon, Graphite. See DESIGN.md. Brand values are applied on :root by the shell. ---- */
 :root, :root[data-theme='paper'] {
   color-scheme: light;
-  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0f1ee; --fg: #202322; --fg-muted: #5b615f; --border: #d9dbd7; --border-strong: #b9bdb8;
-  --accent: #087f78; --accent-fg: #ffffff; --accent-soft: #e3f1ef;
-  --danger: #c83c36; --danger-soft: #fbeceb; --success: #267e59; --success-soft: #e6f3ed; --warn: #a36a12; --warn-soft: #f8f0df;
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0f1ee; --fg: #202322; --fg-muted: #5b615f; --border: #d9dbd7; --border-strong: #878a86;
+  --accent: #087771; --accent-fg: #ffffff; --accent-soft: #e3f1ef;
+  --danger: #c23a34; --danger-soft: #fbeceb; --success: #257a56; --success-soft: #e6f3ed; --warn: #966211; --warn-soft: #f8f0df;
   --info: #3b6e8f; --info-soft: #e6eff5;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 :root[data-theme='carbon'] {
   color-scheme: dark;
-  --bg: #111415; --surface: #1a1e1f; --surface-2: #222728; --fg: #f0f2ef; --fg-muted: #a3aaa7; --border: #343838; --border-strong: #4a5050;
+  --bg: #111415; --surface: #1a1e1f; --surface-2: #222728; --fg: #f0f2ef; --fg-muted: #a3aaa7; --border: #343838; --border-strong: #6c7171;
   --accent: #64beb5; --accent-fg: #0b1a19; --accent-soft: #17302d;
   --danger: #ef6d67; --danger-soft: #3a1f1e; --success: #55c595; --success-soft: #16301f; --warn: #d9a441; --warn-soft: #33290f;
   --info: #7db3d4; --info-soft: #1b2b36;
@@ -23,9 +23,9 @@
 }
 :root[data-theme='graphite'] {
   color-scheme: dark;
-  --bg: #252a2a; --surface: #303637; --surface-2: #394041; --fg: #e9ece8; --fg-muted: #aab1ae; --border: #475150; --border-strong: #5d6967;
+  --bg: #252a2a; --surface: #303637; --surface-2: #394041; --fg: #e9ece8; --fg-muted: #aab1ae; --border: #475150; --border-strong: #828c8a;
   --accent: #64beb5; --accent-fg: #0b1a19; --accent-soft: #274240;
-  --danger: #f0746e; --danger-soft: #432726; --success: #5cc99a; --success-soft: #1f3a2d; --warn: #dcaa4a; --warn-soft: #3a3012;
+  --danger: #f38e8a; --danger-soft: #432726; --success: #5cc99a; --success-soft: #1f3a2d; --warn: #dcaa4a; --warn-soft: #3a3012;
   --info: #84b9d9; --info-soft: #25363f;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
@@ -79,7 +79,11 @@ small, .muted { color: var(--fg-muted); }
 textarea.input { min-height: 72px; resize: vertical; line-height: 1.45; }
 .input::placeholder { color: var(--fg-muted); opacity: 0.8; }
 .input[aria-invalid='true'] { border-color: var(--danger); }
-@media (pointer: coarse) { .input, select.input { min-height: 44px; } }
+@media (pointer: coarse) {
+  .input, select.input { min-height: 44px; }
+  input[type='checkbox'], input[type='radio'] { width: 24px; height: 24px; }
+  label.row:has(> input[type='checkbox'], > input[type='radio']) { min-height: 44px; align-items: center; }
+}
 input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
 .field { display: grid; gap: 4px; margin-bottom: var(--s4); }
 .field > label, .label { font-weight: 500; font-size: 13px; }
@@ -135,6 +139,9 @@ label.row > input[type='checkbox'], label.row > input[type='radio'] { flex: none
 .hljs-string, .hljs-attr, .hljs-number { color: var(--success); }
 .hljs-comment { color: var(--fg-muted); font-style: italic; }
 .hljs-title, .hljs-function { color: var(--info); }
+
+/* On phones, filter bars stack and every field spans the row, whatever width it was given for larger screens. */
+@media (max-width: 600px) { .row > .input[style*='max-width'], .row > select.input[style*='max-width'], .row > .field[style*='max-width'] { max-width: none !important; width: 100%; flex: 1 1 100%; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 140ms ease-out; } @keyframes fade { from { opacity: 0; } to { opacity: 1; } } }

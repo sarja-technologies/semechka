@@ -29,7 +29,7 @@
 <Modal bind:open title={cur ? `${canEdit ? 'Edit' : 'View'} ${cur.label}` : 'Create role'} wide>
   <div class="row"><div class="field grow"><label for="rl">Display name</label><input id="rl" class="input" bind:value={f.label} disabled={!canEdit} /></div><div class="field"><label for="rk">Priority (lower wins settings merges)</label><input id="rk" class="input" type="number" min="0" bind:value={f.rank} disabled={!canEdit} style="max-width:120px" /></div></div>
   <div class="field"><label for="rd">Description</label><input id="rd" class="input" bind:value={f.description} disabled={!canEdit} /></div>
-  {#if cur?.id === 'owner'}<div class="notice info"><div>The owner role must keep the “*” grant so the platform cannot be locked out. Content-access permissions are never covered by “*”.</div></div>{/if}
+  {#if cur?.id === 'owner'}<div class="notice info"><div>The owner role must keep the “*” grant so the platform cannot be locked out. Permissions marked sensitive are never covered by “*” and must be granted explicitly.</div></div>{/if}
   {#if canEdit}<PermMatrix bind:grants bind:denies who="people in this role" />{:else}<p class="mono tiny">grants: {grants.join(', ')}<br />denies: {denies.join(', ') || '—'}</p>{/if}
   {#if err}<p class="err" role="alert">{err}</p>{/if}
   {#snippet footer()}<button class="btn" onclick={() => (open = false)}>Close</button>{#if canEdit}<button class="btn primary" onclick={save}>Save role</button>{/if}{/snippet}

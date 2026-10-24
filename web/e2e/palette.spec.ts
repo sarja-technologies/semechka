@@ -5,7 +5,7 @@ import { shot } from './support/shots';
 
 test.describe.configure({ mode: 'serial' });
 
-const open = async (page: Page) => { await page.getByRole('button', { name: /^(Search|Open command palette)/ }).first().waitFor(); await page.keyboard.press('Control+k'); await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible(); };
+const open = async (page: Page) => { await page.getByRole('button', { name: /^(Search)/ }).first().waitFor(); await page.keyboard.press('Control+k'); await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible(); };
 const results = (page: Page) => page.getByRole('listbox', { name: 'Results' });
 const box = (page: Page) => page.getByRole('combobox', { name: 'Search commands' });
 

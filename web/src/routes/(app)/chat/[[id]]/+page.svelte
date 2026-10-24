@@ -406,6 +406,6 @@
     .listbtn { display: inline-flex; }
     .drawer { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 45vh; border-top: 1px solid var(--border-strong); border-left: 0; box-shadow: var(--shadow); }
   }
-  @media (max-width: 719px) { .ch { padding: 8px; } .col { padding: 12px; } .msel { min-width: 0; flex: 1; } }
+  @media (max-width: 719px) { .ch { padding: 8px; } .col { padding: 12px; } .msel { min-width: 0; max-width: none; flex: 1 1 100%; } .cbar .spacer { display: none; } }
   @media (prefers-reduced-motion: no-preference) { .list { transition: transform 140ms ease-out; } }
 </style>

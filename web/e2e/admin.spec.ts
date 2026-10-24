@@ -36,6 +36,8 @@ test('every administration page loads with real content and no errors', async ({
 test('hardware metrics on the system page are the real numbers of this machine', async ({ as }) => {
   const page = await as('owner');
   await page.goto('/admin/system');
+  await expect(page.getByRole('heading', { name: 'Host' })).toBeVisible();
+  await expect(page.getByText('Memory:')).toBeVisible();
   const sys = await (await page.request.get('/api/admin/system')).json();
   expect(JSON.stringify(sys)).not.toMatch(/fake|mock|demo/i);
   const totalMb = Number(readFileSync('/proc/meminfo', 'utf8').match(/MemTotal:\s+(\d+)/)![1]) / 1024;
@@ -225,11 +227,17 @@ test.describe('branding and themes', () => {
     writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
     await owner.locator('input[type=file]').first().setInputFiles(png);
     await expect(owner.getByAltText('Current logo')).toBeVisible();
+    await owner.locator('input[type=file]').nth(1).setInputFiles(png); // favicon
+    await expect(owner.getByAltText('Current favicon')).toBeVisible();
 
     const member = await as('member');
     await member.goto('/chat');
     await expect(member).toHaveTitle('Harbour');
     await expect(member.locator('.rail img[alt="Harbour Labs AI"]')).toBeVisible();
+    await expect(member.locator('link[rel=icon]')).toHaveAttribute('href', /^\/api\/assets\/[0-9a-f]{24}\.png$/);
+    const ico = await member.request.get(await member.locator('link[rel=icon]').getAttribute('href') as string);
+    expect(ico.status()).toBe(200);
+    expect(ico.headers()['content-type']).toBe('image/png');
     await shot(member, 'branding-applied-1280');
     // the login screen of a signed-out visitor carries the new brand too
     const anon = await (await member.context().browser()!.newContext()).newPage();
@@ -238,6 +246,7 @@ test.describe('branding and themes', () => {
     await anon.close();
 
     await owner.goto('/admin/branding');
+    await owner.getByRole('button', { name: 'Remove' }).first().click();
     await owner.getByRole('button', { name: 'Remove' }).first().click();
     await setSetting('brand.app_name', 'Banana Corporation Private AI');
     await setSetting('brand.tab_title', 'Banana AI');

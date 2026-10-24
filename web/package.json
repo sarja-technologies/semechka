@@ -7,7 +7,9 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "e2e": "playwright test",
+    "contrast": "python3 ../scripts/contrast_check.py"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

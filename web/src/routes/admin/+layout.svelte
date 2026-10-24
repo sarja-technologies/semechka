@@ -26,7 +26,7 @@
     <button class="btn ghost icon" aria-label="Admin sections" aria-expanded={menu} aria-controls="anav" onclick={() => (menu = !menu)}><Icon name="menu" /></button>
     <a href="/admin" class="brand"><Wordmark size={16} /> <span class="tag">Admin</span></a>
     <span class="spacer"></span>
-    <button class="btn sm" onclick={openPalette} aria-label="Open command palette" aria-keyshortcuts="Control+K Meta+K"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
+    <button class="btn sm" onclick={openPalette} aria-keyshortcuts="Control+K Meta+K"><Icon name="search" size={14} /> <span class="hide-s">Search</span> <kbd>Ctrl K</kbd></button>
     <a class="btn sm" href="/">Back to app</a>
   </header>
   <nav id="anav" class:open={menu} aria-label="Admin sections">

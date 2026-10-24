@@ -19,7 +19,7 @@ Three first-party profiles (all tokens editable by an admin; accent is contrast-
 | `--surface` | #FFFFFF | #1A1E1F | #303637 |
 | `--fg` | #202322 | #F0F2EF | #E9ECE8 |
 | `--border` | #D9DBD7 | #343838 | #475150 |
-| `--accent` | #087F78 | #64BEB5 | #64BEB5 |
+| `--accent` | #087771 | #64BEB5 | #64BEB5 |
 | `--danger` | #C83C36 | (lifted for contrast) | |
 | `--success` | #267E59 | | |
 | `--warn` | #A36A12 | | |
