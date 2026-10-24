@@ -99,6 +99,14 @@ def _url_or_blank(value):
     return value
 
 
+def _asset_id(value):
+    if value in ("", None):
+        return ""
+    if not re.fullmatch(r"[0-9a-f]{24}\.(png|webp|jpg|svg)", str(value)):
+        raise SettingError("Upload the image through the branding page; this is not a valid asset id.")
+    return value
+
+
 def _nav_items(value):
     allowed = {"chat", "code", "image", "video", "audio", "knowledge", "agents", "usage", "help"}
     seen = set()
@@ -162,9 +170,9 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.branding", public=True, aliases=["title"],
         validator=lambda v: _strlen(v, 1, 60)),
     Def("brand.logo_asset", C, "Logo", "Uploaded logo asset id (SVG, PNG or WebP).", "string", "",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset"),
+        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
     Def("brand.favicon_asset", C, "Favicon", "Uploaded favicon asset id.", "string", "",
-        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset"),
+        scopes=["deployment"], edit_perm="admin.branding", public=True, widget="asset", validator=_asset_id),
     Def("brand.theme_default", C, "Default theme", "Paper (light), Carbon (dark) or Graphite (dark grey).",
         "enum", "paper", choices=["paper", "carbon", "graphite", "system"], scopes=["deployment", "user"],
         edit_perm="admin.branding", public=True),

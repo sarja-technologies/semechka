@@ -38,7 +38,7 @@ async def upload_asset(file: UploadFile = File(...), ctx: Ctx = Depends(require(
     if not kind:
         raise HTTPException(415, {"code": "unsupported_type", "message": "Use a PNG, WebP, JPEG or SVG image."})
     mime, ext = kind
-    if mime == "image/svg+xml" and re.search(rb"<script|onload=|onerror=|javascript:", data, re.I):
+    if mime == "image/svg+xml" and re.search(rb"<\s*(script|iframe|object|embed|foreignObject|use|image|animate|set)\b|\bon[a-z]+\s*=|javascript:|data:text/html|<!ENTITY", data, re.I):
         raise HTTPException(422, {"code": "unsafe_svg", "message": "That SVG contains scripting and was rejected."})
     aid = hashlib.sha256(data).hexdigest()[:24]
     d = ctx.st.cfg.data_dir / "assets"

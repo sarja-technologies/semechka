@@ -352,7 +352,8 @@ async def generate(cid: str, body: GenIn, request: Request, ctx: Ctx = Depends(c
         if len(body.content) > maxc:
             raise HTTPException(413, {"code": "too_long", "message": f"Messages are limited to {maxc} characters."})
         parent = body.parent_id or c.active_leaf
-        if parent and ctx.s.get(Message, parent) is None:
+        pm = ctx.s.get(Message, parent) if parent else None
+        if parent and (pm is None or pm.conversation_id != c.id):
             raise HTTPException(404, {"code": "not_found", "message": "Message not found."})
         um = Message(conversation_id=c.id, parent_id=parent, role="user", content_enc=ctx.st.vault.encrypt(body.content, "content"))
         ctx.s.add(um)
