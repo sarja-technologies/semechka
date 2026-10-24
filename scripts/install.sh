@@ -11,12 +11,12 @@ PREFIX="${SEMECHKA_PREFIX:-$HOME/.local/share/semechka-app}"
 DATA="${SEMECHKA_DATA_DIR:-$HOME/.local/share/semechka}"
 PORT="${SEMECHKA_PORT:-8780}"
 NAME=""; HOST="${SEMECHKA_HOST:-}"
-DRY=0; NO_SERVICE=0
+DRY=0; NO_SERVICE=0; ROLLBACK=0; RESTORE_DATA=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-usage() { echo "Usage: install.sh [--check] [--no-service] [--name NAME] [--prefix DIR] [--data DIR] [--port N] [--host ADDR]"; echo "  --name NAME   run a second, independent instance (own unit semechka-NAME, own command, own data)"; echo "  --host ADDR   bind address, e.g. a LAN IP (default: follows the Network exposure setting, loopback at first)"; exit "${1:-0}"; }
+usage() { echo "Usage: install.sh [--check] [--no-service] [--rollback [--restore-data]] [--name NAME] [--prefix DIR] [--data DIR] [--port N] [--host ADDR]"; echo "  --name NAME   run a second, independent instance (own unit semechka-NAME, own command, own data)"; echo "  --host ADDR   bind address, e.g. a LAN IP (default: follows the Network exposure setting, loopback at first)"; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do case "$1" in
-  --check) DRY=1;; --no-service) NO_SERVICE=1;; --prefix) PREFIX="$2"; shift;; --data) DATA="$2"; shift;; --port) PORT="$2"; shift;; --name) NAME="$2"; shift;; --host) HOST="$2"; shift;;
+  --check) DRY=1;; --no-service) NO_SERVICE=1;; --prefix) PREFIX="$2"; shift;; --data) DATA="$2"; shift;; --port) PORT="$2"; shift;; --name) NAME="$2"; shift;; --rollback) ROLLBACK=1;; --restore-data) RESTORE_DATA=1;; --host) HOST="$2"; shift;;
   -h|--help) usage 0;; *) echo "Unknown option: $1" >&2; usage 2;; esac; shift; done
 
 ok() { printf '  [ ok ] %s\n' "$*"; }; warn() { printf '  [warn] %s\n' "$*"; }; bad() { printf '  [FAIL] %s\n' "$*"; FAIL=1; }
@@ -24,6 +24,28 @@ FAIL=0
 case "$NAME" in ""|[a-z0-9-]*) ;; *) echo "--name must be lowercase letters, digits and dashes" >&2; exit 2;; esac
 SUFFIX=""; [ -n "$NAME" ] && SUFFIX="-$NAME"
 PROBE="${HOST:-127.0.0.1}"; [ "$PROBE" = "0.0.0.0" ] && PROBE=127.0.0.1
+# ---- rollback: reinstall the previous recorded version; optionally restore the data snapshot taken before the update
+if [ "$ROLLBACK" -eq 1 ]; then
+  [ -x "$PREFIX/venv/bin/semechka" ] || { echo "Nothing installed at $PREFIX"; exit 1; }
+  CUR=$("$PREFIX/venv/bin/semechka" --version | awk '{print $NF}')
+  PREV=$(ls "$PREFIX/releases" 2>/dev/null | grep -v "^$CUR\$" | sort -V | tail -1 || true)
+  [ -n "$PREV" ] || { echo "No earlier version is recorded in $PREFIX/releases"; exit 1; }
+  echo "Rolling back $CUR -> $PREV"
+  systemctl --user stop "semechka$SUFFIX.service" 2>/dev/null || true
+  "$PREFIX/venv/bin/pip" install --quiet --force-reinstall "$PREFIX"/releases/"$PREV"/semechka-*.whl
+  if [ "$RESTORE_DATA" -eq 1 ]; then
+    SNAP=$(ls -d "$DATA"/pre-update/*-from-"$PREV" 2>/dev/null | sort | tail -1 || true)
+    [ -n "$SNAP" ] || { echo "No data snapshot taken before an update from $PREV was found. Program rolled back; data untouched."; exit 1; }
+    for f in semechka.db semechka.db-wal semechka.db-shm; do [ -e "$DATA/$f" ] && mv "$DATA/$f" "$DATA/$f.after-update"; done
+    cp -p "$SNAP/semechka.db" "$DATA/semechka.db"; cp -p "$SNAP/master.key" "$DATA/master.key"
+    [ -d "$SNAP/assets" ] && { rm -rf "$DATA/assets.after-update"; [ -d "$DATA/assets" ] && mv "$DATA/assets" "$DATA/assets.after-update"; cp -a "$SNAP/assets" "$DATA/assets"; }
+    echo "  [ ok ] data restored from $SNAP (changes made since the update are kept as *.after-update)"
+  fi
+  systemctl --user start "semechka$SUFFIX.service" 2>/dev/null || true
+  echo "  [ ok ] now running $("$PREFIX/venv/bin/semechka" --version)"
+  exit 0
+fi
+
 echo "Semechka installer — preflight"
 
 [ "$(uname -s)" = "Linux" ] && ok "Linux $(uname -m)" || bad "Linux is required (found $(uname -s))"
@@ -62,12 +84,29 @@ else warn "no SHA256SUMS found: the package cannot be verified"; fi
 [ "$FAIL" -eq 0 ] || { echo; echo "Preflight failed. Nothing was changed."; exit 1; }
 [ "$DRY" -eq 1 ] && { echo; echo "Preflight passed. (--check: nothing installed)"; exit 0; }
 
+# ---- existing install: snapshot data before touching the program (consistent SQLite copy + key)
+if [ -x "$PREFIX/venv/bin/semechka" ]; then
+  OLDVER=$("$PREFIX/venv/bin/semechka" --version 2>/dev/null | awk '{print $NF}' || echo unknown)
+  if [ -f "$DATA/semechka.db" ]; then
+    SNAP="$DATA/pre-update/$(date +%Y%m%d-%H%M%S)-from-$OLDVER"; mkdir -p "$SNAP" && chmod 700 "$DATA/pre-update" "$SNAP"
+    "$PYBIN" - "$DATA/semechka.db" "$SNAP/semechka.db" <<'PYSNAP'
+import sqlite3, sys
+src = sqlite3.connect(sys.argv[1]); dst = sqlite3.connect(sys.argv[2]); src.backup(dst); dst.close(); src.close()
+PYSNAP
+    cp -p "$DATA/master.key" "$SNAP/master.key"
+    [ -d "$DATA/assets" ] && cp -al "$DATA/assets" "$SNAP/assets" 2>/dev/null || true
+    ok "existing install $OLDVER found; data snapshot kept in $SNAP"
+  fi
+fi
+
 echo; echo "Installing to $PREFIX (data in $DATA)"
 "$PYBIN" -m venv "$PREFIX/venv"
 "$PREFIX/venv/bin/pip" install --quiet --upgrade pip
 "$PREFIX/venv/bin/pip" install --quiet "$WHEEL"
 mkdir -p "$DATA" && chmod 700 "$DATA"
 mkdir -p "$HOME/.local/bin" && ln -sf "$PREFIX/venv/bin/semechka" "$HOME/.local/bin/semechka$SUFFIX"
+NEWVER=$("$PREFIX/venv/bin/semechka" --version | awk '{print $NF}')
+mkdir -p "$PREFIX/releases/$NEWVER" && cp "$WHEEL" "$PREFIX/releases/$NEWVER/"  # kept so --rollback can reinstall it
 ok "installed $("$PREFIX/venv/bin/semechka" --version)"
 
 if [ "$NO_SERVICE" -eq 0 ] && command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
@@ -93,7 +132,7 @@ ProtectHome=read-only
 [Install]
 WantedBy=default.target
 UNIT
-  systemctl --user daemon-reload && systemctl --user enable --now semechka$SUFFIX.service
+  systemctl --user daemon-reload && systemctl --user enable semechka$SUFFIX.service && systemctl --user restart semechka$SUFFIX.service
   ok "service enabled (systemctl --user status semechka$SUFFIX)"
   for _ in $(seq 1 30); do curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1 && break; sleep 0.5; done
 else
