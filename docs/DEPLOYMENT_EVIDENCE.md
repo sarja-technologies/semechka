@@ -38,6 +38,9 @@ rollback rehearsal and 5 restart cycles of sign-in, CSRF-protected write, sign-o
    Installer snapshots: `roasted/data/pre-update/20261025-110745-from-0.4.0/`, `salted/data/pre-update/20261025-111346-from-0.4.0/`.
    The deployed build's tarball is kept as `releases/superseded/semechka-0.4.0-f11066bf.tar.gz`.
 4. Neither engine was restarted (`sarness-engine` pid 61700, `semechka-sarness` pid 352517 before and after).
+5. The build on the Spark (wheel `625a14d6…`) was made from the hardening commit before its imports were re-sorted:
+   five Python files differ from the tagged v0.4.0 source only in how their import lines are wrapped. The released
+   artifact is rebuilt from the tagged commit (see the release's checksums).
 
 ### Rollback, rehearsed three times on the copy
 | Step | Result (each of 3 cycles) |

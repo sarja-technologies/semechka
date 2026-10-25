@@ -61,8 +61,9 @@
   from any client ("Waiting for the engine to finish another reply"), up to the queue's wait limit, then gives up
   without switching. Tested against an engine double that switches the way the real one does
   (`test_engine_coordination.py`: no reply was cut off).
-- **What remains unprotected:** (1) the engine's status and the request that makes it switch are two calls, so a
-  reply another program starts in the round trip between them can still be cut off; (2) clients that do not run
+- **Engine-level limitation: cross-client scheduling is not completely safe.** Semechka narrows the window but
+  cannot close it, because the engine offers nothing to reserve its chat model. What remains unprotected: (1) the
+  engine's status and the request that makes it switch are two calls, so a reply another program starts in the round trip between them can still be cut off; (2) clients that do not run
   Semechka (or another Semechka server sharing the engine) do not wait for Semechka's replies; (3) Semechka predicts a
   switch from the model and context size it asks for; a difference in GPU layers or the engine's own default context
   that it cannot see is not predicted; (4) a reply that starts while someone unloads the model fails at its start
