@@ -144,6 +144,7 @@ test.describe('settings', () => {
     const page = await as('owner');
     await page.goto('/admin/settings?q=password_min_length');
     const row = page.locator('article.set', { hasText: 'Minimum password length' });
+    await row.getByLabel('Minimum password length').clear(); // Firefox over BiDi appends to a number field otherwise
     await row.getByLabel('Minimum password length').fill('10');
     await row.getByRole('button', { name: 'Save' }).click();
     const dlg = page.getByRole('dialog', { name: 'This change reduces protection' });

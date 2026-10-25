@@ -1,8 +1,9 @@
 """Model discovery metadata, engine status and load/unload against the Sarness double (tests/fake_sarness.py).
 
-The double follows engine 0.4.0's real behaviour where it matters for safety: loading a chat model stops the loaded
-one even mid-reply, so Semechka must refuse; unload refuses mid-reply; image/video models are freed through
-/v1/models/{id}/unload and refused while a job runs.
+The double follows engine 0.4.0's real behaviour where it matters for safety: asking for another chat model stops the
+loaded one even mid-reply (through /v1/llm/load or a completion), so Semechka never preloads and never runs two chat
+models at once on it; unload refuses mid-reply; image/video models are freed through /v1/models/{id}/unload and the
+worker stopped through /v1/worker/stop, both refused while a job runs.
 """
 import json
 
@@ -62,58 +63,62 @@ def test_discovery_still_works_with_an_engine_that_predates_capabilities(mo, st)
 
 
 # ---- load / unload -------------------------------------------------------------------------------------
-def test_load_and_unload_a_chat_model_with_audit_and_reconciled_state(mo, st):
+def test_a_chat_model_is_never_loaded_ahead_of_time_on_a_shared_engine(mo, st):
     m = mid(st, "local:fake-chat")
     pre = mo.get(f"/api/admin/models/{m}/lifecycle").json()
-    assert pre["state"] == "idle" and pre["load"]["allowed"] and pre["unload"]["noop"] == "Not loaded."
-    r = mo.post(f"/api/admin/models/{m}/load")
-    assert r.status_code == 200, r.text
-    assert r.json()["operation"]["state"] == "done"
-    assert fs.STATE["loads"] == ["fake-chat"]
-    assert models_by_real(st)["local:fake-chat"][1]["loaded"] is True
-    assert mo.get(f"/api/admin/models/{m}/lifecycle").json()["state"] == "loaded"
-    again = mo.post(f"/api/admin/models/{m}/load").json()
-    assert again["noop"] == "Already loaded." and fs.STATE["loads"] == ["fake-chat"]
+    assert pre["state"] == "loaded"  # the setup smoke test used it, which is how chat models load on this engine
+    assert not pre["load"]["allowed"] and "turned off" in pre["load"]["blockers"][0]
+    r = mo.post(f"/api/admin/models/{mid(st, 'local:fake-big')}/load")
+    assert r.status_code == 501 and r.json()["detail"]["code"] == "unsupported"
+    assert "no way to reserve" in r.json()["detail"]["message"]
+    assert fs.STATE["loads"] == [] and fs.STATE["llm"]["model_id"] == "fake-chat"  # /v1/llm/load is never called
+    assert mo.get("/api/engines").json()["engines"][0]["supports"]["load"] is False
+    assert actions(st) == ["model.load.refused"]
+
+
+def test_unload_a_chat_model_with_audit_and_reconciled_state(mo, st):
+    m = mid(st, "local:fake-chat")
     r = mo.post(f"/api/admin/models/{m}/unload")
     assert r.status_code == 200 and r.json()["operation"]["state"] == "done"
     assert fs.STATE["unloads"] == ["fake-chat"] and fs.STATE["llm"]["model_id"] is None
     assert models_by_real(st)["local:fake-chat"][1]["loaded"] is False
-    assert actions(st) == ["model.load", "model.load.done", "model.unload", "model.unload.done"]
+    assert mo.post(f"/api/admin/models/{m}/unload").json()["noop"] == "Not loaded."
+    assert actions(st) == ["model.unload", "model.unload.done"]
 
 
-def test_loading_another_chat_model_is_refused_while_someone_is_getting_a_reply(mo, st):
-    fs.STATE["llm"].update(state="ready", model_id="fake-big", active_streams=1)
-    r = mo.post(f"/api/admin/models/{mid(st, 'local:fake-chat')}/load")
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "busy"
-    assert "cut them off" in r.json()["detail"]["message"]
-    assert fs.STATE["loads"] == [] and fs.STATE["llm"]["model_id"] == "fake-big"
-    r = mo.post(f"/api/admin/models/{mid(st, 'local:fake-big')}/unload")
+def test_unload_is_refused_while_a_reply_is_written_or_about_to_start(mo, st):
+    m = mid(st, "local:fake-chat")
+    fs.STATE["llm"]["active_streams"] = 1  # any client's reply: the engine counts them all
+    r = mo.post(f"/api/admin/models/{m}/unload")
     assert r.status_code == 409 and fs.STATE["unloads"] == []
-    assert actions(st) == ["model.load.refused", "model.unload.refused"]
-
-
-def test_this_servers_own_reply_in_progress_also_blocks_a_swap(mo, st):
-    fs.STATE["llm"].update(state="ready", model_id="fake-big", active_streams=0)
+    fs.STATE["llm"]["active_streams"] = 0
     bid = mo.get("/api/admin/backends").json()[0]["id"]
-    t = st.scheduler.submit(backend_id=bid, user_id="u_x", kind="chat", max_wait=0, model_id=mid(st, "local:fake-big"))
+    t = st.scheduler.submit(backend_id=bid, user_id="u_x", kind="chat", max_wait=0, model_id=m, exclusive=True)
     try:
         assert t.state == "running"
-        r = mo.post(f"/api/admin/models/{mid(st, 'local:fake-chat')}/load")
+        r = mo.post(f"/api/admin/models/{m}/unload")
         assert r.status_code == 409 and "about to receive a reply" in r.json()["detail"]["message"]
     finally:
         t.release()
-    assert mo.post(f"/api/admin/models/{mid(st, 'local:fake-chat')}/load").status_code == 200
+    assert fs.STATE["unloads"] == [] and actions(st) == ["model.unload.refused", "model.unload.refused"]
 
 
-def test_a_failed_load_is_reported_cleaned_and_audited(mo, st):
-    fs.STATE["fail_load"] = True
-    r = mo.post(f"/api/admin/models/{mid(st, 'local:fake-chat')}/load")
-    assert r.status_code == 200
-    op = r.json()["operation"]
-    assert op["state"] == "failed" and "llama-server exited" in op["error"] and "/srv/private" not in op["error"]
-    assert actions(st)[-1] == "model.load.failed"
-    eng = mo.get("/api/engines").json()["engines"][0]
-    assert eng["operation"]["state"] == "failed" and eng["status"]["llm"]["state"] == "error"
+def test_engines_that_hold_several_models_keep_the_load_checks(st, monkeypatch):
+    """Ollama-style engines: load stays available, and still refuses while another model is mid-reply."""
+    from semechka import adapters, lifecycle_svc
+    from semechka.adapters.base import Manifest
+    from semechka.models import Backend
+    from semechka.models import Model as M
+
+    class Multi(adapters.Adapter):
+        manifest = Manifest(id="multi", name="Multi", model_load=True, model_unload=True)
+    monkeypatch.setitem(adapters.REGISTRY, "multi", Multi)
+    b, m = Backend(id="b_multi", adapter="multi", enabled=True), M(id="m1", real_id="local:one", available=True)
+    busy = {"llm": {"state": "ready", "model_id": "two", "active_streams": 1}, "jobs": {}, "memory": {}}
+    v = lifecycle_svc.check(st, m, b, "load", busy)
+    assert not v["allowed"] and "cut them off" in v["blockers"][0]
+    v = lifecycle_svc.check(st, m, b, "load", {**busy, "llm": {**busy["llm"], "active_streams": 0}})
+    assert v["allowed"]
 
 
 def test_image_models_are_freed_but_never_loaded_ahead_of_time(mo, st):
@@ -145,7 +150,7 @@ def test_engine_queue_shows_other_clients_jobs_without_their_content(mo, st):
     assert len(own) == 1 and own[0]["id"] and own[0]["model_ref"]["alias"] == "fake-turbo"
     assert foreign == [{**foreign[0], "id": None}] and foreign[0]["model"] == "fake-clip"
     assert eng["status"]["memory"]["total_mb"] == 120000 and eng["supports"] == {
-        "load": True, "unload": True, "status": True, "queue": True}
+        "load": False, "unload": True, "worker_stop": True, "exclusive_chat_model": True, "status": True, "queue": True}
 
 
 # ---- permissions (server-side; the UI never decides) ---------------------------------------------------

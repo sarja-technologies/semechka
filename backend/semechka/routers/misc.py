@@ -85,7 +85,7 @@ def my_resources(ctx: Ctx = Depends(current)):
 
 
 @router.get("/health")
-def health(s=Depends(get_db), st: AppState = Depends(get_state)):
+def health(s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     """Liveness for installers and monitors. Reveals nothing about configuration."""
     s.execute(select(Meta).limit(1)).first()
     return {"ok": True}

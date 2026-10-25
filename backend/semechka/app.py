@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import re
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,7 +20,24 @@ from sqlalchemy import delete, select
 from . import __version__, attachments_svc, audit, media_svc, services
 from .config import Config
 from .models import AuditEvent, Conversation, UsageEvent
-from .routers import admin_config, admin_content, admin_people, assistants, auth, catalog, chat, knowledge, lifecycle, me, media, misc, queue, setup, sso, theme  # sso: OIDC single sign-on
+from .routers import (  # sso: OIDC single sign-on
+    admin_config,
+    admin_content,
+    admin_people,
+    assistants,
+    auth,
+    catalog,
+    chat,
+    knowledge,
+    lifecycle,
+    me,
+    media,
+    misc,
+    queue,
+    setup,
+    sso,
+    theme,
+)
 from .state import AppState
 
 log = logging.getLogger("semechka")
@@ -34,9 +52,12 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         token = setup.ensure_setup_token(st)
-        if token:
+        if token and sys.stdout.isatty():
             print(f"\n  Semechka setup token (one time, expires when the owner account is created):\n    {token}\n"
                   f"  Also saved to {cfg.setup_token_path}\n", flush=True)
+        elif token:  # a journal or log file keeps what it is given: name the owner-only file, never the token
+            print(f"\n  Semechka is waiting for its owner. The one-time setup token is in {cfg.setup_token_path}\n"
+                  f"  (read it with: cat {cfg.setup_token_path})\n", flush=True)
         task = asyncio.create_task(_sweeper(st)) if cfg.background else None
         media_task = asyncio.create_task(media_svc.pump(st)) if cfg.background else None  # media block
         yield

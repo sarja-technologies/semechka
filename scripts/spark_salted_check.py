@@ -1,6 +1,7 @@
 """0.4.0 checks of Salted after an update, against the real engine. Runs ON the Spark (stdlib only); copy it to
 ~/semechka-deploy/bin/. Reads the test passwords from their 0600 file and never prints them. The one conversation it
-creates is deleted again. Usage: python3 spark_salted_check.py 8788"""
+creates is deleted again by its id, even if a check fails, and the member's conversations are compared with the list
+taken before; no other conversation is touched. Usage: python3 spark_salted_check.py 8788"""
 import http.cookiejar
 import json
 import sys
@@ -93,14 +94,20 @@ check(not any(p.startswith("models.") for p in roles.get("member", {}).get("gran
 
 # a real reply on the engine through the upgraded copy
 quick = next((m for m in cat["models"] if m["alias"] == "Quick"), cat["models"][0])
-conv = member.call("POST", "/api/chat/conversations", {"model_id": quick["id"]})
-t0 = time.time()
-evs = member.stream(f"/api/chat/conversations/{conv['id']}/generate", {"mode": "send", "operation": "text",
-                    "content": "Reply with one short sentence about the sea.", "model_id": quick["id"], "parent_id": None})
-done = next((e for e in evs if e["type"] == "done"), None)
-check(bool(done and done["status"] == "complete" and done["content"].strip()),
-      f"member chat with {quick['label']} streamed a real reply in {time.time() - t0:.1f}s: " + (done["content"].strip()[:100] if done else str(evs[-1:])))
+def all_ids():
+    return {c["id"] for a in ("false", "true") for c in member.call("GET", f"/api/chat/conversations?archived={a}&limit=500")}
 
-check(member.status("DELETE", f"/api/chat/conversations/{conv['id']}") in (200, 204), "the test conversation is removed again")
-check(len(member.call("GET", "/api/chat/conversations")) == len(convs), "member's conversation count is back to what it was")
+
+before = all_ids()
+conv = member.call("POST", "/api/chat/conversations", {"model_id": quick["id"]})
+try:
+    t0 = time.time()
+    evs = member.stream(f"/api/chat/conversations/{conv['id']}/generate", {"mode": "send", "operation": "text",
+                        "content": "Reply with one short sentence about the sea.", "model_id": quick["id"], "parent_id": None})
+    done = next((e for e in evs if e["type"] == "done"), None)
+    check(bool(done and done["status"] == "complete" and done["content"].strip()),
+          f"member chat with {quick['label']} streamed a real reply in {time.time() - t0:.1f}s: " + (done["content"].strip()[:100] if done else str(evs[-1:])))
+finally:
+    check(member.status("DELETE", f"/api/chat/conversations/{conv['id']}") in (200, 204, 404), "the test conversation is removed again")
+    check(all_ids() == before, f"member's conversations are exactly what they were ({len(before)})")
 print("FAILED:" if fails else "ALL PASSED", fails if fails else "", flush=True)

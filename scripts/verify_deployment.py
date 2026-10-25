@@ -5,6 +5,9 @@
 
 Everything is checked against the running services, never against code. Secrets are read over SSH inside this process
 and are never printed; the report contains only facts (versions, counts, booleans, timings, modes).
+The one conversation it creates in Salted (as the member test account) is deleted again by its id when the run ends,
+even if a check or the script itself fails, and the member's conversation list is checked to be exactly what it was
+before. No other conversation is ever touched.
 Exit status is non-zero if any check fails.
 """
 from __future__ import annotations
@@ -25,6 +28,8 @@ HOST = os.environ.get("SPARK_HOST", "spark")
 IP = os.environ.get("SPARK_IP", "192.168.20.193")
 ROASTED, SALTED = f"http://{IP}:8787", f"http://{IP}:8788"
 RESULTS: list[tuple[str, bool, str]] = []
+MEMBER = "member@salted.test"
+LEFT: dict = {"before": None, "created": []}  # what the run must leave as it found it
 
 
 def ssh(cmd: str, timeout=120) -> str:
@@ -82,11 +87,49 @@ def engine_system() -> dict:
     return json.loads(out) if out else {}
 
 
+def conv_ids(c: Client) -> set[str] | None:
+    """Every conversation the account has, archived or not, in either workspace."""
+    ids: set[str] = set()
+    for archived in ("false", "true"):
+        for mode in ("chat", "code"):
+            code, rows = c.json("GET", f"/api/chat/conversations?archived={archived}&mode={mode}&limit=500")
+            if code in (403, 409, 501) and mode == "code":
+                continue  # the coding workspace is not offered to this account
+            if code != 200 or not isinstance(rows, list):
+                return None
+            ids |= {r["id"] for r in rows}
+    return ids
+
+
+def clean_up():
+    """Delete exactly the conversations this run created, by id, then compare with the list taken before the run."""
+    if LEFT["before"] is None:
+        return
+    c = Client(SALTED)
+    if c.login(MEMBER, cred(MEMBER)) != 200:
+        check("verification conversation removed", False, "could not sign in to remove it")
+        return
+    gone = [cid for cid in LEFT["created"] if c.json("DELETE", f"/api/chat/conversations/{cid}")[0] in (200, 404)]
+    check("verification conversation removed", len(gone) == len(LEFT["created"]), f"{len(gone)} of {len(LEFT['created'])}")
+    after = conv_ids(c)
+    check("Salted is left with exactly the conversations it had before the run",
+          after is not None and after == LEFT["before"], f"{len(LEFT['before'])} before, {len(after or ())} after")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--restart", action="store_true", help="also restart both Semechka services and re-verify persistence")
     a = ap.parse_args()
+    try:
+        run(a)
+    finally:
+        clean_up()
+    failed = [n for n, ok, _ in RESULTS if not ok]
+    print(f"\n{len(RESULTS) - len(failed)} passed, {len(failed)} failed")
+    return 1 if failed else 0
 
+
+def run(a):
     # 1. the Spark is where we think it is
     ips = ssh("ip -4 -br addr | awk '{print $1, $3}'")
     check("Spark LAN address confirmed on its own interface", f"{IP}/" in ips, ips.replace("\n", "; "))
@@ -135,14 +178,18 @@ def main() -> int:
     code, spub = s.json("GET", "/api/public")
     check("Salted reachable over the LAN and set up", code == 200 and spub.get("needs_setup") is False,
           f"org {spub.get('brand', {}).get('org_name')!r}")
-    member_pw = cred("member@salted.test")
-    check("Salted test account can sign in", s.login("member@salted.test", member_pw) == 200)
+    member_pw = cred(MEMBER)
+    check("Salted test account can sign in", s.login(MEMBER, member_pw) == 200)
+    LEFT["before"] = conv_ids(s)
+    check("Salted member's conversations listed before the run", LEFT["before"] is not None,
+          f"{len(LEFT['before'] or ())} conversations")
     models = s.json("GET", "/api/chat/models")[1]
     models = models if isinstance(models, list) else []
     check("Salted offers real models to a member", len(models) >= 1, ", ".join(m["alias"] for m in models))
     quick = next((m for m in models if m["alias"] == "Quick"), models[0] if models else None)
-    if quick:
+    if quick and LEFT["before"] is not None:  # never create anything the run could not account for afterwards
         conv = s.json("POST", "/api/chat/conversations", {"model_id": quick["id"]})[1]
+        LEFT["created"].append(conv["id"])
         t0 = time.time()
         code, resp, _ = s.req("POST", f"/api/chat/conversations/{conv['id']}/generate",
                               {"mode": "send", "content": "Reply with one short sentence about the sea.", "model_id": quick["id"]}, stream=True)
@@ -224,10 +271,6 @@ def main() -> int:
         new_orig = ssh("systemctl --user show sarness-engine -p MainPID --value")
         check("the original Sarness Engine service was not interrupted", new_orig == orig_pid, f"pid {new_orig}")
         check("dedicated engine still serving", engine_system().get("engine", {}).get("version") is not None)
-
-    failed = [n for n, ok, _ in RESULTS if not ok]
-    print(f"\n{len(RESULTS) - len(failed)} passed, {len(failed)} failed")
-    return 1 if failed else 0
 
 
 if __name__ == "__main__":

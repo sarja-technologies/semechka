@@ -11,9 +11,13 @@ Audited against the Sarness Engine HTTP API v1 (engine 0.4.0, API 1.1; its /v1/o
   POST /v1/agent/completions stateless SSE completion; Semechka owns the transcript
   GET  /v1/llm/status        state stopped|loading|ready|error, model_id, active_streams, ctx, loaded_at, error
   POST /v1/llm/load          {model_id}: blocks until llama-server is ready (up to 300 s). It first stops whatever chat
-                             model is loaded, even mid-reply, so callers must check active_streams themselves.
-  POST /v1/llm/unload        409 while a reply is being generated
+                             model is loaded, even mid-reply, and nothing lets a client reserve the slot, so a check
+                             made beforehand cannot protect a reply another client starts. Semechka never calls it.
+  POST /v1/agent/completions also switches the chat model (same code path, engine `ensure_local`) when the request
+                             names another model or another context window, again even mid-reply.
+  POST /v1/llm/unload        409 while a reply is being generated (checked inside the engine)
   POST /v1/models/{id}/unload  frees a chat model or an image/video model held by the GPU worker; 409 while busy
+  POST /v1/worker/stop       stops the picture/video worker process, returning all of its memory; 409 while it runs a job
   GET  /v1/jobs?status=      the engine's job queue (all of its clients, so prompts are never copied)
 Semechka does not use Sarness' own conversation store, so no chat content is persisted by Sarness.
 Models Sarness reaches through a remote endpoint are marked external, so the egress policy applies.
@@ -29,6 +33,10 @@ import httpx
 from .base import Adapter, AdapterError, DiscoveredModel, Manifest
 from .openai_compat import _short
 from .sarness_media import SarnessMediaMixin, clean_error
+
+PRELOAD_OFF = ("Loading a chat model ahead of time is turned off for this engine: it switches its one chat model even "
+               "while another client's reply is being written, and offers no way to reserve it. A chat model loads "
+               "when someone first uses it.")
 
 
 def _h(key):
@@ -102,13 +110,16 @@ def media_meta(cm: dict, im: dict, repo: str | None) -> dict:
 
 class SarnessAdapter(SarnessMediaMixin, Adapter):
     manifest = Manifest(
-        id="sarness", name="Sarness Engine", model_load=True, model_unload=True, system_telemetry=True, media=True,
+        id="sarness", name="Sarness Engine", model_load=False, model_unload=True, system_telemetry=True, media=True,
+        exclusive_chat_model=True, worker_stop=True,
         reports_usage_tokens=True, reports_timings=True,
         model_metadata=["engine_name", "context", "context_trained", "default_ctx", "size", "vram_estimate_mb",
                         "quantization", "format", "architecture", "layers", "license", "description", "runtime",
                         "source_repo", "reasoning"],
-        notes="One chat model is loaded at a time; loading another replaces it. Image and video models load when a job "
-              "needs them and can be freed afterwards. Install of new models is done in Sarness itself.")
+        notes="One chat model is loaded at a time for every client, and it loads when someone first uses it. Loading "
+              "one ahead of time is not offered: the engine switches models even mid-reply and has no way to reserve "
+              "it. Image and video models load when a job needs them and can be freed afterwards. Install of new "
+              "models is done in Sarness itself.")
 
     async def health(self) -> dict:
         try:
@@ -290,11 +301,21 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
             return None
 
     async def load(self, model: str) -> None:
-        if model.startswith(("image:", "video:")):
-            raise AdapterError("Image and video models are loaded by the engine when a job needs them.", status=501, kind="unsupported")
-        if not model.startswith("local:"):
-            raise AdapterError("Models on a remote endpoint are not loaded by this engine.", status=501, kind="unsupported")
-        await self._post("/v1/llm/load", {"model_id": model.split(":", 1)[1]}, timeout=360)
+        raise AdapterError(PRELOAD_OFF, status=501, kind="unsupported")
+
+    async def chat_slot(self) -> dict | None:
+        try:
+            async with httpx.AsyncClient(timeout=5) as c:
+                llm = await self._json(c, "/v1/llm/status")
+        except httpx.HTTPError:
+            return None
+        if not llm:
+            return None
+        return {"state": llm.get("state"), "model_id": llm.get("model_id"), "ctx": llm.get("ctx"),
+                "active_streams": int(llm.get("active_streams") or 0)}
+
+    async def stop_worker(self) -> None:
+        await self._post("/v1/worker/stop", None, timeout=120)
 
     async def unload(self, model: str) -> None:
         if model.startswith("endpoint:"):

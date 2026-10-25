@@ -13,6 +13,7 @@ test.describe('sign-in', () => {
     await page.getByLabel('Password').fill('wrong password here');
     await page.getByRole('button', { name: /sign in/i }).click();
     const unknown = await page.getByRole('alert').innerText();
+    await page.getByLabel('Email').clear(); // Firefox over BiDi appends to an email field otherwise
     await page.getByLabel('Email').fill(USERS.member.email);
     await page.getByLabel('Password').fill('also wrong password');
     await page.getByRole('button', { name: /sign in/i }).click();
@@ -60,6 +61,7 @@ test.describe('sign-in', () => {
     await owner.post('/api/admin/users', { email: 'locked@e2e.test', display_name: 'Lock Me', password: PW, role_id: 'member', team_ids: [] });
     await page.goto('/login');
     for (let i = 0; i < 9; i++) {
+      await page.getByLabel('Email').clear();
       await page.getByLabel('Email').fill('locked@e2e.test');
       await page.getByLabel('Password').fill(`wrong password ${i}`);
       await page.getByRole('button', { name: /sign in/i }).click();
@@ -103,6 +105,7 @@ test.describe('registration modes', () => {
     const admin = await as('admin');
     await admin.goto('/admin/people');
     await admin.getByLabel('Status').selectOption('pending_approval');
+    await expect(admin.getByText(/^1 total/)).toBeVisible(); // the filtered list has replaced the full one
     await admin.getByRole('checkbox', { name: 'Select Pat Pending' }).check();
     await admin.getByRole('button', { name: 'Approve', exact: true }).click();
     await admin.getByRole('button', { name: /^Approve 1$/ }).click();

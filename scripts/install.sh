@@ -174,7 +174,11 @@ elif curl -fsS "http://$PROBE:$PORT/api/health" >/dev/null 2>&1; then
   echo "Semechka is running."
   echo "  Open:         http://$PROBE:$PORT"
   if [ -f "$DATA/setup-token" ]; then
-    echo "  Setup token:  $(cat "$DATA/setup-token")   (one time; file: $DATA/setup-token)"
+    if [ -t 1 ]; then
+      echo "  Setup token:  $(cat "$DATA/setup-token")   (one time; file: $DATA/setup-token)"
+    else  # output going to a log or another machine keeps it: name the owner-only file instead
+      echo "  Setup token:  cat $DATA/setup-token   (one time; owner-only file)"
+    fi
     echo "  Next:         the browser wizard creates the owner account, connects a model backend and sets privacy defaults."
   fi
 else

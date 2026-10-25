@@ -35,6 +35,11 @@ class Manifest:
     cancel: bool = True  # cancellation = closing the stream
     model_load: bool = False
     model_unload: bool = False
+    # One chat model is held for every client of the engine, and asking for another (or the same one with a different
+    # context window) replaces it even while a reply is being written. Semechka then never runs replies for two
+    # different chat models on it at once, and waits while another client is mid-reply before switching.
+    exclusive_chat_model: bool = False
+    worker_stop: bool = False  # the picture/video worker process can be stopped to return all of its memory
     model_install: bool = False
     media: bool = False  # image/video generation jobs (media_* methods)
     system_telemetry: bool = False
@@ -84,6 +89,14 @@ class Adapter:
         """Running and queued engine jobs: id, kind, status, model, progress, queue_position, times. Never prompts.
         None: this backend has no job queue it can report."""
         return None
+
+    async def chat_slot(self) -> dict | None:
+        """For an exclusive_chat_model engine: {"state", "model_id", "active_streams", "ctx"} of its one chat model,
+        read now. None: not reported."""
+        return None
+
+    async def stop_worker(self) -> None:
+        raise Unsupported("stopping the picture and video worker")
 
     async def load(self, model: str) -> None:
         raise Unsupported("loading models")

@@ -19,7 +19,16 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from .. import attachments_svc, audit, catalog_svc, chat_context, chat_svc, media_svc, services
+from .. import (
+    attachments_svc,
+    audit,
+    catalog_svc,
+    chat_context,
+    chat_svc,
+    lifecycle_svc,
+    media_svc,
+    services,
+)
 from ..adapters import AdapterError
 from ..backends_svc import adapter_for
 from ..deps import Ctx, current
@@ -654,6 +663,24 @@ QUEUE_MESSAGES = {
     "queue_timeout": "Your request waited too long in the queue and was cancelled. Try again in a moment.",
     "queue_cancelled": "Your request was cancelled while it was waiting in the queue.",
 }
+ENGINE_BUSY = ("The engine was writing another client's reply with a different model for too long, so it was not "
+               "switched. Try again in a moment.")
+
+
+async def _engine_slot(adapter, m: Model, params: dict, max_wait: float):
+    """On an engine with one chat model for every client: SSE events while switching it now would cut off another
+    client's reply (lifecycle_svc.wait_for_chat_slot), then a final "running" event if there was a wait. Raises
+    TimeoutError when the wait runs out."""
+    waited = False
+    try:
+        async for _ in lifecycle_svc.wait_for_chat_slot(adapter, lifecycle_svc.engine_id(m.real_id),
+                                                        lifecycle_svc.want_ctx(m, params), time.monotonic() + max_wait):
+            waited = True
+            yield _sse({"type": "queue", "position": 0, "reason": "engine_busy"})
+    except AdapterError:  # the engine could not say; the request itself reports what is wrong
+        pass
+    if waited:
+        yield _sse({"type": "queue", "position": 0, "running": True})
 
 
 async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_msg_id, parent_for_asst, request):
@@ -669,6 +696,7 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
         adapter = adapter_for(b, st)
         sys_prompt = m.system_prompt
         m_copy, b_copy = m, b
+        exclusive = adapter.manifest.exclusive_chat_model and lifecycle_svc.kind_of(m) == "llm"
     # Model instructions, workspace prompt, assistant prompt and retrieved passages travel as ONE system message
     # (several chat templates only accept a single leading system message).
     sys_parts = [x for x in [sys_prompt, *ctx_args.get("extra_system", [])] if x]
@@ -700,7 +728,7 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
             ticket = st.scheduler.submit(backend_id=b_copy.id, user_id=user_id, rank=qa["rank"], kind="chat",
                                          label=m_copy.alias, user_label=qa["user_label"], backend_limit=qa["backend_limit"],
                                          user_limit=qa["user_limit"], max_wait=qa["max_wait"], max_depth=qa["max_depth"],
-                                         model_id=m_copy.id)
+                                         model_id=m_copy.id, exclusive=exclusive)
             queue_info["position_on_arrival"] = ticket.position_on_arrival
             if ticket.state == "waiting":
                 queue_info["state"] = "waited"
@@ -708,6 +736,13 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
                     yield w if isinstance(w, str) else _sse({"type": "queue", **w})
                 yield _sse({"type": "queue", "position": 0, "running": True})
             queue_info["waited_s"] = round(ticket.waited, 3)
+            if exclusive:
+                async for w in _with_heartbeat(_engine_slot(adapter, m_copy, params, qa["max_wait"] or 300)):
+                    queue_info["state"] = "waited"
+                    yield w
+        except TimeoutError:
+            status, err = "error", ENGINE_BUSY
+            queue_info["state"] = "engine_busy"
         except QueueError as e:
             code = getattr(e, "code", "queue_error")
             if code == "queue_cancelled" and ticket is not None and ticket.ended_by == "admin":

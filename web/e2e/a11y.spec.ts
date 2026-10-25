@@ -48,7 +48,8 @@ test.describe('axe: no violations of WCAG 2.2 A/AA on any route, in all three th
       expect(found).toEqual([]);
     });
 
-    test(`${theme}: administration`, async ({ as }) => {
+    test(`${theme}: administration`, async ({ as, browserName }) => {
+      test.slow(browserName === 'firefox', 'axe over WebDriver BiDi takes about three times as long on 23 pages');
       await setTheme('owner', theme);
       const page = await as('owner');
       const found: string[] = [];
@@ -143,16 +144,21 @@ test.describe('keyboard only', () => {
   });
 
   test('every control reached by Tab shows a visible focus indicator', async ({ as }) => {
-    const page = await as('owner');
+    const first = await as('owner');
     const missing: string[] = [];
     for (const r of ['/chat', '/admin/people', '/admin/settings', '/admin/models', '/account']) {
+      // Past the last control, Firefox moves focus out of the page to its own toolbar (as it does for people), and a
+      // headless Firefox never hands it back; a fresh tab per screen starts with focus in the page.
+      const page = r === '/chat' ? first : await first.context().newPage();
       await page.goto(r);
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       await page.locator('body').click({ position: { x: 1, y: 1 } });
+      let checked = 0;
       for (let i = 0; i < 45; i++) {
         await page.keyboard.press('Tab');
         const info = await page.evaluate(() => {
           const el = document.activeElement as HTMLElement | null;
+          if (!document.hasFocus()) return { left: true };
           if (!el || el === document.body) return null;
           const cs = getComputedStyle(el), box = el.getBoundingClientRect();
           // a visually hidden file input hands its focus ring to its label, which is checked on its own
@@ -165,8 +171,11 @@ test.describe('keyboard only', () => {
           const wrapRing = !!wrap && wrap.matches(':focus-within') && /0px 0px 0px [1-9]/.test(getComputedStyle(wrap).boxShadow);
           return { ok: hidden ? true : ring || !!labelRing || wrapRing, name: `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30)}"` };
         });
+        if (info && 'left' in info) break; // focus went past the last control
+        if (info) checked++;
         if (info && !info.ok) missing.push(`${r}: ${info.name}`);
       }
+      if (checked < 5) missing.push(`${r}: only ${checked} controls reached`); // the early stop must not hide a screen
     }
     expect([...new Set(missing)]).toEqual([]);
   });
@@ -206,9 +215,16 @@ test.describe('structure', () => {
   });
 });
 
+// Firefox driven over WebDriver BiDi ignores Playwright's media emulation (reducedMotion, isMobile, hasTouch). Its own
+// preferences set the same media features, so those checks run in a Firefox launched with them.
+async function ownFirefox(browserName: string, playwright: any, prefs: Record<string, number>) {
+  return browserName === 'firefox' ? await playwright.firefox.launch({ channel: 'moz-firefox', firefoxUserPrefs: prefs }) : null;
+}
+
 test.describe('motion and touch', () => {
-  test('reduced motion removes animation and transitions', async ({ browser }) => {
-    const ctx = await browser.newContext({ reducedMotion: 'reduce', baseURL: URLS.seeded, storageState: path.join(DIRS.auth, 'owner.json') });
+  test('reduced motion removes animation and transitions', async ({ browser, browserName, playwright }) => {
+    const own = await ownFirefox(browserName, playwright, { 'ui.prefersReducedMotion': 1 });
+    const ctx = await (own ?? browser).newContext({ reducedMotion: 'reduce', baseURL: URLS.seeded, storageState: path.join(DIRS.auth, 'owner.json') });
     const page = await ctx.newPage();
     await page.goto('/admin/teams');
     await page.getByRole('button', { name: 'Create team' }).click();
@@ -217,10 +233,12 @@ test.describe('motion and touch', () => {
     expect(parseFloat(dur.t)).toBe(0);
     expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
     await ctx.close();
+    await own?.close();
   });
 
-  test('on a phone, controls are large enough to tap (at least 40 px tall) and nothing overlaps the content', async ({ browser }) => {
-    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true, baseURL: URLS.seeded, storageState: path.join(DIRS.auth, 'member.json') });
+  test('on a phone, controls are large enough to tap (at least 40 px tall) and nothing overlaps the content', async ({ browser, browserName, playwright }) => {
+    const own = await ownFirefox(browserName, playwright, { 'ui.primaryPointerCapabilities': 1, 'ui.allPointerCapabilities': 1 }); // a touch screen only
+    const ctx = await (own ?? browser).newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true, baseURL: URLS.seeded, storageState: path.join(DIRS.auth, 'member.json') });
     const page = await ctx.newPage();
     const small: string[] = [];
     for (const r of ['/chat', '/usage', '/help', '/account']) {
@@ -231,7 +249,9 @@ test.describe('motion and touch', () => {
         .map((el) => `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24)}" ${Math.round(el.getBoundingClientRect().height)}px`));
       small.push(...found.map((f) => `${r}: ${f}`));
     }
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     expect([...new Set(small)]).toEqual([]);
     await ctx.close();
+    await own?.close();
   });
 });

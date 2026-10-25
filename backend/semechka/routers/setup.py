@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import socket
+import time
 from pathlib import Path
 
 import httpx
@@ -12,8 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .. import audit, security, services, telemetry
-from .. import adapters
+from .. import adapters, audit, lifecycle_svc, security, services, telemetry
 from ..backends_svc import adapter_for, sync_models
 from ..crypto import sha256_hex
 from ..deps import get_db, get_state, issue_session
@@ -85,12 +85,12 @@ def load_hints(st: AppState) -> dict[str, dict]:
 
 
 @router.get("/status")
-def status(s=Depends(get_db)):
+def status(s=Depends(get_db, scope="function")):
     return {"needs_setup": needs_setup(s)}
 
 
 @router.get("/hardware")
-async def hardware(request: Request, s=Depends(get_db), st: AppState = Depends(get_state)):
+async def hardware(request: Request, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     _check_token(request, s, st)
     found = []
     for hid, hint in load_hints(st).items():
@@ -134,7 +134,7 @@ def _resolve_probe(b: BackendProbe, st: AppState) -> BackendProbe:
 
 
 @router.post("/backend-test")
-async def backend_test(body: BackendProbe, request: Request, s=Depends(get_db), st: AppState = Depends(get_state)):
+async def backend_test(body: BackendProbe, request: Request, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     _check_token(request, s, st)
     body = _resolve_probe(body, st)
     _validate_url(body.base_url)
@@ -172,7 +172,7 @@ class CompleteIn(BaseModel):
 
 
 @router.post("/complete")
-async def complete(body: CompleteIn, request: Request, response: Response, s=Depends(get_db),
+async def complete(body: CompleteIn, request: Request, response: Response, s=Depends(get_db, scope="function"),
                    st: AppState = Depends(get_state)):
     _check_token(request, s, st)
     ip = request.client.host if request.client else ""
@@ -261,6 +261,15 @@ async def _smoke(st, s, backend_id, real_id) -> dict:
     ad = adapter_for(b, st)
     text = ""
     try:
+        m = s.execute(select(Model).where(Model.backend_id == backend_id, Model.real_id == real_id)).scalar_one_or_none()
+        if ad.manifest.exclusive_chat_model and m is not None and lifecycle_svc.kind_of(m) == "llm":
+            try:  # the engine is shared: never switch its model under another client's reply just to test it
+                async for _ in lifecycle_svc.wait_for_chat_slot(ad, lifecycle_svc.engine_id(real_id),
+                                                                lifecycle_svc.want_ctx(m, {}), time.monotonic() + 60):
+                    pass
+            except TimeoutError:
+                return {"ok": False, "error": "The engine is busy with another client's reply. The model was not "
+                                              "tested; try it from the chat once setup is done."}
         async for ev in ad.chat_stream(real_id, [{"role": "user", "content": "Reply with the single word: ready"}],
                                        {"max_tokens": 16, "temperature": 0}):
             if ev["type"] == "delta":

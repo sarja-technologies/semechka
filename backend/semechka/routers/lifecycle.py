@@ -26,6 +26,7 @@ def _supports(b: Backend) -> dict:
     cls = adapters.REGISTRY.get(b.adapter)
     m = cls.manifest if cls else None
     return {"load": bool(m and m.model_load), "unload": bool(m and m.model_unload),
+            "worker_stop": bool(m and m.worker_stop), "exclusive_chat_model": bool(m and m.exclusive_chat_model),
             "status": bool(cls and cls.status is not adapters.Adapter.status),
             "queue": bool(cls and cls.engine_jobs is not adapters.Adapter.engine_jobs)}
 
@@ -121,3 +122,38 @@ async def model_lifecycle(mid: str, op: str, ctx: Ctx = Depends(require(LOAD))):
         busy = rec["error_kind"] == "busy"
         raise _err(409 if busy else 502, "busy" if busy else "engine_error", rec["error"] or "The engine refused.")
     return {"ok": True, "operation": rec, "warnings": verdict["warnings"]}
+
+
+@router.get("/engines/{bid}/worker")
+async def worker_state(bid: str, ctx: Ctx = Depends(require(LOAD))):
+    b = ctx.s.get(Backend, bid)
+    if b is None:
+        raise _err(404, "not_found", "No such engine.")
+    status = await lifecycle_svc.engine_state(ctx.st, b) if _supports(b)["status"] else None
+    return {"stop": lifecycle_svc.check_worker_stop(ctx.st, b, status),
+            "operation": lifecycle_svc.public_op(ctx.st.lifecycle.get(b.id))}
+
+
+@router.post("/engines/{bid}/worker/stop")
+async def worker_stop(bid: str, ctx: Ctx = Depends(require(LOAD))):
+    """Stop the picture/video worker process: all of its memory comes back. Refused while it works or jobs wait."""
+    b = ctx.s.get(Backend, bid)
+    if b is None:
+        raise _err(404, "not_found", "No such engine.")
+    status = await lifecycle_svc.engine_state(ctx.st, b) if _supports(b)["status"] else None
+    verdict = lifecycle_svc.check_worker_stop(ctx.st, b, status)
+    if verdict["noop"] and verdict["allowed"]:
+        return {"ok": True, "noop": verdict["noop"], "operation": None}
+    if not verdict["allowed"]:
+        audit_ctx(ctx, "engine.worker_stop.refused", bid, {"reason": verdict["blockers"][0][:200]})
+        ctx.s.commit()
+        code = verdict["code"]
+        raise _err({"unsupported": 501, "unreachable": 502}.get(code, 409), code, verdict["blockers"][0],
+                   blockers=verdict["blockers"], warnings=verdict["warnings"])
+    audit_ctx(ctx, "engine.worker_stop", bid, {})
+    ctx.s.commit()
+    rec = await lifecycle_svc.stop_worker(ctx.st, b, ctx.user.id, ctx.ip)
+    if rec["state"] == "failed":
+        busy = rec["error_kind"] == "busy"
+        raise _err(409 if busy else 502, "busy" if busy else "engine_error", rec["error"] or "The engine refused.")
+    return {"ok": True, "operation": rec}

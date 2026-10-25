@@ -15,12 +15,17 @@ from .perms import Principal
 from .state import AppState
 
 
-
 def get_state(request: Request) -> AppState:
     return request.app.state.sem
 
 
 def get_db(request: Request, st: AppState = Depends(get_state)):
+    """One session per request, committed when the endpoint returns.
+
+    Every use is `Depends(get_db, scope="function")`: with the default request scope FastAPI runs the commit after the
+    response has been sent, so a client could be told "signed in" (or "saved") and read the row before it exists, and
+    a failed commit would still have answered 200. Streaming endpoints commit before they return and open their own
+    sessions inside the stream."""
     s = st.db.Session()
     try:
         yield s
@@ -89,11 +94,11 @@ def _load(request: Request, s, st: AppState, *, require_mfa=True) -> Ctx | None:
     return Ctx(user, services.load_principal(s, user), row, s, st, client_ip(request))
 
 
-def optional_ctx(request: Request, s=Depends(get_db), st: AppState = Depends(get_state)) -> Ctx | None:
+def optional_ctx(request: Request, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)) -> Ctx | None:
     return _load(request, s, st)
 
 
-def current(request: Request, s=Depends(get_db), st: AppState = Depends(get_state)) -> Ctx:
+def current(request: Request, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)) -> Ctx:
     ctx = _load(request, s, st)
     if ctx is None:
         raise HTTPException(401, {"code": "unauthenticated", "message": "Sign in to continue."})

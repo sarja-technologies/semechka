@@ -7,7 +7,12 @@ contains a server path, anything else queues, runs, then completes on the follow
 Inventory and lifecycle follow engine 0.4.0: /v1/capabilities, /v1/models (with server paths that must never leak),
 /v1/models/catalog, /v1/llm/status|load|unload (load replaces the loaded chat model; unload refuses mid-reply) and
 /v1/models/{id}/unload. STATE["legacy"] hides the 0.4.0-only endpoints, as an older engine would.
+Completions behave like the engine's `ensure_local`: a request for another chat model, or for the same one with
+another context window, switches the one chat model even while other replies stream. A reply whose model is switched
+away mid-stream ends with an error and is counted in STATE["cut_off"]; STATE["switches"] lists every switch, and
+STATE["stream_delay"] makes each reply take a while. /v1/worker/stop stops the picture/video worker (409 mid-job).
 """
+import asyncio
 import json
 import struct
 import zlib
@@ -26,7 +31,8 @@ def reset():
     STATE.clear()
     STATE.update(jobs={}, by_key={}, files={}, discards=[], submissions=[], n=0, reject_files=False, uploads={},
                  legacy=False, llm={"state": "stopped", "model_id": None, "active_streams": 0, "error": None},
-                 worker_loaded=set(), loads=[], unloads=[], fail_load=False)
+                 worker_loaded=set(), loads=[], unloads=[], fail_load=False, cut_off=0, switches=[], stream_delay=0.0,
+                 worker_alive=False, worker_stops=0, completions=[])
 
 
 reset()
@@ -82,7 +88,18 @@ def health():
 
 @app.get("/v1/system", dependencies=[Depends(auth)])
 def system():
-    return {"engine": {"version": "0.4.0-fake"}}
+    busy = any(j["status"] == "running" for j in STATE["jobs"].values())
+    return {"engine": {"version": "0.4.0-fake"},
+            "runtime": {"worker": {"alive": STATE["worker_alive"] or bool(STATE["worker_loaded"]), "busy": busy}}}
+
+
+@app.post("/v1/worker/stop", dependencies=[Depends(auth)])
+def worker_stop():
+    if any(j["status"] == "running" for j in STATE["jobs"].values()):
+        raise HTTPException(409, "the GPU worker is running a job")
+    STATE.update(worker_alive=False, worker_stops=STATE["worker_stops"] + 1)
+    STATE["worker_loaded"].clear()
+    return {"ok": True}
 
 
 @app.get("/v1/agent/models", dependencies=[Depends(auth)])
@@ -131,7 +148,8 @@ def catalog():
 
 @app.get("/v1/llm/status", dependencies=[Depends(auth)])
 def llm_status():
-    return {**STATE["llm"], "ctx": 2048, "loaded_at": 1.0 if STATE["llm"]["model_id"] else None,
+    return {**STATE["llm"], "ctx": STATE["llm"].get("ctx", 2048) if STATE["llm"]["model_id"] else None,
+            "loaded_at": 1.0 if STATE["llm"]["model_id"] else None,
             "vram_estimate_mb": 1500 if STATE["llm"]["model_id"] else None}
 
 
@@ -173,11 +191,43 @@ def unload_model(model_id: str):
     return {"ok": True}
 
 
+def _ensure_local(mid: str, ctx: int | None):
+    """The engine's ensure_local: switch (stopping whatever streams on the old model) unless already right."""
+    info = next(m for m in MODELS if m["id"] == mid)
+    caps = info.get("capabilities") or {}
+    ctx = min(int(ctx or caps.get("default_ctx") or 4096), int(caps.get("context_max") or 10**9))
+    llm = STATE["llm"]
+    if llm["state"] == "ready" and llm["model_id"] == mid and llm.get("ctx", 2048) == ctx:
+        return
+    STATE["switches"].append({"to": mid, "ctx": ctx, "from": llm["model_id"], "streams": llm["active_streams"]})
+    llm.update(state="ready", model_id=mid, ctx=ctx, error=None, active_streams=0, gen=llm.get("gen", 0) + 1)
+
+
 @app.post("/v1/agent/completions", dependencies=[Depends(auth)])
 async def completions(request: Request):
+    body = await request.json()
+    ref, params = body.get("model_ref", ""), body.get("params") or {}
+    STATE["completions"].append(ref)
+    local = ref.startswith("local:")
+    if local:
+        _ensure_local(ref.split(":", 1)[1], params.get("ctx"))
+        STATE["llm"]["active_streams"] += 1
+    gen_at_start = STATE["llm"].get("gen")
+
     async def gen():
-        yield "data: " + json.dumps({"type": "delta", "content": "ready"}) + "\n\n"
-        yield "data: " + json.dumps({"type": "done", "finish_reason": "stop"}) + "\n\n"
+        try:
+            for word in ("ready", " and", " done"):
+                if local and STATE["llm"].get("gen") != gen_at_start:  # the model was switched under this reply
+                    STATE["cut_off"] += 1
+                    yield "data: " + json.dumps({"type": "error", "message": "llama-server stopped"}) + "\n\n"
+                    return
+                yield "data: " + json.dumps({"type": "delta", "content": word}) + "\n\n"
+                if STATE["stream_delay"]:
+                    await asyncio.sleep(STATE["stream_delay"])
+            yield "data: " + json.dumps({"type": "done", "finish_reason": "stop"}) + "\n\n"
+        finally:
+            if local and STATE["llm"].get("gen") == gen_at_start:
+                STATE["llm"]["active_streams"] = max(0, STATE["llm"]["active_streams"] - 1)
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 

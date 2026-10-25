@@ -26,8 +26,14 @@ the accessibility test; prompt history missing the message just sent; picker lab
 without the technical permission; `PATCH /api/me` unable to clear a personal choice (composer keys, then theme); the
 Running tab offering buttons that could only ever answer "Not loaded" or be refused; the framework's bare 404 page.
 
-**Not done.** Chrome only; no screen reader; no side-by-side comparison with the Codex app itself (only its published
-screenshots were studied, and nothing of OpenAI's was copied).
+**Firefox (release hardening).** The whole browser suite, including axe in all three themes, keyboard-only flows,
+focus indicators, reduced motion and touch-target size, was run in Firefox 158 as well (78 passed); DEPLOYMENT_EVIDENCE.md
+lists the test changes that were needed, none of them to the product. The Running tab screenshots were retaken after
+the chat-model preload was removed.
+
+**Not done.** Screenshots in Chrome only (Firefox ran the tests, not a visual review); no screen reader; no
+side-by-side comparison with the Codex app itself (only its published screenshots were studied, and nothing of
+OpenAI's was copied).
 
 ## Pass 2: repeatable real-browser verification
 

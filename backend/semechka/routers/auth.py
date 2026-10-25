@@ -49,7 +49,7 @@ def signup_state(s, st: AppState) -> dict:
 
 
 @router.get("/public")
-def public(s=Depends(get_db), st: AppState = Depends(get_state)):
+def public(s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     """Everything a signed-out visitor may know: branding, whether setup is pending, whether sign-up is open."""
     from .setup import needs_setup
     pub = st.settings.public_values(s)
@@ -70,7 +70,7 @@ def _check_origin(request: Request):
 
 
 @router.post("/auth/signup")
-def signup(body: SignupIn, request: Request, response: Response, s=Depends(get_db), st: AppState = Depends(get_state)):
+def signup(body: SignupIn, request: Request, response: Response, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     ip = request.client.host if request.client else ""
     mode = st.settings.deployment(s, "signup.mode")
     from .sso import sso_enforced
@@ -162,7 +162,7 @@ def _send_token(s, st, user: User, kind: str, request: Request):
 
 
 @router.post("/auth/verify")
-def verify_email(body: dict, s=Depends(get_db), st: AppState = Depends(get_state)):
+def verify_email(body: dict, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     tok = hashlib.sha256(str(body.get("token", "")).encode()).hexdigest()
     row = s.get(EmailToken, tok)
     if row is None or row.kind != "verify" or row.expires_at < time.time():
@@ -177,7 +177,7 @@ def verify_email(body: dict, s=Depends(get_db), st: AppState = Depends(get_state
 
 
 @router.post("/auth/forgot")
-def forgot(body: dict, request: Request, s=Depends(get_db), st: AppState = Depends(get_state)):
+def forgot(body: dict, request: Request, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     ip = request.client.host if request.client else ""
     email = str(body.get("email", "")).strip().lower()
     if not st.limiter.hit(f"forgot:{ip}", 10, 3600):
@@ -190,7 +190,7 @@ def forgot(body: dict, request: Request, s=Depends(get_db), st: AppState = Depen
 
 
 @router.post("/auth/reset")
-def reset(body: dict, s=Depends(get_db), st: AppState = Depends(get_state)):
+def reset(body: dict, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     row = s.get(EmailToken, hashlib.sha256(str(body.get("token", "")).encode()).hexdigest())
     if row is None or row.kind != "reset" or row.expires_at < time.time():
         raise HTTPException(400, {"code": "invalid_token", "message": "This link is invalid or has expired."})
@@ -208,7 +208,7 @@ def reset(body: dict, s=Depends(get_db), st: AppState = Depends(get_state)):
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db), st: AppState = Depends(get_state)):
+def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     ip = request.client.host if request.client else ""
     email = body.email.strip().lower()
     if not st.limiter.hit(f"login:ip:{ip}", 60, 60) or not st.limiter.hit(f"login:{email}", 10, 60):
@@ -263,7 +263,7 @@ def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db)
 
 
 @router.post("/auth/logout")
-def logout(request: Request, response: Response, s=Depends(get_db), ctx: Ctx | None = Depends(optional_ctx)):
+def logout(request: Request, response: Response, s=Depends(get_db, scope="function"), ctx: Ctx | None = Depends(optional_ctx)):
     if ctx:
         sent = request.headers.get("x-csrf-token", "")
         if not secrets.compare_digest(sent, ctx.session.csrf):

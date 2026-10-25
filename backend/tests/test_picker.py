@@ -28,6 +28,7 @@ def ids(st):
 
 # ---- what an owner sees ----------------------------------------------------------------------------------
 def test_owner_sees_every_usable_model_with_real_names_details_and_live_state(mo, st):
+    fs.STATE["llm"].update(state="stopped", model_id=None)  # the setup smoke test loaded it; start from nothing loaded
     cat = picker(mo)
     m = by_alias(cat)
     assert list(m) == ["fake-chat", "fake-big"]  # offered first; fake-big is usable only through models.use_all

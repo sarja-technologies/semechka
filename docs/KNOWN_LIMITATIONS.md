@@ -18,7 +18,16 @@
 - Telemetry: NVIDIA via `nvidia-smi` and Linux `/proc` only. AMD/Intel/Apple accelerators report "unavailable". ARM64 has not been run.
 - PostgreSQL, Docker/Compose packaging and the GitHub Actions workflow were written but **not executed** on the authoring machine.
 - Rate limiting, settings cache and generation counters are in-process: run one worker. A restart clears limiter state.
-- Accessibility: axe-core (WCAG 2.2 A/AA) is clean on every route in Light, Dark and Graphite (the Custom theme is gated by the editor's contrast check instead), keyboard-only flows, focus management, reduced motion and touch-target size are tested in real Chrome (DESIGN_REVIEW.md, pass 2). **Not done:** no real screen-reader pass (NVDA, JAWS, VoiceOver, Orca: none available here), no independent audit, only Chrome driven (Firefox and Safari untested). The permission matrix scrolls horizontally inside its container on phones.
+- **Before 0.4.0 a sign-in could answer before its session was stored** (FastAPI 0.118+ commits a request's changes
+  after the response is sent). A client that called the API at once could get 401, most often on the first sign-in
+  after a start; the same applied to every other write. Fixed in 0.4.0 (changes are committed before the answer, and
+  a failed commit is an error, not a success). 0.3.0 and earlier behave the old way whenever they are installed with FastAPI 0.118 or newer (the Spark's 0.3.0 was: reproduced there).
+- **The first-run setup token is in the service log of installs made before 0.4.0**: the server printed it on every
+  start, and systemd keeps that output in the user journal (readable by the same account, and by members of the
+  `adm`/`systemd-journal` groups). From 0.4.0 the server and installer print the token only to a terminal and
+  otherwise name the owner-only file. The token stops working when the wizard is completed; older journal entries are
+  not removed.
+- Accessibility: axe-core (WCAG 2.2 A/AA) is clean on every route in Light, Dark and Graphite (the Custom theme is gated by the editor's contrast check instead), keyboard-only flows, focus management, reduced motion and touch-target size are tested in real Chrome (DESIGN_REVIEW.md, pass 2) and, from 0.4.0, the same 78 browser tests in Firefox 158 (`E2E_FIREFOX=1`, driven over WebDriver BiDi). In Firefox, reduced motion and a touch screen are set through Firefox's own preferences, because the driver ignores Playwright's emulation; that is a stand-in for a phone, not a phone. **Not done:** no real screen-reader pass (NVDA, JAWS, VoiceOver, Orca: none available here), no independent audit, Safari and mobile browsers untested. The permission matrix scrolls horizontally inside its container on phones.
 - No independent security review or penetration test. Treat the threat model as the author's, not an assessment.
 
 ## Interface, themes and frontends (0.3.0)
@@ -41,20 +50,38 @@
 - Video was exercised once on a real engine at a deliberately tiny size (smallest resolution, 5 frames, 4 steps). Longer or larger clips, and the 80+ GB models (e.g. LTX-2.3), were not run.
 
 ## Model management, picker and interface (0.4.0)
-- **Load and unload** work only with the Sarness Engine. Only chat models can be loaded ahead of time; picture and video
-  models load when first used, and Semechka can only free their memory. Engine 0.4.0 holds one chat model at a time,
-  so loading one replaces the other.
-- **Protecting replies in progress:** Semechka refuses a load or unload while the engine reports a reply streaming (from
-  any client) or while this server has a reply about to start on another model. The check and the load are separate
-  calls and the engine has no reservation, so a reply another client starts in the moment between them can still be
-  cut off by the engine.
+- **Loading a chat model ahead of time is turned off for the Sarness Engine.** Engine 0.4.0 holds one chat model for
+  every client and switches it on any request for another model (or the same model with another context size), even
+  while a reply is being written, and it offers no lock or reservation. A check before a manual load could not make
+  that safe, so the action is not offered (the API answers 501 with the reason). Chat models load when someone first
+  uses them. Unloading stays: the engine itself refuses it while a reply streams.
+- **How replies are protected instead:** on an engine like this, Semechka's queue never runs replies on two different
+  chat models at once (a reply for another model waits, shown as "Waiting for replies from another model to finish"),
+  and before a reply that would make the engine switch, Semechka waits until the engine reports no reply streaming
+  from any client ("Waiting for the engine to finish another reply"), up to the queue's wait limit, then gives up
+  without switching. Tested against an engine double that switches the way the real one does
+  (`test_engine_coordination.py`: no reply was cut off).
+- **What remains unprotected:** (1) the engine's status and the request that makes it switch are two calls, so a
+  reply another program starts in the round trip between them can still be cut off; (2) clients that do not run
+  Semechka (or another Semechka server sharing the engine) do not wait for Semechka's replies; (3) Semechka predicts a
+  switch from the model and context size it asks for; a difference in GPU layers or the engine's own default context
+  that it cannot see is not predicted; (4) a reply that starts while someone unloads the model fails at its start
+  with the engine's error. Only an engine-side lease would close these.
 - **No load progress:** the engine reports no percentage for loading a model, so the panel shows the operation as
   running with the time it started. During the tests engine 0.4.0 reported 0 % progress for picture and video jobs
   until they finished, and that is what is shown.
 - **Memory figures are the engine's own estimates.** A load is refused only when the estimate exceeds the engine's total
   memory. The engine may stop an idle picture/video worker to make room, which Semechka reports but cannot prevent.
   After a picture or video model is freed, the engine keeps its worker process running (memory in use stayed about
-  5 GB above the starting level in the test); Semechka has no control to stop the worker.
+  5 GB above the starting level in the test). Administrators with `ops.model.load` can now stop the worker from the
+  Running tab; it is refused while the worker is making something or jobs are waiting (the engine refuses too), and
+  the worker starts again by itself for the next picture or video, which then takes longer.
+- **Large models have not been run through Semechka.** Only small chat models (Qwen3.5 0.8B, which is Salted's "Quick",
+  and on a copy Qwen3.6 35B-A3B for vision), SDXL Turbo and Wan 2.2 TI2V 5B were exercised on the real engine. The
+  high-memory models installed on the reference Spark were not: Qwen3 Coder Next (about 48 GB of weights, 54.7 GB by the engine's estimate; the coding
+  model most likely to be chosen for the code workspace), gpt-oss-120b (about 63 GB), Hermes 4 70B (about 43 GB),
+  and the 50 to 126 GB video models. Load times, memory estimates against the Spark's unified memory, and what the
+  engine does when a large model does not fit alongside a running worker are untested.
 - **Other clients' engine jobs** appear with their kind, model and status only; their prompts and titles never do.
 - **Model operators without `admin.users.view`** can edit models but cannot pick roles, teams or people in a model's
   access rules, because those lists need that permission.
@@ -65,5 +92,9 @@
 - **Prompt history** (Alt+Up/Down, off by default) recalls messages from the open conversation and from this browser
   tab, not from other conversations.
 - **The Codex-inspired layout** was compared with screenshots of the OpenAI Codex app only, not side by side with the
-  app itself, and was checked in Chrome only.
+  app itself.
+- **Deployment verification** (`verify_deployment.py`, `spark_salted_check.py`) now deletes the one conversation it
+  creates, by its id, and checks the member's list is exactly what it was. Nine conversations left by verification
+  and chat-probe runs before this change are still in Salted's member test account; they were not removed (see
+  DEPLOYMENT_EVIDENCE.md).
 

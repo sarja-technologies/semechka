@@ -12,6 +12,10 @@ while anyone else is waiting. Waiting tickets are served in this order:
   requests does not starve someone who queued one;
 * then plain FIFO.
 
+On an engine that holds one chat model for every client (`exclusive` tickets), a ticket for another chat model than
+the ones running does not start until they finish: starting it would make the engine switch models under them. The
+head of the queue is never overtaken by later tickets for the running model, so a switch cannot be starved.
+
 Everything runs on the event loop (single thread), so no locks are needed. State is in memory: it is rebuilt empty
 after a restart, which is correct because in-flight streams die with the process too.
 
@@ -61,6 +65,7 @@ class Ticket:
     label: str
     max_wait: float
     model_id: str = ""  # Semechka model id, so model lifecycle can see who is waiting for which model
+    exclusive: bool = False  # needs the engine's one chat model slot (see the module docstring)
     id: str = field(default_factory=lambda: "q_" + uuid.uuid4().hex[:12])
     state: str = "waiting"  # waiting | running | done | cancelled | timeout | rejected
     enqueued_at: float = 0.0
@@ -129,11 +134,11 @@ class Scheduler:
     # ---- submitting ---------------------------------------------------------------------------------
     def submit(self, *, backend_id: str, user_id: str, rank: int = 100, kind: str = "chat", label: str = "",
                user_label: str = "", backend_limit: int = 2, user_limit: int = 1, max_wait: float = 300.0,
-               max_depth: int = 50, model_id: str = "") -> Ticket:
+               max_depth: int = 50, model_id: str = "", exclusive: bool = False) -> Ticket:
         b = self.backends.setdefault(backend_id, _Backend())
         b.limit, b.user_limit = max(1, backend_limit), max(1, user_limit)
         t = Ticket(self, backend_id, user_id, user_label, rank, kind, label, max_wait, model_id=model_id,
-                   enqueued_at=self.clock())
+                   exclusive=exclusive, enqueued_at=self.clock())
         if len(b.waiting) >= max_depth:
             t.state = "rejected"
             raise QueueFull(f"The queue for this backend is full ({max_depth} waiting). Try again shortly.")
@@ -182,11 +187,18 @@ class Scheduler:
         order = self._ordered(b) if b else []
         return order.index(t) + 1 if t in order else None
 
+    @staticmethod
+    def _switch_blocked(b: "_Backend", t: Ticket) -> bool:
+        return t.exclusive and any(r.exclusive and r.model_id != t.model_id for r in b.running)
+
     def describe_wait(self, t: Ticket) -> dict:
         b = self.backends[t.backend_id]
         pos = self.position_of(t) or 0
-        return {"position": pos, "ahead": max(0, pos - 1) + len(b.running), "waiting": len(b.waiting),
-                "running": len(b.running), "limit": b.limit, "ticket": t.id}
+        out = {"position": pos, "ahead": max(0, pos - 1) + len(b.running), "waiting": len(b.waiting),
+               "running": len(b.running), "limit": b.limit, "ticket": t.id}
+        if self._switch_blocked(b, t):
+            out["reason"] = "model_switch"  # waiting for replies from another chat model to finish
+        return out
 
     # ---- dispatch -----------------------------------------------------------------------------------
     def _dispatch(self, backend_id: str) -> None:
@@ -202,6 +214,8 @@ class Scheduler:
                     break
             if nxt is None:  # everyone waiting is over their share and someone else is waiting: keep the slot free
                 nxt = self._ordered(b)[0]
+            if self._switch_blocked(b, nxt):  # let the other model's replies finish; nobody overtakes the switch
+                break
             b.waiting.remove(nxt)
             nxt.state, nxt.started_at = "running", self.clock()
             if nxt._timer:

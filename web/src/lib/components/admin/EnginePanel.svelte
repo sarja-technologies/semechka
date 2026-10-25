@@ -1,7 +1,8 @@
 <script lang="ts">
   // Live engine state and model load/unload. Everything shown is what the engine reports through /api/engines
-  // (nothing estimated here); what each person sees is filtered by the server. Before loading or unloading, the
-  // server's own check is shown: blockers (the button stays off) and warnings (shown before you confirm).
+  // (nothing estimated here); what each person sees is filtered by the server. Before loading, unloading or stopping
+  // the worker, the server's own check is shown: blockers (the button stays off) and warnings (shown before you
+  // confirm). Only what the engine itself can do without cutting off a reply is offered (see lifecycle_svc.py).
   import { onMount, onDestroy } from 'svelte';
   import { get, post } from '$lib/api';
   import { can } from '$lib/session.svelte';
@@ -25,6 +26,10 @@
     try { models = (await get('/api/admin/models?per_page=500')).items ?? []; } catch { models = []; }
   }
   const opName = (o: any) => { const m = models.find((x) => x.id === o.model_id); return m ? name(m) : o.model; };
+  const opText = (o: any, phase: 'running' | 'failed' | 'done') => o.op === 'stop_worker'
+    ? { running: 'Stopping the picture and video worker…', failed: 'Stopping the picture and video worker failed.', done: 'Stopped the picture and video worker' }[phase]
+    : `${{ running: o.op === 'load' ? 'Loading' : 'Unloading', failed: o.op === 'load' ? 'Loading' : 'Unloading', done: o.op === 'load' ? 'Loaded' : 'Unloaded' }[phase]} ${opName(o)}${phase === 'running' ? '…' : phase === 'failed' ? ' failed.' : ''}`;
+  const supportsOf = (m: any) => engines.find((e) => e.id === m.backend_id)?.supports ?? {};
   const busyOp = $derived(engines.some((e) => e.operation?.state === 'running'));
   function schedule() { clearInterval(timer); timer = setInterval(() => { if (!document.hidden) refresh(); }, busyOp ? 2000 : 6000); }
   $effect(() => { void busyOp; schedule(); });
@@ -51,6 +56,20 @@
     open = m.id; verdict = null; opErr = ''; checking = true;
     try { verdict = await get(`/api/admin/models/${m.id}/lifecycle`); } catch (e) { opErr = errMsg(e); }
     checking = false;
+  }
+  // ---- the picture and video worker ----------------------------------------------------------------------------
+  let wopen = $state<string | null>(null), wverdict = $state<any>(null), wchecking = $state(false), wErr = $state('');
+  async function askWorker(e: any) {
+    if (wopen === e.id) { wopen = null; return; }
+    wopen = e.id; wverdict = null; wErr = ''; wchecking = true;
+    try { wverdict = (await get(`/api/engines/${e.id}/worker`)).stop; } catch (x) { wErr = errMsg(x); }
+    wchecking = false;
+  }
+  async function stopWorker(e: any) {
+    sending = true; wErr = '';
+    try { const r = await post(`/api/engines/${e.id}/worker/stop`); toast(r.noop ?? 'The picture and video worker was stopped.'); wopen = null; }
+    catch (x) { wErr = errMsg(x); }
+    sending = false; refresh();
   }
   async function act(m: any, op: 'load' | 'unload') {
     sending = true; opErr = '';
@@ -82,9 +101,9 @@
         {@const o = e.operation}
         <div class="notice {o.state === 'failed' ? 'bad' : o.state === 'running' ? 'info' : ''}" role="status">
           <div class="grow">
-            {#if o.state === 'running'}<strong>{o.op === 'load' ? 'Loading' : 'Unloading'} {opName(o)}…</strong> started {ago(o.started_at)}. Other people's replies keep running.
-            {:else if o.state === 'failed'}<strong>{o.op === 'load' ? 'Loading' : 'Unloading'} {opName(o)} failed.</strong> {o.error}
-            {:else}<strong>{o.op === 'load' ? 'Loaded' : 'Unloaded'} {opName(o)}</strong> {ago(o.finished_at)}.{/if}
+            {#if o.state === 'running'}<strong>{opText(o, 'running')}</strong> started {ago(o.started_at)}. Other people's replies keep running.
+            {:else if o.state === 'failed'}<strong>{opText(o, 'failed')}</strong> {o.error}
+            {:else}<strong>{opText(o, 'done')}</strong> {ago(o.finished_at)}.{/if}
           </div>
         </div>
       {/if}
@@ -104,11 +123,29 @@
           <span class="v">{#if s.llm.model_id}<strong>{s.llm.model_ref?.alias ?? s.llm.model_id}</strong> · {LLM[s.llm.state] ?? s.llm.state}{s.llm.ctx ? ` · ${s.llm.ctx.toLocaleString()} context` : ''}{s.llm.vram_estimate_mb ? ` · about ${gb(s.llm.vram_estimate_mb)}` : ''}
             {:else}{LLM[s.llm.state] ?? s.llm.state ?? 'Unknown'}{/if}
             {#if s.llm.active_streams}<span class="chip warn">{s.llm.active_streams} {s.llm.active_streams === 1 ? 'reply' : 'replies'} streaming</span>{/if}
-            {#if s.llm.error}<span class="err small">{s.llm.error}</span>{/if}</span></div>
+            {#if s.llm.error}<span class="err small">{s.llm.error}</span>{/if}</span>
+          {#if e.supports.exclusive_chat_model}<span class="v tiny muted note">One chat model for every client of this engine. It loads when someone first uses it. This server never switches it while one of its replies is being written, and waits while another client is mid-reply.</span>{/if}</div>
       {/if}
       {#if s?.worker}
         <div class="stat"><span class="k">Pictures and video</span>
-          <span class="v">{s.worker.busy ? 'Working' : s.worker.alive ? 'Idle' : 'Not running'}{#if s.worker.model_refs?.length}{' · holding'} {s.worker.model_refs.map((r: any, i: number) => r?.alias ?? s.worker.loaded[i]).join(', ')}{/if}</span></div>
+          <span class="v">{s.worker.busy ? 'Working' : s.worker.alive ? 'Idle' : 'Not running'}{#if s.worker.model_refs?.length}{' · holding'} {s.worker.model_refs.map((r: any, i: number) => r?.alias ?? s.worker.loaded[i]).join(', ')}{/if}
+            {#if operate && e.supports.worker_stop && s.worker.alive && !s.worker.busy}<button class="btn sm" aria-expanded={wopen === e.id} onclick={() => askWorker(e)}>Stop worker…</button>{/if}</span>
+          {#if wopen === e.id}
+            <div class="v wchk">
+              {#if wchecking}<p class="small muted" role="status">Checking with the engine…</p>
+              {:else if wverdict}
+                {#if wverdict.noop}<p class="small">{wverdict.noop}</p>
+                {:else}
+                  {#each wverdict.blockers as b}<div class="notice bad" role="alert"><div>{b}</div></div>{/each}
+                  {#if wverdict.allowed}
+                    <p class="small">Returns all of the worker's memory, including what it keeps after a model is freed. The next picture or video starts it again, so that one takes longer.</p>
+                    <div class="row" style="gap:8px"><button class="btn primary sm" disabled={sending} onclick={() => stopWorker(e)}>Stop the worker</button><button class="btn ghost sm" onclick={() => (wopen = null)}>Cancel</button></div>
+                  {/if}
+                {/if}
+              {/if}
+              {#if wErr}<div class="notice bad" role="alert"><div>{wErr}</div></div>{/if}
+            </div>
+          {/if}</div>
       {/if}
       {#if s?.jobs}
         <div class="stat"><span class="k">Engine jobs</span>
@@ -144,7 +181,7 @@
             <span class="mn"><strong>{name(m)}</strong><span class="tiny muted">{m.alias !== name(m) ? `${m.alias} · ` : ''}{KIND[k]}{m.meta?.vram_estimate_mb ? ` · about ${gb(m.meta.vram_estimate_mb)}` : m.meta?.size_bytes ? ` · ${gb(Math.round(m.meta.size_bytes / 1048576))} on disk` : ''}{m.enabled ? '' : ' · off for people'}</span></span>
             {#if st === 'loaded'}<span class="chip ok">Loaded</span>{:else if st === 'working'}<span class="chip info">Working…</span>{/if}
             {#if k === 'other'}<span class="tiny muted">Remote: nothing to load</span>
-            {:else if k === 'media' && st !== 'loaded' && st !== 'working'}<span class="tiny muted">Loads when someone uses it</span>
+            {:else if (k === 'media' || !supportsOf(m).load) && st !== 'loaded' && st !== 'working'}<span class="tiny muted">Loads when someone uses it</span>
             {:else if operate}<button class="btn sm" aria-expanded={open === m.id} onclick={() => ask(m)} disabled={st === 'working'}>{st === 'loaded' ? (k === 'media' ? 'Free memory…' : 'Unload…') : 'Load…'}</button>{/if}
           </div>
           {#if open === m.id}
@@ -186,6 +223,8 @@
   .stat .v { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .stat .bar { grid-column: 2; }
   .stat .bar + .v { grid-column: 2; font-size: 13px; color: var(--fg-2); }
+  .stat .note, .stat .wchk { grid-column: 2; }
+  .wchk { display: grid; gap: 8px; } .wchk .notice { margin: 0; }
   .bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; max-width: 420px; }
   .bar span { display: block; height: 100%; background: var(--fg-2); border-radius: inherit; transition: width var(--medium) var(--ease); }
   .bar span.high { background: var(--warn); }
@@ -201,5 +240,5 @@
   .chk { padding: 0 8px 10px 38px; display: grid; gap: 8px; }
   .chk .notice { margin: 0; }
   .pad { padding: 12px; }
-  @media (max-width: 719px) { .stat { grid-template-columns: minmax(0, 1fr); } .stat .bar, .stat .bar + .v { grid-column: 1; } .chk { padding-left: 8px; } }
+  @media (max-width: 719px) { .stat { grid-template-columns: minmax(0, 1fr); } .stat .bar, .stat .bar + .v, .stat .note, .stat .wchk { grid-column: 1; } .chk { padding-left: 8px; } }
 </style>

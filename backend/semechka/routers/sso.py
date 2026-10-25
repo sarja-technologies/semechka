@@ -80,7 +80,7 @@ def _login_url(code: str) -> RedirectResponse:
 
 # ---- public ---------------------------------------------------------------------------------------------
 @router.get("/api/sso/providers")
-def public_providers(s=Depends(get_db), st: AppState = Depends(get_state)):
+def public_providers(s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
     rows = s.execute(select(SsoProvider).where(SsoProvider.enabled == True).order_by(SsoProvider.name)).scalars().all()  # noqa: E712
     return {"providers": [{"id": p.id, "name": p.name} for p in rows],
             "local_login": bool(st.settings.deployment(s, "sso.local_login")) or not rows,
@@ -88,7 +88,7 @@ def public_providers(s=Depends(get_db), st: AppState = Depends(get_state)):
 
 
 @router.get("/api/sso/{pid}/start")
-async def start(pid: str, request: Request, return_to: str = "/", link: int = 0, s=Depends(get_db),
+async def start(pid: str, request: Request, return_to: str = "/", link: int = 0, s=Depends(get_db, scope="function"),
                 st: AppState = Depends(get_state), ctx: Ctx | None = Depends(optional_ctx)):
     ip = client_ip(request)
     if not st.limiter.hit(f"sso:start:{ip}", 30, 60):
@@ -121,7 +121,7 @@ async def start(pid: str, request: Request, return_to: str = "/", link: int = 0,
 
 
 @router.get("/api/sso/callback")
-async def callback(request: Request, code: str = "", state: str = "", error: str = "", s=Depends(get_db),
+async def callback(request: Request, code: str = "", state: str = "", error: str = "", s=Depends(get_db, scope="function"),
                    st: AppState = Depends(get_state)):
     ip = client_ip(request)
     if not st.limiter.hit(f"sso:cb:{ip}", 30, 60):
@@ -256,7 +256,7 @@ def _sync_roles(s, p: SsoProvider, user: User, ident: SsoIdentity, groups: list[
 
 
 @router.post("/api/sso/logout")
-def sso_logout(request: Request, response: Response, s=Depends(get_db), st: AppState = Depends(get_state),
+def sso_logout(request: Request, response: Response, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state),
                ctx: Ctx | None = Depends(optional_ctx)):
     """Ends the local session; returns an end_session URL only if the provider advertises one."""
     redirect = None

@@ -59,8 +59,12 @@
     await tick();
     scroller.scrollTop = t0 + (scroller.scrollHeight - h0); // the same message stays under the reader's eyes
   }
-  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? `In queue, position ${live.queue.position}` : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
-  const liveWord = $derived(!live ? '' : live.queue ? `In queue: position ${live.queue.position}` : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
+  // why a reply has not started: its place in the queue, or the engine finishing replies on another chat model
+  const queueText = (q: any) => q.reason === 'engine_busy' ? 'Waiting for the engine to finish another reply'
+    : q.reason === 'model_switch' ? 'Waiting for replies from another model to finish'
+    : `In queue, position ${q.position}`;
+  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
+  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
 </script>
 
 <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
