@@ -10,6 +10,7 @@ OUT="dist/semechka-$VERSION"
 rm -rf dist && mkdir -p "$OUT"
 ( cd web && pnpm install --frozen-lockfile >/dev/null && pnpm build >/dev/null )
 rm -rf backend/semechka/web && cp -r web/build backend/semechka/web
+rm -rf backend/build backend/*.egg-info  # setuptools keeps old files here, and the wheel would carry them
 PY=${PYTHON:-.venv/bin/python}
 "$PY" -m pip install -q build >/dev/null
 "$PY" -m build --wheel --outdir "$OUT" backend >/dev/null
