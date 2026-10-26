@@ -224,7 +224,7 @@ def test_owner_only_files_are_denied_to_everyone_else_by_default(w, s):
     person's file. Only an allow rule naming that file does, and a deny still wins."""
     T.set_workspace_member(s, w.az("alice"), w.mkt.id, "user", w.u["carol"].id, "editor")
     mine = [Node("file", "fi_c", owner=w.u["carol"].id), Node("folder", "fo_1")]
-    shared = lambda who, perm="file.read": w.az(who).check(perm, w.mkt, mine).allowed  # noqa: E731
+    shared = lambda who, perm="file.read": w.az(who).check(perm, w.mkt, mine).allowed
     assert shared("bob") and shared("alice") and shared("carol")  # default: the workspace's roles decide
     T.update_workspace(s, w.az("alice"), w.mkt.id, policy={"file_access": "owner"})
     for perm in ("file.read", "file.download", "file.write", "file.delete", "file.restore"):

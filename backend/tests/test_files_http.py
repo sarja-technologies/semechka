@@ -250,7 +250,7 @@ def test_owner_only_workspace_over_http_listing_download_search_retrieval(owner,
     ctx = ann.post(f"/api/workspaces/{wid}/contexts", json={"name": "Shared"}).json()["id"]
     for f in (a, b):
         ann.put(f"/api/contexts/{ctx}/items/{f}")
-    names = lambda cl: sorted(f["name"] for f in cl.get(f"/api/workspaces/{wid}/files").json()["files"])  # noqa: E731
+    names = lambda cl: sorted(f["name"] for f in cl.get(f"/api/workspaces/{wid}/files").json()["files"])
     assert names(bea) == ["ann.md", "bea.md"]  # default behaviour is unchanged
 
     assert ann.patch(f"/api/workspaces/{wid}", json={"policy": {"file_access": "owner"}}).status_code == 200
