@@ -7,8 +7,9 @@ validated and audited exactly like a click in Administration, Settings).
     status               show the switches (read-only)
     apply  [--dry-run]   fence, allow-list the agent model, then workspaces, then agents (see ORDER)
     rollback [--open]    agents off, workspaces off; the fence stays (--open also lifts it)
-    go     [--dry-run]   apply + production smoke tests with this same signed-in session; if a critical check fails the
-                         flags are rolled back automatically. Writes a report (no secrets) to --report.
+    go     [--dry-run]   shows the plan, waits for you to type APPLY (or pass --yes), applies, then runs the production smoke
+                         tests with this same signed-in session; if a critical check fails the flags are rolled back
+                         automatically. Writes a report (no secrets) to --report. Options: --model, --data-dir, --report.
 
 ORDER (apply). Nothing is switched on before the fence and the model list are in place and read back:
     0. resolve the model: exactly one enabled model whose id/alias/real id matches --model (default qwen3.6-35b-a3b@MXFP4_MOE)
@@ -320,9 +321,14 @@ def main() -> int:
         elif cmd == "rollback":
             rollback(a, "--open" in args)
         else:
-            model = apply(a, opt("--model", DEFAULT_MODEL), dry)
+            want = opt("--model", DEFAULT_MODEL)
+            model = apply(a, want, True)  # always show the plan first; this changes nothing
             if dry:
                 return 0
+            if "--yes" not in args and input("\nType APPLY to switch this on for administrators only (anything else stops, nothing changed): ").strip() != "APPLY":
+                print("Stopped. Nothing was changed.")
+                return 0
+            model = apply(a, want, False)
             ok = False
             try:
                 ok = smoke(a, model, opt("--data-dir"), opt("--report"))
