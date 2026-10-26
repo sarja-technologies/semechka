@@ -141,3 +141,27 @@ def test_limits_and_validation_over_http(owner, app, st):
     assert boss.post(f"/api/orgs/{acme}/reindex").status_code == 200
     z = fin.get("/api/workspaces/" + wid + "/files").json()
     assert [f["name"] for f in z["files"]] == ["a.txt"]
+
+
+def test_jobs_left_running_by_a_dead_process_resume_at_start_up(owner, app, st, cfg):
+    """A restart must not make people wait out a lease for work the dead process was doing; repeated crashers fail."""
+    from sqlalchemy import select
+
+    from semechka import jobs_svc
+    from semechka.models_files import Job
+    acme, c = company(owner, app, "Acme", "boss@acme.test", {"fin@acme.test": "dept_admin"})
+    fin = c["fin@acme.test"]
+    wid = fin.post(f"/api/orgs/{acme}/workspaces", json={"name": "Finance"}).json()["id"]
+    up(fin, wid, "a.txt", b"hello")
+    up(fin, wid, "b.txt", b"world")
+    with st.db.session() as s:
+        j1, j2 = s.execute(select(Job)).scalars().all()[:2]
+        j1.status, j1.attempts, j1.lease_until = "running", 1, 9_999_999_999  # a lease that would not expire for centuries
+        j2.status, j2.attempts = "running", jobs_svc.MAX_ATTEMPTS
+        ids = (j1.id, j2.id)
+    assert jobs_svc.recover_on_start(st) == 2
+    with st.db.session() as s:
+        assert s.get(Job, ids[0]).status == "queued" and s.get(Job, ids[0]).lease_until == 0
+        assert s.get(Job, ids[1]).status == "failed" and "repeatedly" in s.get(Job, ids[1]).error
+    jobs_svc.run_pending(st)
+    assert {j["status"] for j in fin.get(f"/api/workspaces/{wid}/jobs").json()} == {"succeeded", "failed"}

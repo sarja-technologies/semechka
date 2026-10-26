@@ -79,6 +79,21 @@ def recover_stale(st) -> int:
     return n
 
 
+def recover_on_start(st) -> int:
+    """At process start nothing is running here, so jobs the previous process left 'running' (a crash, a restart, a
+    deploy) go straight back to the queue instead of waiting for their lease to expire. A job that has already been tried
+    MAX_ATTEMPTS times is failed instead, so a job that crashes the server cannot crash it forever."""
+    n = 0
+    with st.db.session() as s:
+        for j in s.execute(select(Job).where(Job.status == "running")).scalars().all():
+            if j.attempts >= MAX_ATTEMPTS:
+                j.status, j.error, j.finished_at = "failed", "The server stopped repeatedly while running this job.", time.time()
+            else:
+                j.status, j.lease_until = "queued", 0
+            n += 1
+    return n
+
+
 def claim(st, kinds: list[str] | None = None) -> str | None:
     with st.db.session() as s:
         q = select(Job).where(Job.status == "queued").order_by(Job.priority, Job.created_at).limit(25)

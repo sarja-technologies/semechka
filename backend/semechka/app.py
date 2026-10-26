@@ -73,6 +73,10 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                   f"  (read it with: cat {cfg.setup_token_path})\n", flush=True)
         task = asyncio.create_task(_sweeper(st)) if cfg.background else None
         media_task = asyncio.create_task(media_svc.pump(st)) if cfg.background else None  # media block
+        if cfg.background:
+            n = await asyncio.to_thread(jobs_svc.recover_on_start, st)  # jobs a previous process left running resume now
+            if n:
+                log.info("requeued %d job(s) left running by the previous process", n)
         jobs_task = asyncio.create_task(jobs_svc.pump(st)) if cfg.background else None  # durable workspace jobs
         yield
         for t in (task, media_task, jobs_task):
