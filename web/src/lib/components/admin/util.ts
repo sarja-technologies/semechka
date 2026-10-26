@@ -12,6 +12,8 @@ export const ADMIN_PAGES = [
   { href: '/admin/people', label: 'People & Accounts', icon: 'users', perm: 'admin.users.view' },
   { href: '/admin/invites', label: 'Invites & Enrolment', icon: 'mail', perm: 'admin.users.invite' },
   { href: '/admin/teams', label: 'Teams', icon: 'users', perm: 'admin.users.view' },
+  { href: '/admin/organisations', label: 'Organisations', icon: 'workspaces', perm: 'admin.orgs.manage' },
+  { href: '/admin/cloud', label: 'Cloud workspaces', icon: 'cpu', perm: 'admin.system.view' },
   { href: '/admin/roles', label: 'Roles & Permissions', icon: 'key', perm: 'admin.users.view' },
   { href: '/admin/visibility', label: 'Technical Visibility', icon: 'eye', perm: 'admin.users.view' },
   { href: '/admin/models', label: 'Models', icon: 'cpu', perm: 'admin.models.manage' },

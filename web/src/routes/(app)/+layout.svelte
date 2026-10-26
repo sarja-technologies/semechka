@@ -15,7 +15,9 @@
   const workspace = $derived<'chat' | 'code'>(path.startsWith('/code') ? 'code' : 'chat');
   const base = $derived(`/${workspace}`);
   const flags = $derived(app.me?.ui.ui ?? {});
-  const hasSidebar = $derived(flags.sidebar !== false && !!app.me?.ui.modes?.[workspace]?.enabled);
+  // Workspaces and organisation pages have their own navigation: the conversation list would only be in the way.
+  const ownNav = $derived(path.startsWith('/workspaces') || path.startsWith('/organisation'));
+  const hasSidebar = $derived(flags.sidebar !== false && !ownNav && !!app.me?.ui.modes?.[workspace]?.enabled);
   const brand = $derived<any>({ ...app.brand, ...(app.me?.ui.brand ?? {}) });
 
   // collapsed on wide screens: the person's last choice, else the administrator's default

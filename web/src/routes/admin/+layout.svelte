@@ -55,7 +55,9 @@
   main { padding: 24px 28px 64px; min-width: 0; max-width: 1200px; }
   @media (max-width: 860px) {
     .shell { grid-template-columns: minmax(0, 1fr); }
-    .top .btn.icon { display: inline-flex; } .hide-s, .top kbd { display: none; }
+    .top .btn.icon { display: inline-flex; } .top kbd { display: none; }
+    /* the word stays for screen readers (a name must contain its visible text); only its pixels are dropped on phones */
+    .hide-s { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     nav { display: none; position: fixed; inset: 52px 0 0 0; z-index: 30; height: auto; border: 0; } nav.open { display: grid; }
     nav a { min-height: 44px; }
     main { padding: 16px 16px 64px; }

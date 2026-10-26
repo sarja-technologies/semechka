@@ -42,8 +42,9 @@ export const put = <T = any>(p: string, b?: unknown) => api<T>('PUT', p, b ?? {}
 export const patch = <T = any>(p: string, b?: unknown) => api<T>('PATCH', p, b ?? {});
 export const del = <T = any>(p: string) => api<T>('DELETE', p);
 
-export async function upload<T = any>(path: string, file: File): Promise<T> {
-  const fd = new FormData(); fd.append('file', file);
+export async function upload<T = any>(path: string, file: File | Blob, fields: Record<string, string> = {}, name?: string): Promise<T> {
+  const fd = new FormData(); fd.append('file', file, name ?? (file instanceof File ? file.name : 'upload'));
+  for (const [k, v] of Object.entries(fields)) if (v !== undefined && v !== null && v !== '') fd.append(k, v);
   const r = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: headers('POST'), body: fd });
   return parse(r);
 }
