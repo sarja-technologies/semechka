@@ -287,6 +287,7 @@ class AuditEvent(Base):
     ip: Mapped[str] = mapped_column(String(64), default="")
     prev_hash: Mapped[str] = mapped_column(String(64), default="")
     hash: Mapped[str] = mapped_column(String(64), default="")
+    org_id: Mapped[str | None] = mapped_column(String(32), index=True)  # 0.4.1: tenant-scoped events; not part of the hash
 
 
 class Meta(Base):
@@ -299,6 +300,7 @@ Index("ix_msgs_conv_parent", Message.conversation_id, Message.parent_id)
 
 # --- knowledge fork: tables for collections, assistants and conversation context live in their own module ---
 from . import models_knowledge  # noqa: E402,F401
+from . import models_tenancy  # noqa: E402,F401  (organisations, workspaces, access rules)
 
 
 class EmailToken(Base):

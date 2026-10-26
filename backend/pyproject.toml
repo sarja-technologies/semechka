@@ -35,3 +35,7 @@ asyncio_mode = "auto"
 
 [tool.setuptools.package-data]
 semechka = ["web/**/*", "theme/*.json"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's idiom is `x = Depends(...)` in a signature; these calls are not mutable defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body", "fastapi.Header", "fastapi.File", "fastapi.Form", "semechka.deps.require", "semechka.deps.require_any"]

@@ -22,12 +22,13 @@ def _clean(detail: dict) -> dict:
     return out
 
 
-def record(session, actor: str, action: str, target: str = "", detail: dict | None = None, ip: str = "") -> AuditEvent:
+def record(session, actor: str, action: str, target: str = "", detail: dict | None = None, ip: str = "",
+           org_id: str | None = None) -> AuditEvent:
     """Append to the hash chain. Never pass message content: sensitive keys are dropped defensively."""
     with _lock:
         prev = session.execute(select(AuditEvent).order_by(AuditEvent.id.desc()).limit(1)).scalar_one_or_none()
         ev = AuditEvent(ts=time.time(), actor=actor or "", action=action, target=target or "",
-                        detail=_clean(detail or {}), ip=ip or "", prev_hash=prev.hash if prev else "")
+                        detail=_clean(detail or {}), ip=ip or "", prev_hash=prev.hash if prev else "", org_id=org_id)
         ev.hash = _digest(ev)
         session.add(ev)
         session.flush()

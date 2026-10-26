@@ -328,6 +328,63 @@ def _down_7(conn: Connection, _c: Ctx) -> None:
     conn.execute(text("delete from meta where key='m7_roles'"))
 
 
+# ---- 8: organisations, workspaces and access rules -----------------------------------------------
+_TABLES_8 = ["acl_entries", "workspace_members", "workspaces", "org_group_members", "org_groups", "org_members",
+             "org_roles", "orgs"]  # drop order: children first
+
+
+def _up_8(conn: Connection, _c: Ctx) -> None:
+    """Existing installs get a Default organisation holding every existing person; conversations stay personal."""
+    from sqlalchemy.orm import Session
+
+    from . import models_tenancy, tenancy_svc  # noqa: F401
+    from .db import Base
+    Base.metadata.create_all(conn, tables=[Base.metadata.tables[n] for n in reversed(_TABLES_8)])
+    add_column_if_missing(conn, "audit_events", "org_id", "VARCHAR(32)")
+    conn.execute(text('CREATE INDEX IF NOT EXISTS ix_audit_events_org_id ON audit_events (org_id)'))
+    if conn.execute(text("select count(*) from orgs")).scalar():
+        return
+    name = _setting(conn, "brand.org_name") or "Default organisation"
+    s = Session(bind=conn)
+    org = tenancy_svc.create_org(s, "migration", name, "default", is_default=True, auto_join=True)
+    roles = {r.key: r.id for r in s.query(models_tenancy.OrgRole).filter_by(org_id=org.id)}
+    s.flush()
+    held: dict[str, list[list[str]]] = {}
+    for uid_, rid in conn.execute(text("select user_id, role_id from user_roles")).fetchall():
+        held.setdefault(uid_, []).append(rid)
+    grants = {rid: g for rid, g, _d in _rows(conn, "roles")}
+    from . import perms
+    n = 0
+    for uid_, status in conn.execute(text("select id, status from users where status != 'deleted' order by created_at")).fetchall():
+        my = held.get(uid_, [])
+        can_manage = any(any(perms._matches(x, "admin.users.manage", for_grant=True) for x in grants.get(r, [])) for r in my)
+        key = "org_owner" if "owner" in my else "org_admin" if can_manage else "member"
+        conn.execute(text("insert into org_members(org_id, user_id, status, role_ids, added_by, created_at) "
+                          "values (:o, :u, :s, :r, 'migration', :t)"),
+                     {"o": org.id, "u": uid_, "s": "suspended" if status == "suspended" else "active",
+                      "r": json.dumps([roles[key]]), "t": time.time()})
+        n += 1
+    gmap = {}
+    for tid, tname in conn.execute(text("select id, name from teams")).fetchall():
+        gid = "g_" + tid[2:]
+        gmap[tid] = gid
+        conn.execute(text("insert into org_groups(id, org_id, parent_id, name, kind, created_at) values (:i, :o, null, :n, 'team', :t)"),
+                     {"i": gid, "o": org.id, "n": tname, "t": time.time()})
+    for tid, uid_ in conn.execute(text("select team_id, user_id from team_members")).fetchall():
+        if conn.execute(text("select 1 from org_members where org_id=:o and user_id=:u"), {"o": org.id, "u": uid_}).fetchone():
+            conn.execute(text("insert into org_group_members(group_id, user_id, is_admin) values (:g, :u, 0)"), {"g": gmap[tid], "u": uid_})
+    conn.execute(text("delete from meta where key='seeded_default_org'"))
+    conn.execute(text("insert into meta(key, value) values ('seeded_default_org', :v)"), {"v": json.dumps({"org": org.id, "members": n})})
+
+
+def _down_8(conn: Connection, _c: Ctx) -> None:
+    # Everything here is new in this release: organisations, groups, workspaces and access rules go with it.
+    for tbl in _TABLES_8:
+        drop_table_if_present(conn, tbl)
+    drop_column_if_present(conn, "audit_events", "org_id")
+    conn.execute(text("delete from meta where key='seeded_default_org'"))
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
@@ -338,6 +395,8 @@ MIGRATIONS: dict[int, Step] = {
             _up_6, _down_6),
     7: Step("0.4.1: image and video generation permissions for everyday roles (where media models are enabled)",
             _up_7, _down_7),
+    8: Step("0.4.1: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
+            _up_8, _down_8),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

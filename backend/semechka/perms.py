@@ -100,6 +100,8 @@ REGISTRY: list[Perm] = [
     _p("admin.backup.manage", "Manage backups", "Administration"),
     _p("admin.preview_role", "Preview the product as another role", "Administration"),
     _p("admin.sso.manage", "Configure single sign-on providers", "Administration"),  # SSO
+    _p("admin.orgs.manage", "Create and suspend organisations", "Administration",
+       "Platform level. Creating an organisation names its first owner; it does not make you a member or give access to its content."),
     _p("admin.content.read", "Read other people's conversations", "Administration",
        "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
        "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),

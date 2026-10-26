@@ -20,6 +20,8 @@ MODE_CAPABILITY = {"chat": "chat", "code": "chat", "image": "image", "video": "v
 
 def seed(s) -> None:
     """Idempotent: create role templates on first run. Never touches existing (possibly renamed) roles."""
+    from . import tenancy_svc
+    tenancy_svc.ensure_default_org(s)  # a fresh install starts with one organisation; existing ones get it from migration 8
     if s.get(Meta, "seeded_roles"):
         return
     for t in perms.ROLE_TEMPLATES:
