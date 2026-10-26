@@ -23,6 +23,13 @@ def grant(owner, role, perms):
     assert owner.put(f"/api/admin/roles/{role}", json=body).status_code == 200
 
 
+def revoke(owner, role, perms):
+    r = {x["id"]: x for x in owner.get("/api/admin/roles").json()}[role]
+    body = {"label": r["label"], "description": r["description"], "rank": r["rank"],
+            "grants": [g for g in r["grants"] if g not in perms], "denies": r["denies"]}
+    assert owner.put(f"/api/admin/roles/{role}", json=body).status_code == 200
+
+
 def model_id(api, kind):
     return api.get("/api/media/options", params={"kind": kind}).json()["models"][0]["id"]
 
@@ -188,6 +195,8 @@ def test_kind_must_match_the_model(mo):
 def test_members_need_the_mode_permission_and_never_see_each_others_media(mo, app):
     m1, m2 = make_user(mo, app, "m1@example.test"), make_user(mo, app, "m2@example.test")
     mid = model_id(mo, "image")
+    assert m1.get("/api/media/options", params={"kind": "image"}).status_code == 200  # seeded member role holds it
+    revoke(mo, "member", ["mode.image", "mode.video"])
     assert m1.get("/api/media/options", params={"kind": "image"}).status_code == 403
     assert img(m1, mid=mid).status_code == 403 and m1.get("/api/media/jobs").status_code == 403
     grant(mo, "member", ["mode.image", "mode.video", "chat.ephemeral"])

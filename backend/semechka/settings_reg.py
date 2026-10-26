@@ -270,7 +270,7 @@ DEFS: list[Def] = [
         scopes=["deployment", "role", "team"], edit_perm="admin.navigation", validator=_prompts),
     # ---- modes ----
     *[Def(f"modes.{m}.enabled", M, f"Enable {lbl}", f"Turns {lbl} on or off. When off, navigation and the API "
-          "both reject it.", "bool", m == "chat", scopes=["deployment", "role", "team", "user"],
+          "both reject it.", "bool", m in ("chat", "image", "video"), scopes=["deployment", "role", "team", "user"],
           merge="false_wins", edit_perm="admin.settings.edit", aliases=[f"disable {m}"])
       for m, lbl in [("chat", "chat"), ("code", "code workspace"), ("image", "image generation"),
                      ("video", "video generation"), ("audio", "audio"), ("knowledge", "knowledge search"),

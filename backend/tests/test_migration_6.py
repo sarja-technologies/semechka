@@ -23,7 +23,8 @@ def test_upgrade_grants_new_model_permissions_only_to_roles_that_managed_models(
     cfg.background = False
     AppState.build(cfg).db.engine.dispose()
     after = roles(old_data / "semechka.db")
-    added = {rid: after[rid][0] - before[rid][0] for rid in before}
+    media = {"mode.image", "mode.video"}  # migration 7's business; the fixture has an enabled image model
+    added = {rid: after[rid][0] - before[rid][0] - media for rid in before}
     assert added["model_operator"] == {"admin.models.present", "admin.models.defaults", "models.view_all",
                                        "models.use_all", "models.status.view", "ops.queue.view"}
     assert added["platform_admin"] == {"models.view_all", "models.use_all", "models.status.view"}  # admin.*, ops.* cover the rest

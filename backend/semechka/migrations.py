@@ -293,6 +293,41 @@ def _down_6(conn: Connection, _c: Ctx) -> None:
             conn.execute(text("update users set prefs=:p where id=:i"), {"p": json.dumps(p), "i": uid})
 
 
+# ---- 7: image and video generation reachable for everyday roles -----------------------------------
+# 0.4.0 seeded mode.image / mode.video for the owner only and defaulted both modes off, so a deployment with image and
+# video models connected still told everyone "turned off" or "no access". Instances that have enabled at least one
+# image or video model have shown they want media: their everyday roles gain the two permissions, and what was added
+# is recorded so `down` removes exactly that. Nobody who could not already generate gains anything else.
+_PERMS_7 = ["mode.image", "mode.video"]
+_ROLES_7 = ("platform_admin", "org_admin", "team_manager", "member")
+
+
+def _up_7(conn: Connection, _c: Ctx) -> None:
+    wants = conn.execute(text("select count(*) from models where enabled=1 and capabilities like '%\"image\"%' "
+                              "or enabled=1 and capabilities like '%\"video\"%'")).scalar()
+    added: dict[str, list[str]] = {}
+    if wants:
+        for rid, grants, _d in _rows(conn, "roles"):
+            if rid in _ROLES_7 and "mode.code" in grants:
+                new = [p for p in _PERMS_7 if p not in grants]
+                if new:
+                    conn.execute(text("update roles set grants=:g where id=:i"), {"g": json.dumps(grants + new), "i": rid})
+                    added[rid] = new
+    conn.execute(text("delete from meta where key='m7_roles'"))
+    conn.execute(text("insert into meta(key, value) values ('m7_roles', :v)"), {"v": json.dumps(added)})
+
+
+def _down_7(conn: Connection, _c: Ctx) -> None:
+    row = conn.execute(text("select value from meta where key='m7_roles'")).fetchone()
+    added = json.loads(row[0]) if row else {}
+    for rid, grants, _d in _rows(conn, "roles"):
+        gone = added.get(rid)
+        if gone:
+            conn.execute(text("update roles set grants=:g where id=:i"),
+                         {"g": json.dumps([x for x in grants if x not in gone]), "i": rid})
+    conn.execute(text("delete from meta where key='m7_roles'"))
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
@@ -301,6 +336,8 @@ MIGRATIONS: dict[int, Step] = {
     5: Step("0.3.0: themes Light, Dark, Graphite and Custom", _up_5, _down_5),
     6: Step("0.4.0: model permissions (see all, use restricted, presentation, defaults) and model display settings",
             _up_6, _down_6),
+    7: Step("0.4.1: image and video generation permissions for everyday roles (where media models are enabled)",
+            _up_7, _down_7),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])
