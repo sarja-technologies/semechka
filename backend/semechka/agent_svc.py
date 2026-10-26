@@ -771,7 +771,7 @@ def _messages(st, s, agent, run, ws, person, steps) -> list[dict]:
 def _prepare_turn(st, job_id: str) -> Turn:
     from . import services
     from .models import User
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         job = s.get(Job, job_id)
         if job is None or job.status != "running":
             raise jobs_svc.JobCancelled("The job is no longer running.")
@@ -823,7 +823,7 @@ async def _heartbeat(st, job_id: str):
     while True:
         await asyncio.sleep(max(5, jobs_svc.LEASE_SECONDS // 4))
         def beat():
-            with st.db.session() as s:
+            with st.db.session(write=True) as s:
                 j = s.get(Job, job_id)
                 if j and j.status == "running":
                     _touch(j)
@@ -902,7 +902,7 @@ async def _call_model_once(st, turn: Turn) -> tuple[str, dict]:
 
 def _record_model(st, job_id: str, turn: Turn, text: str, info: dict) -> dict | None:
     """Persist the model's turn and, atomically, the tool step it asked for. -> result dict when the run is finished."""
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         job = s.get(Job, job_id)
         run = s.get(AgentRun, job.payload["run_id"])
         agent = s.get(Agent, run.agent_id)
@@ -989,7 +989,7 @@ def unverified_claims(s, run: AgentRun, final: str, made: set[str]) -> list[str]
 
 
 def _execute_tool(st, job_id: str, step_n: int) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         job = s.get(Job, job_id)
         run = s.get(AgentRun, job.payload["run_id"])
         agent = s.get(Agent, run.agent_id)

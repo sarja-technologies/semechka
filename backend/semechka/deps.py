@@ -26,7 +26,7 @@ def get_db(request: Request, st: AppState = Depends(get_state)):
     response has been sent, so a client could be told "signed in" (or "saved") and read the row before it exists, and
     a failed commit would still have answered 200. Streaming endpoints commit before they return and open their own
     sessions inside the stream."""
-    s = st.db.Session()
+    s = st.db.Session() if request.method in ("GET", "HEAD", "OPTIONS") else st.db.writer()  # writers queue for the lock
     try:
         yield s
         s.commit()

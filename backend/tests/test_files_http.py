@@ -165,3 +165,72 @@ def test_jobs_left_running_by_a_dead_process_resume_at_start_up(owner, app, st, 
         assert s.get(Job, ids[1]).status == "failed" and "repeatedly" in s.get(Job, ids[1]).error
     jobs_svc.run_pending(st)
     assert {j["status"] for j in fin.get(f"/api/workspaces/{wid}/jobs").json()} == {"succeeded", "failed"}
+
+
+def test_concurrent_writers_queue_for_the_database_instead_of_failing(tmp_path):
+    """Seen live under load: login reads a user, then updates it; another writer committed in between, and SQLite's WAL mode
+    answers 'database is locked' at once, ignoring the busy timeout. Writers that begin with the write lock wait their turn."""
+    import threading
+
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    from semechka.db import Database
+    db = Database(f"sqlite:///{tmp_path}/t.db")
+    with db.session() as s:
+        s.execute(text("create table t (k text primary key, v integer)"))
+        s.execute(text("insert into t values ('a', 0)"))
+
+    def interleave(write):
+        a = db.session(write=write)
+        with a as sa:
+            sa.execute(text("select v from t where k='a'")).scalar()  # A has read
+            done = threading.Event()
+
+            def other():
+                with db.session(write=True) as sb:  # B writes and commits while A is still open
+                    sb.execute(text("update t set v = v + 1 where k='a'"))
+                done.set()
+            th = threading.Thread(target=other)
+            th.start()
+            if not write:
+                done.wait(5)  # for a deferred A, B gets in and commits first
+            sa.execute(text("update t set v = v + 10 where k='a'"))
+        th.join(10)
+
+    with pytest.raises(OperationalError, match="locked"):
+        interleave(False)  # the failure this guards against
+    interleave(True)  # A took the write lock first; B waited, then both applied
+    with db.session() as s:
+        assert s.execute(text("select v from t where k='a'")).scalar() == 1 + 10 + 1  # first run added 1 + (A failed), second 10 + 1
+
+
+def test_a_burst_of_logins_and_uploads_never_answers_500(owner, app, st, cfg):
+    """The same failure through the real HTTP stack: many people signing in and uploading at once."""
+    import concurrent.futures as cf
+
+    from .conftest import Api, make_user
+    acme, c = company(owner, app, "Burst", "boss@burst.test", {})
+    boss = c["boss@burst.test"]
+    people = []
+    for i in range(8):
+        email = f"p{i}@burst.test"
+        make_user(owner, app, email)
+        assert boss.post(f"/api/orgs/{acme}/members", json={"email": email, "roles": ["dept_admin"]}).status_code == 200
+        people.append(email)
+
+    def work(email):
+        cl = Api(app)
+        codes = []
+        for _ in range(3):
+            codes.append(cl.login(email).status_code)
+        cl.csrf = cl.get("/api/me").json()["csrf"]
+        wid = cl.post(f"/api/orgs/{acme}/workspaces", json={"name": f"ws-{email}"}).json()["id"]
+        for n in range(3):
+            codes.append(up(cl, wid, f"f{n}.txt", b"hello burst " * 50).status_code)
+        return codes
+    with cf.ThreadPoolExecutor(8) as ex:
+        results = list(ex.map(work, people))
+    flat = [c for r in results for c in r]
+    assert set(flat) == {200}, sorted(set(flat))

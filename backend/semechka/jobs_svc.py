@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
 
 from . import audit, authz
 from .models import User
@@ -69,7 +70,7 @@ def still_authorised(s, j: Job) -> str | None:
 def recover_stale(st) -> int:
     """Jobs whose worker vanished (lease expired) go back to the queue, or fail after too many attempts."""
     n = 0
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         for j in s.execute(select(Job).where(Job.status == "running", Job.lease_until < time.time())).scalars().all():
             if j.attempts >= MAX_ATTEMPTS:
                 j.status, j.error, j.finished_at = "failed", "The worker stopped repeatedly while running this job.", time.time()
@@ -84,7 +85,7 @@ def recover_on_start(st) -> int:
     deploy) go straight back to the queue instead of waiting for their lease to expire. A job that has already been tried
     MAX_ATTEMPTS times is failed instead, so a job that crashes the server cannot crash it forever."""
     n = 0
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         for j in s.execute(select(Job).where(Job.status == "running")).scalars().all():
             if j.attempts >= MAX_ATTEMPTS:
                 j.status, j.error, j.finished_at = "failed", "The server stopped repeatedly while running this job.", time.time()
@@ -95,7 +96,7 @@ def recover_on_start(st) -> int:
 
 
 def claim(st, kinds: list[str] | None = None) -> str | None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         q = select(Job).where(Job.status == "queued").order_by(Job.priority, Job.created_at).limit(25)
         if kinds:
             q = q.where(Job.kind.in_(kinds))
@@ -131,7 +132,7 @@ def _preflight(st, job_id: str):
 
 
 def _complete(st, job_id: str, result: dict) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(Job, job_id)
         if j and j.status == "running":
             j.result, j.status, j.finished_at, j.error = result or {}, "succeeded", time.time(), ""
@@ -148,12 +149,19 @@ def run_job(st, job_id: str) -> None:
         if inspect.iscoroutinefunction(fn):
             _complete(st, job_id, asyncio.run(fn(st, job_id)))
         else:
-            with st.db.session() as s:
-                j = s.get(Job, job_id)
-                result = fn(st, s, j) or {}
-                j.result, j.status, j.finished_at, j.error = result, "succeeded", time.time(), ""
-                if j.progress is not None:
-                    j.progress = 1.0
+            for attempt in range(4):  # a handler's session reads then writes; if another writer got in between, run it again
+                try:
+                    with st.db.session() as s:
+                        j = s.get(Job, job_id)
+                        result = fn(st, s, j) or {}
+                        j.result, j.status, j.finished_at, j.error = result, "succeeded", time.time(), ""
+                        if j.progress is not None:
+                            j.progress = 1.0
+                    break
+                except OperationalError as e:
+                    if "locked" not in str(e) or attempt == 3:
+                        raise
+                    time.sleep(0.4 * (attempt + 1))
     except JobPaused:
         pass
     except JobCancelled as e:
@@ -193,7 +201,7 @@ def sync_kinds() -> list[str]:
 
 
 def _end(st, job_id: str, status: str, error: str) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(Job, job_id)
         if j and j.status in ("running", "queued"):
             j.status, j.error, j.finished_at = status, error[:300], time.time()
