@@ -153,6 +153,7 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
 
 | 2026-10-26 | 0.5.0 / 10 | `backups/roasted-cmsit-pre-0.5.0-20261026-195048` | copy: up/down/up, semantic 4/4 | healthy; all cloud and sandbox switches OFF |
 | 2026-10-26 | 0.5.6 / 10 (no schema change) | `backups/roasted-cmsit-pre-0.5.6-20261026-220105` | copy: up, down to 9, up, semantic 4/4, roles hash identical | healthy; 3 users, 7 conversations, branding intact; Salted untouched (0.4.0 / 6); switches still OFF |
+| 2026-10-27 | 0.5.7 / 10 (no schema change) | `backups/roasted-cmsit-pre-0.5.7-deploy-20261027-002802` (also `-rollout-20261027-002704/-002721/-002737`, each integrity ok) | copy of the real configuration, served on a loopback port with the engine address pointed at nothing: 27/27 (see "0.5.7 rollout" below) | healthy; 3 users, 7 conversations, 75 messages, branding "CMSIT AI", schema 10, **no cloud.* or sandbox.* setting stored, so every cloud switch is still OFF**; unauthenticated cloud endpoints 401; Salted untouched (0.4.0 / 6) |
 | 2026-10-26 | staging 0.5.6 / 10 | none (synthetic, disposable) | n/a | port 8790, `~/semechka-deploy/staging`, credentials in `secrets/staging-credentials.txt` (0600), all switches ON |
 
 Rollback of the latest stage: on the Spark, `semechka migrate --to 8 --yes` with the 0.4.4 program (instance data dir
@@ -364,16 +365,45 @@ qwen-image-2.1, qwen-image-edit-2511, flux2-klein-4b (z-image-turbo is also serv
 ### Recovery
 
 * Program rollback of CMSIT AI: `~/semechka-deploy/roasted/app` keeps older releases; `install.sh --rollback` (run from the
-  unpacked newer release) returns to the previous recorded version; data schema is unchanged between 0.5.0 and 0.5.6.
-* Data: restore `~/semechka-deploy/backups/roasted-cmsit-pre-0.5.6-20261026-220105` (database `.backup`, `master.key`, assets) or
+  unpacked newer release) returns to the previous recorded version; data schema is unchanged between 0.5.0 and 0.5.7.
+* Data: restore `~/semechka-deploy/backups/roasted-cmsit-pre-0.5.7-deploy-20261027-002802` (database `.backup`, `master.key`, assets) or
   `semechka restore <file>` for a sealed backup.
 * Sandbox: `sandbox/setup/README.md` (rollback of each step). Relay only: `systemctl --user disable --now semechka-sandbox-relay`.
 * Staging can be deleted outright (`systemctl --user disable --now semechka-staging`; remove `~/semechka-deploy/staging`).
 
+### 0.5.7 controlled rollout (2026-10-27)
+
+What 0.5.7 adds (all inert until an administrator uses them): `cloud.rollout` (everyone | admins; default everyone), the per-owner
+file rule (`file_access: owner` on a workspace policy), `cloud.agents.models` (agents limited to listed models; empty = no limit),
+`scripts/spark/rollout.py` (apply / rollback through the audited admin API), the VM-boundary assessment in `docs/THREAT_MODEL.md`.
+
+Evidence, with what each one is and is not:
+
+| Evidence | Where | Result |
+|---|---|---|
+| Backend suite | developer machine | 425 passed, 8 skipped (full run, after the agent-model change and the sweeper fix); new tests `test_rollout.py`, owner-rule tests in `test_authz.py` and `test_files_http.py` (mutation-checked: removing the rule or the guard fails them) |
+| Live controls check (`live_rollout.py`) | **staging** (synthetic accounts, real engine), not production | 26/26: fence on/off, members and the organisation's own owner refused with 403 `rollout`, signed-out 401, owner-only files hidden from a colleague and from the platform owner, retrieval does not leak, agent picker limited, history and audit chain verify |
+| 35B agent, scenario D (`live_scenarios.py`, model alias "Agent") | **staging** | passed: correct 15,900 and 14,500, every python call approved, real sandbox. The 4B/"Quick" model is not used for agents; `cloud.agents.models` makes that a server rule |
+| Rollout rehearsal (`rehearse_rollout.sh`) | **a copy of CMSIT AI's real data/configuration**, run on the Spark with the engine address replaced by a dead one; live DB only read with `.backup` | 27/27: baseline equals production (switches off, branding), `rollout.py apply` fence-first, ordinary account refused everywhere even after being added to an organisation, administrator pilot (upload, retrieval, owner rule, model list), `rollback`, history undo, sealed backup then restore into an empty directory reproduces flags/accounts/messages/roles/models with integrity ok |
+| Production after deploy | **live CMSIT AI**, read-only checks | version 0.5.7, schema 10, row counts and branding unchanged, switches off, 401 for signed-out callers |
+
+Not done on production, because it needs an administrator's credentials that were not given to this work: no cloud switch was
+flipped on CMSIT AI, and no signed-in session on 8787 was used. The production procedure is the one rehearsed: run
+`scripts/spark/rollout.py apply` as a CMSIT AI administrator (it sets `cloud.rollout=admins` first), or set the three settings
+in Administration, Settings in that order.
+
+Found while deploying: at service start the retention sweep and the embedding backfill could log `database is locked` while the
+start-up work held the writer (logged, retried five minutes later, no data affected; the same appeared at earlier deploys). Fixed
+after 0.5.7 (they now take the write lock; unreleased). The media pump has the same pattern but runs on the event loop, where
+waiting for the lock is unsafe; it logs "media pump failed" at start-up and retries three seconds later. Not changed.
+
 ### Open items and decisions for the owner
 
-1. Whether to switch on `cloud.workspaces.enabled`, `cloud.agents.enabled`, `sandbox.enabled` on CMSIT AI. If sandbox is
-   enabled, first run `sandbox/setup/3-service-proxy.sh` and set `sandbox.docker_host` (step 4 of the sandbox README).
-2. Agents need a capable model (35B-class or larger); the 120B model cannot share the GPU with video generation.
-3. Not built: OCR/transcription, reranking, an agent media tool, a per-owner file rule, a VM boundary for hostile code.
+1. Run the rollout on CMSIT AI (administrator only): `scripts/spark/rollout.py apply`. Sandbox stays off until you approve it; if
+   you do, first run `sandbox/setup/3-service-proxy.sh`, set `sandbox.docker_host` (step 4 of the sandbox README), and decide on the
+   VM boundary (see the assessment in `docs/THREAT_MODEL.md`).
+2. After the fence is up, set `cloud.agents.models` to the model ids you have checked (the 35B "Agent" model); agents then cannot
+   be pinned to, or default to, a small model. The 120B model cannot share the GPU with video generation.
+3. Not built: OCR/transcription, reranking, an agent media tool, a VM boundary for hostile code. (The per-owner file rule exists
+   from 0.5.7 but is off by default and per workspace.)
 4. The 8787 instance is CMSIT AI (production). The earlier "Roasted = disposable" label in notes is wrong.
