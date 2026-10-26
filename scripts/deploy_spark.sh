@@ -9,6 +9,8 @@
 #   <name>/app/venv     program files for the instance   (replaced on update)
 #   <name>/data         database, master key, uploads    (never touched by an update)
 #   secrets/            0600 files: sarness.token, salted-credentials.txt
+# Staging (port 8790) is a throw-away instance with synthetic accounts for end-to-end runs; it is provisioned by
+# scripts/spark/provision_staging.py and never holds real data.
 # Roasted is installed with a one-time setup token and an engine "hint" so the wizard can find the engine; it is never
 # completed by this script. Salted is provisioned afterwards by scripts/provision_salted.py.
 set -euo pipefail
@@ -21,9 +23,10 @@ BASE="$(basename "$TARBALL" .tar.gz)"
 $SSH 'mkdir -p ~/semechka-deploy/releases'
 $SCP "$TARBALL" "$TARBALL.sha256" "$(echo "$SSH" | awk '{print $NF}'):semechka-deploy/releases/"
 
-for NAME in roasted salted; do
+for NAME in roasted salted staging; do
+  [ "$NAME" = staging ] && [ "$WHICH" != staging ] && continue  # staging only when asked for by name
   [ "$WHICH" = both ] || [ "$WHICH" = "$NAME" ] || continue
-  PORT=8787; [ "$NAME" = salted ] && PORT=8788
+  PORT=8787; [ "$NAME" = salted ] && PORT=8788; [ "$NAME" = staging ] && PORT=8790
   echo "== $NAME on $IP:$PORT"
   $SSH bash -s -- "$BASE" "$NAME" "$PORT" "$IP" "$ENGINE_URL" <<'REMOTE'
 set -euo pipefail
