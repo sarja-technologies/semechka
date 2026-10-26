@@ -414,7 +414,7 @@ MIGRATIONS: dict[int, Step] = {
             _up_7, _down_7),
     8: Step("0.4.2: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
             _up_8, _down_8),
-    9: Step("0.4.2: workspace files and versions, durable jobs, contexts and the retrieval index", _up_9, _down_9),
+    9: Step("0.4.3: workspace files and versions, durable jobs, contexts and the retrieval index", _up_9, _down_9),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

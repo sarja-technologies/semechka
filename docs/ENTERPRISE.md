@@ -70,9 +70,9 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M2 | Tenancy tables + migration 8 | done, **deployed to CMSIT AI 2026-10-26 (0.4.2, schema 8)** | `models_tenancy.py`, `migrations._up_8/_down_8`; tests `test_migration_7`, suite 326 passed |
 | M2 | `authz` engine + tests | done | `authz.py`; `tests/test_authz.py` 21 tests (tenant boundary, deny-wins, sensitive wildcards, restricted items, foreign ids, agent intersection) |
 | M2 | Org/group/workspace/member/ACL API | done (API only; UI is M7) | `routers/orgs.py`; `tests/test_orgs_http.py` Scenarios A and B at workspace level (file level arrives in M3) |
-| M3a | Workspace filesystem, versions, trash, quotas, encrypted per-org store | done (not yet deployed) | `files_svc.py`, `routers/files.py`; `tests/test_files_contexts.py` (19), `tests/test_files_http.py` (4) |
-| M3b | Durable jobs + ingestion (txt/md/code/csv/json/pdf/docx/xlsx/pptx; images/video/archives reported unsupported) | done (not yet deployed) | `jobs_svc.py`, `ingest_svc.py`, `extract_svc.py`; real generated Office/PDF files in tests; zip-bomb and path-traversal archives refused |
-| M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done (not yet deployed) | `contexts_svc.py`; cache key = exact permitted (file, version) set |
+| M3a | Workspace filesystem, versions, trash, quotas, encrypted per-org store | done, **deployed 0.4.3 / schema 9** | `files_svc.py`, `routers/files.py`; `tests/test_files_contexts.py` (19), `tests/test_files_http.py` (4) |
+| M3b | Durable jobs + ingestion (txt/md/code/csv/json/pdf/docx/xlsx/pptx; images/video/archives reported unsupported) | done, **deployed 0.4.3** | `jobs_svc.py`, `ingest_svc.py`, `extract_svc.py`; real generated Office/PDF files in tests; zip-bomb and path-traversal archives refused |
+| M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done, **deployed 0.4.3** | `contexts_svc.py`; cache key = exact permitted (file, version) set |
 | M3d | Semantic retrieval (embeddings) + hybrid ranking | **not started** | needs a real embedding model; none installed, engine exposes no embedding endpoint. Nothing in the product claims semantic search. |
 | M4 | Document tools (docx/xlsx/pptx/pdf) | planned | |
 | M5 | Durable jobs + container executor | planned, **blocked** on runtime | |
