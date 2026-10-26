@@ -19,11 +19,11 @@ const api = async (page: Page, path: string) => (await page.request.get(path)).j
 
 /** Make sure the composer will use `model`: usually it is already the default, otherwise pick it from the chooser. */
 async function choose(page: Page, model: string) {
-  const current = page.locator('.composer').getByRole('button', { name: new RegExp(`^${model}\\b`) });
+  const current = page.locator('.composer').getByRole('button', { name: new RegExp(`\\b${model}\\b`) });
   if (await current.count()) return;
   await page.locator('.composer').getByRole('button', { name: /Model|chevron/i }).or(page.locator('.composer button[aria-haspopup]')).first().click();
   await page.getByRole('option', { name: new RegExp(model) }).first().click();
-  await expect(page.locator('.composer').getByRole('button', { name: new RegExp(`^${model}\\b`) })).toBeVisible();
+  await expect(page.locator('.composer').getByRole('button', { name: new RegExp(`\\b${model}\\b`) })).toBeVisible();
 }
 
 // ---- Scenario G: media generation as an ordinary member, through the UI --------------------------------------------

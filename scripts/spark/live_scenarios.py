@@ -20,7 +20,10 @@ import urllib.request
 import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "backend"))
-from tests.test_files_contexts import docx_bytes, xlsx_bytes  # noqa: E402  (document builders shared with the unit tests)
+from tests.test_files_contexts import (  # document builders shared with the unit tests
+    docx_bytes,
+    xlsx_bytes,
+)
 
 BASE = os.environ.get("STAGING_URL", "http://192.168.20.193:8790")
 SSH = ["ssh", "-F", os.path.expanduser(os.environ.get("SPARK_SSH_CONFIG", "~/.ssh/config.semechka")), "spark"]
@@ -35,7 +38,7 @@ def check(name: str, ok: bool, seen: object = "") -> bool:
 
 
 def ssh(cmd: str) -> str:
-    return subprocess.run([*SSH, cmd], capture_output=True, text=True, timeout=300).stdout
+    return subprocess.run([*SSH, cmd], capture_output=True, text=True, timeout=300, check=False).stdout
 
 
 def credentials() -> dict[str, str]:
@@ -241,7 +244,7 @@ def scenario_C(w: World, ids):
         try:
             urllib.request.urlopen(BASE + "/api/health", timeout=3).read()
             break
-        except Exception:
+        except OSError:
             time.sleep(1)
     c2 = Client(f"acme-finance@{DOMAIN}", w.creds[f"acme-finance@{DOMAIN}"])
     code, after = c2.post(f"/api/workspaces/{fin}/retrieve", {"query": "who has to approve an expensive taxi ride", "context_ids": [ctx["id"]]})
@@ -283,7 +286,7 @@ def scenario_D(w: World, ids, ctx_id):
     c.upload(fin, "pnl-september.xlsx", xlsx_bytes({"P&L": sept}))
     c.upload(fin, "pnl-october.xlsx", xlsx_bytes({"P&L": octo}))
     wait_jobs(c, fin)
-    net = lambda rows: sum(r[1] if r[0] == "Revenue" else -r[1] for r in rows[1:])  # noqa: E731
+    net = lambda rows: sum(r[1] if r[0] == "Revenue" else -r[1] for r in rows[1:])
     exp_oct, exp_sep = net(octo), net(sept)
     model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
     task = ("Compare pnl-september.xlsx and pnl-october.xlsx. Use the python tool to compute net profit for both months and the "
@@ -357,7 +360,7 @@ def scenario_H(w: World, ids, ctx_id):
     print("== H: the service restarts while an agent is running")
     c, fin = w.u["acme-finance"], ids["fin"]
     model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
-    aid, rid = run_agent(c, fin, "Restart survivor", "Read policy.docx and budget.xlsx, then write a short summary document called restart-check.docx.", model,
+    _aid, rid = run_agent(c, fin, "Restart survivor", "Read policy.docx and budget.xlsx, then write a short summary document called restart-check.docx.", model,
                          ["list_files", "read_file", "read_table", "create_document"], approval="never", ctx_ids=[ctx_id])
     status, nsteps = "", 0
     for _ in range(240):  # in flight = running AND at least one step already written, so the restart interrupts real work
@@ -374,7 +377,7 @@ def scenario_H(w: World, ids, ctx_id):
         try:
             urllib.request.urlopen(BASE + "/api/health", timeout=3).read()
             break
-        except Exception:
+        except OSError:
             time.sleep(1)
     c = Client(f"acme-finance@{DOMAIN}", w.creds[f"acme-finance@{DOMAIN}"])
     r = wait_run(c, rid, timeout=900)

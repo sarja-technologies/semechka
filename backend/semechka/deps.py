@@ -37,6 +37,20 @@ def get_db(request: Request, st: AppState = Depends(get_state)):
         s.close()
 
 
+def get_db_deferred(st: AppState = Depends(get_state)):
+    """Like get_db, but never starts as a writer: for an endpoint that does slow work first (a password hash) and calls
+    `st.db.upgrade(s)` itself, after `s.rollback()`, just before it writes."""
+    s = st.db.Session()
+    try:
+        yield s
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 

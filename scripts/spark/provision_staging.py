@@ -17,7 +17,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from provision_salted import Api, load_credentials, new_password, save_credentials  # noqa: E402  (shared helpers)
+from provision_salted import (  # (shared helpers)
+    Api,
+    load_credentials,
+    new_password,
+    save_credentials,
+)
 
 DOMAIN = "staging.test"
 ACCOUNTS = [  # local part, display name, role: platform people; company people are created inside organisations

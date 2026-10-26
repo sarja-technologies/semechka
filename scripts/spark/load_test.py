@@ -18,7 +18,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from live_scenarios import DOMAIN, Client, credentials  # noqa: E402  (shared HTTP client and credential reader)
+from live_scenarios import (  # (shared HTTP client and credential reader)
+    DOMAIN,
+    Client,
+    credentials,
+)
 
 
 def pct(xs: list[float], p: float) -> float:

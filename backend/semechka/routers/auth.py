@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import audit, mailer, security, services
-from ..deps import Ctx, current, get_db, get_state, issue_session, optional_ctx
+from ..deps import Ctx, current, get_db, get_db_deferred, get_state, issue_session, optional_ctx
 from ..models import EmailToken, Invite, Role, SessionRow, User, UserRole
 from ..state import AppState
 
@@ -208,7 +208,7 @@ def reset(body: dict, s=Depends(get_db, scope="function"), st: AppState = Depend
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db, scope="function"), st: AppState = Depends(get_state)):
+def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db_deferred, scope="function"), st: AppState = Depends(get_state)):
     ip = request.client.host if request.client else ""
     email = body.email.strip().lower()
     if not st.limiter.hit(f"login:ip:{ip}", 60, 60) or not st.limiter.hit(f"login:{email}", 10, 60):
@@ -216,6 +216,10 @@ def login(body: LoginIn, request: Request, response: Response, s=Depends(get_db,
     user = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
     now = time.time()
     ok = security.verify_password(user.password_hash if user else None, body.password)
+    uid = user.id if user else None
+    s.rollback()  # the hash above is the slow part: it ran without the write lock; everything below may write
+    st.db.upgrade(s)
+    user = s.get(User, uid) if uid else None
     if user and user.locked_until > now:
         raise HTTPException(429, {"code": "locked", "message": "This account is temporarily locked. Try again later."})
     if not user or not ok:
