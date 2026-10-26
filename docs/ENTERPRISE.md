@@ -73,7 +73,7 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M3a | Workspace filesystem, versions, trash, quotas, encrypted per-org store | done, **deployed 0.4.3 / schema 9** | `files_svc.py`, `routers/files.py`; `tests/test_files_contexts.py` (19), `tests/test_files_http.py` (4) |
 | M3b | Durable jobs + ingestion (txt/md/code/csv/json/pdf/docx/xlsx/pptx; images/video/archives reported unsupported) | done, **deployed 0.4.3** | `jobs_svc.py`, `ingest_svc.py`, `extract_svc.py`; real generated Office/PDF files in tests; zip-bomb and path-traversal archives refused |
 | M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done, **deployed 0.4.3** | `contexts_svc.py`; cache key = exact permitted (file, version) set |
-| M3d | Semantic retrieval (embeddings) + hybrid ranking | **not started** | needs a real embedding model; none installed, engine exposes no embedding endpoint. Nothing in the product claims semantic search. |
+| M3d | Semantic retrieval (embeddings) + hybrid ranking (BM25 + cosine, reciprocal-rank fusion) | done, **deployed 0.4.4, enabled on CMSIT AI** | `embed_svc.py`; Qwen3-Embedding-0.6B Q8 (Apache-2.0, sha256 verified) served by `semechka-embed.service` on 127.0.0.1:8760; real-model rehearsal on the Spark: 4/4 queries with no shared keywords, junk query returns nothing; `tests/test_semantic.py` (7) with a deterministic fake embedder |
 | M4 | Document tools (docx/xlsx/pptx/pdf) | planned | |
 | M5 | Durable jobs + container executor | planned, **blocked** on runtime | |
 | M6 | Model gateway, scheduling, agent memory | planned | |
@@ -113,7 +113,20 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
 ## Blockers (as of 2026-10-26)
 
 * Container runtime: the privileged one-time setup above has not been done yet (done at M5, with rollback notes).
-* Embeddings: the engine exposes no embedding endpoint and no embedding model is installed (see M3d).
+
+## Decisions made while building M2
+
+* **Auto-join is single-tenant only.** New platform users join the auto-join organisation (first joiner = owner).
+  Creating a second organisation turns auto-join off and audits it; otherwise companies would share a directory.
+* **Org owners/admins can list workspace names** (`org.workspaces.list_all`) and read their metadata, nothing else;
+  a workspace nobody lets you see answers 404. Members' emails are shown only to people who manage members.
+* **Orphan recovery:** only `org.workspaces.recover` (org owner) can appoint a `ws_admin` to a workspace with none;
+  it cannot grant any other role and does not grant reading rights.
+* Known gap: contributors/editors are not limited to "own files" (no per-owner rule yet).
+* Known gap: platform `owner` is also org owner of the *default* organisation (that is how single-tenant installs
+  work); in a hosted multi-tenant setup the operator should not use that account as a tenant member.
+* Lint: baseline was 457 findings; adding ruff's FastAPI `extend-immutable-calls` setting brought the repo to 185;
+  new files introduce none.
 
 ## Decisions made while building M3
 
@@ -128,3 +141,34 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
   `access_log_days` (365); run by the existing sweeper.
 * Known gaps: no OCR for scans/images, no audio/video transcription; archives are stored, never opened; contributors
   may overwrite other people's files (no per-owner rule).
+
+## Deployments
+
+| When | Version / schema | Backup (on the Spark) | Rehearsal | Result |
+|------|------------------|-----------------------|-----------|--------|
+| 2026-10-26 | 0.4.1 / 7 | `backups/roasted-cmsit-pre-0.4.1-20261026-134427` | copy: up, down (roles hash identical) | healthy; member can list image/video models on the copy |
+| 2026-10-26 | 0.4.2 / 8 | `backups/roasted-cmsit-pre-0.4.2-20261026-174016` | copy: up → 1 org, 3 members; down → tables and column gone, roles hash identical; up again | healthy; 3 users, 5 chats, CMSIT AI branding intact; new routes answer 401 unauthenticated; Salted untouched (0.4.0 / 6) |
+| 2026-10-26 | 0.4.3 / 9 | `backups/roasted-cmsit-pre-0.4.3-20261026-175521` | copy on the Spark: up; real DOCX/XLSX/PPTX uploaded, ingested and retrieved with citations (aarch64); down to 8 removed the file tables and blob directory (roles hash identical); up again | healthy; 3 users, 5 chats, branding intact; new routes 401 unauthenticated; Salted untouched |
+| 2026-10-26 | 0.4.4 / 9 | `backups/roasted-cmsit-pre-0.4.4-20261026-181149` | copy on the Spark with the real embedding model: 4/4 semantic queries, junk query empty | healthy; embeddings enabled via the audited settings service; 3 users, chats 5 → 7 during the session (live use), Salted untouched |
+
+Rollback of the latest stage: on the Spark, `semechka migrate --to 8 --yes` with the 0.4.4 program (instance data dir
+`~/semechka-deploy/roasted/data`), then install the 0.4.2 tarball (schema 8) from `~/semechka-deploy/releases/`; or restore the
+backup directory above (database `.backup` + `master.key` + `assets`).
+
+## Semantic retrieval notes (M3d)
+
+* Model downloaded 2026-10-26 on the owner's instruction to proceed (641 MB, `~/semechka-deploy/models/embed/`) from
+  `Qwen/Qwen3-Embedding-0.6B-GGUF`; checksum matched the hub's published sha256. Run by the existing llama.cpp binary
+  as its own loopback-only user service (`MemoryMax=6G`); it does not touch the Sarness engine.
+* `embeddings.min_score` (default 0.47) is a heuristic measured on this model: related 0.50-0.75, unrelated <= 0.45.
+* Modes are reported per passage (`keyword` / `semantic` / `hybrid`) and for the whole search; when the service is
+  down, unconfigured, or passages are not yet embedded, the response says so in `notes`.
+* Vectors are encrypted per organisation and tagged with the model that made them; a model change makes them stale and
+  they are ignored until the sweeper's backfill recomputes them.
+* Mutation-testing the cache key showed the first cache-leak tests did not notice a key that ignored the permitted set
+  (results were still re-filtered, so nothing leaked, but visible answers could be crowded out); a crowd-out test
+  now covers it.
+* Production configuration change, made through the audited settings service as `ops:claude`: `embeddings.url` and
+  `embeddings.model` on CMSIT AI.
+* Process note: an earlier edit of this file truncated the M2 decisions and the deployments table; both were restored
+  from commit c06d045 and the missing rows added.
