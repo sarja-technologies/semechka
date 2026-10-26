@@ -300,8 +300,9 @@ Index("ix_msgs_conv_parent", Message.conversation_id, Message.parent_id)
 
 # --- knowledge fork: tables for collections, assistants and conversation context live in their own module ---
 from . import models_knowledge  # noqa: E402,F401
-from . import models_tenancy  # noqa: E402,F401  (organisations, workspaces, access rules)
-from . import models_files  # noqa: E402,F401  (workspace files, jobs, contexts)
+from . import models_tenancy  # noqa: F401  (organisations, workspaces, access rules)
+from . import models_files  # noqa: F401  (workspace files, jobs, contexts)
+from . import models_agents  # noqa: F401  (cloud agents, runs, memory)
 
 
 class EmailToken(Base):

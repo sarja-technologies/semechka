@@ -5,6 +5,7 @@ starts. Handlers are registered per kind and receive only ids; they re-load and 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import threading
 import time
@@ -20,10 +21,14 @@ from .models_tenancy import OrgMember, Workspace
 log = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 300
-CONCURRENCY = {"ingest": 2, "embed": 1}  # per kind; anything else runs one at a time
+CONCURRENCY = {"ingest": 2, "embed": 1, "agent": 2}  # per kind; anything else runs one at a time
 HANDLERS: dict[str, Callable] = {}
 _running: dict[str, int] = {}
 _lock = threading.Lock()
+
+
+class JobPaused(Exception):
+    """Raised by a handler that has set the job to awaiting_approval: leave the job exactly as the handler left it."""
 
 
 class JobCancelled(Exception):
@@ -94,24 +99,48 @@ def claim(st, kinds: list[str] | None = None) -> str | None:
     return None
 
 
-def run_job(st, job_id: str) -> None:
-    kind = None
-    try:
-        with st.db.session() as s:
-            j = s.get(Job, job_id)
-            kind = j.kind
-            if j.cancel_requested:
-                raise JobCancelled("Cancelled before it started.")
-            why = still_authorised(s, j)
-            if why:
-                raise JobCancelled(why)
-            fn = HANDLERS.get(j.kind)
-            if fn is None:
-                raise RuntimeError(f"No handler for '{j.kind}' jobs.")
-            result = fn(st, s, j) or {}
-            j.result, j.status, j.finished_at, j.error = result, "succeeded", time.time(), ""
+def _preflight(st, job_id: str):
+    """-> (kind, handler). Raises JobCancelled when the job must not start."""
+    with st.db.session() as s:
+        j = s.get(Job, job_id)
+        kind = j.kind
+        if j.cancel_requested:
+            raise JobCancelled("Cancelled before it started.")
+        why = still_authorised(s, j)
+        if why:
+            raise JobCancelled(why)
+        fn = HANDLERS.get(kind)
+        if fn is None:
+            raise RuntimeError(f"No handler for '{kind}' jobs.")
+        return kind, fn
+
+
+def _complete(st, job_id: str, result: dict) -> None:
+    with st.db.session() as s:
+        j = s.get(Job, job_id)
+        if j and j.status == "running":
+            j.result, j.status, j.finished_at, j.error = result or {}, "succeeded", time.time(), ""
             if j.progress is not None:
                 j.progress = 1.0
+
+
+def run_job(st, job_id: str) -> None:
+    """Run one claimed job on this thread. A coroutine handler (agents) gets its own event loop here; the application's
+    pump runs those on the main loop instead (run_job_async) so they share its generation scheduler."""
+    kind = None
+    try:
+        kind, fn = _preflight(st, job_id)
+        if inspect.iscoroutinefunction(fn):
+            _complete(st, job_id, asyncio.run(fn(st, job_id)))
+        else:
+            with st.db.session() as s:
+                j = s.get(Job, job_id)
+                result = fn(st, s, j) or {}
+                j.result, j.status, j.finished_at, j.error = result, "succeeded", time.time(), ""
+                if j.progress is not None:
+                    j.progress = 1.0
+    except JobPaused:
+        pass
     except JobCancelled as e:
         _end(st, job_id, "cancelled", str(e))
     except Exception as e:  # noqa: BLE001  a handler bug must end the job, not the worker
@@ -120,6 +149,32 @@ def run_job(st, job_id: str) -> None:
         if kind:
             with _lock:
                 _running[kind] = max(0, _running.get(kind, 0) - 1)
+
+
+async def run_job_async(st, job_id: str) -> None:
+    kind = None
+    try:
+        kind, fn = await asyncio.to_thread(_preflight, st, job_id)
+        result = await fn(st, job_id)
+        await asyncio.to_thread(_complete, st, job_id, result)
+    except JobPaused:
+        pass
+    except JobCancelled as e:
+        await asyncio.to_thread(_end, st, job_id, "cancelled", str(e))
+    except Exception as e:  # noqa: BLE001
+        await asyncio.to_thread(_end, st, job_id, "failed", f"{type(e).__name__}: {str(e)[:200]}")
+    finally:
+        if kind:
+            with _lock:
+                _running[kind] = max(0, _running.get(kind, 0) - 1)
+
+
+def async_kinds() -> list[str]:
+    return [k for k, fn in HANDLERS.items() if inspect.iscoroutinefunction(fn)]
+
+
+def sync_kinds() -> list[str]:
+    return [k for k, fn in HANDLERS.items() if not inspect.iscoroutinefunction(fn)]
 
 
 def _end(st, job_id: str, status: str, error: str) -> None:
@@ -144,9 +199,19 @@ def run_pending(st, limit: int = 50, kinds: list[str] | None = None) -> int:
 
 
 async def pump(st) -> None:
+    tasks: set[asyncio.Task] = set()
     while True:
         try:
-            await asyncio.to_thread(run_pending, st, 10)
+            await asyncio.to_thread(recover_stale, st)
+            await asyncio.to_thread(run_pending, st, 10, sync_kinds())
+            kinds = async_kinds()
+            while kinds:
+                jid = await asyncio.to_thread(claim, st, kinds)
+                if jid is None:
+                    break
+                t = asyncio.create_task(run_job_async(st, jid))
+                tasks.add(t)
+                t.add_done_callback(tasks.discard)
         except Exception:  # the pump must outlive any single failure
             log.exception("job pump iteration failed")
         await asyncio.sleep(1.0)

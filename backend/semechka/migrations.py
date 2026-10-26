@@ -331,6 +331,7 @@ def _down_7(conn: Connection, _c: Ctx) -> None:
 # ---- 8: organisations, workspaces and access rules -----------------------------------------------
 _TABLES_8 = ["acl_entries", "workspace_members", "workspaces", "org_group_members", "org_groups", "org_members",
              "org_roles", "orgs"]  # drop order: children first
+_TABLES_10 = ["agent_memory", "agent_steps", "agent_runs", "agent_versions", "agents"]
 _TABLES_9 = ["context_versions", "context_attachments", "context_items", "contexts", "jobs", "ws_chunks", "ws_doc_text",
              "ws_file_access", "ws_file_versions", "ws_files", "ws_folders"]
 
@@ -402,6 +403,19 @@ def _down_9(conn: Connection, c: Ctx) -> None:
         shutil.rmtree(c.data_dir / "workspaces", ignore_errors=True)
 
 
+# ---- 10: cloud agents -------------------------------------------------------------------------------
+def _up_10(conn: Connection, _c: Ctx) -> None:
+    from . import models_agents  # noqa: F401
+    from .db import Base
+    Base.metadata.create_all(conn, tables=[Base.metadata.tables[n] for n in reversed(_TABLES_10)])
+
+
+def _down_10(conn: Connection, _c: Ctx) -> None:
+    # Agents, their run history and their memory exist only in this release.
+    for tbl in _TABLES_10:
+        drop_table_if_present(conn, tbl)
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
@@ -415,6 +429,7 @@ MIGRATIONS: dict[int, Step] = {
     8: Step("0.4.2: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
             _up_8, _down_8),
     9: Step("0.4.3: workspace files and versions, durable jobs, contexts and the retrieval index", _up_9, _down_9),
+    10: Step("0.5.0: cloud agents, durable run steps and agent memory", _up_10, _down_10),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

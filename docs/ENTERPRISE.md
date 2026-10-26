@@ -74,7 +74,7 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M3b | Durable jobs + ingestion (txt/md/code/csv/json/pdf/docx/xlsx/pptx; images/video/archives reported unsupported) | done, **deployed 0.4.3** | `jobs_svc.py`, `ingest_svc.py`, `extract_svc.py`; real generated Office/PDF files in tests; zip-bomb and path-traversal archives refused |
 | M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done, **deployed 0.4.3** | `contexts_svc.py`; cache key = exact permitted (file, version) set |
 | M3d | Semantic retrieval (embeddings) + hybrid ranking (BM25 + cosine, reciprocal-rank fusion) | done, **deployed 0.4.4, enabled on CMSIT AI** | `embed_svc.py`; Qwen3-Embedding-0.6B Q8 (Apache-2.0, sha256 verified) served by `semechka-embed.service` on 127.0.0.1:8760; real-model rehearsal on the Spark: 4/4 queries with no shared keywords, junk query returns nothing; `tests/test_semantic.py` (7) with a deterministic fake embedder |
-| M4 | Document tools (docx/xlsx/pptx/pdf) | planned | |
+| M4 | Agent framework: configs + versions, durable runs/steps, authority = user ∩ agent ∩ workspace, approvals, resume, memory; tools: search_context, list_files, read_file, read_table, table_stats, calc, create_document (docx), create_spreadsheet (xlsx), create_presentation (pptx), write_text_file, remember, recall | done in code + tests (13 agent tests, scripted model); **off by default** (`cloud.agents.enabled`) | `agent_svc.py`, `docgen_svc.py`, `routers/agents.py`, `models_agents.py`, migration 10; mutation-checked authority tests; **not yet exercised against a real language model** (planned with the sandbox in M5/M8) |
 | M5 | Durable jobs + container executor | planned, **blocked** on runtime | |
 | M6 | Model gateway, scheduling, agent memory | planned | |
 | M7 | Workspace UI + admin UI | planned | |
@@ -172,3 +172,27 @@ backup directory above (database `.backup` + `master.key` + `assets`).
   `embeddings.model` on CMSIT AI.
 * Process note: an earlier edit of this file truncated the M2 decisions and the deployments table; both were restored
   from commit c06d045 and the missing rows added.
+
+## Decisions made while building M4
+
+* **Agent authority is structural.** `AgentAuthz.check()` = the invoking person's current check AND the agent's own:
+  permissions implied by its enabled tools (a write tool implies read), its workspace (other workspaces only to read
+  files of contexts it may search), no organisation administration. The existing file/context services accept it
+  unchanged, so there is no second code path to forget.
+* **Recomputed, not remembered.** Authority is rebuilt from the database before every model turn and every tool call
+  (membership, workspace access, model access, agent still enabled/not archived, platform switch). A revoked person's
+  queued run is cancelled before the model is called; revocation mid-run stops the next tool.
+* **Durable by construction.** A model step and the tool step it requested are written in one transaction. A tool
+  that had started when a worker died is reported to the model as "interrupted", never silently replayed; one that
+  never started is run. A lease heartbeat stops long turns being mistaken for dead workers. Approval waits pause the
+  job (it consumes no worker and no time budget).
+* **Agents queue behind people.** Model calls go through the shared generation scheduler at rank 400 (lower priority
+  than interactive chat) and the engine's single-chat-model coordination (`wait_for_chat_slot`).
+* **Prompt injection.** Document text is framed as data; more importantly nothing the model says can exceed the gate:
+  tools outside its list are refused, and the gate is the person's permissions. Test: an obedient scripted model
+  following injected instructions creates no file and runs no code.
+* **Revising is versioning.** `create_*` on an existing name adds a new version (source `agent`); history stays.
+* Known gaps: no streaming of run progress to the browser yet (poll `GET /api/runs/{id}`); no `python`/`shell`/`network`
+  tools until the sandbox exists (M5); generated PDF is not offered; `media` tool for agents is not built.
+* Mutation checks run: removing the agent scope from `AgentAuthz`, and removing the per-turn authority recheck, each
+  make a test fail.

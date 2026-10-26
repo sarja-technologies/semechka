@@ -418,6 +418,16 @@ DEFS: list[Def] = [
     Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    # ---- cloud agents ----
+    Def("cloud.agents.enabled", SYS, "Cloud agents",
+        "Lets people with the right workspace role run configured agents that read their authorised documents, "
+        "create files and remember things between runs. Off until you turn it on. Every tool call is checked "
+        "against the person's current access; agents never get more than the person who started them.",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Agents send document passages to the chosen language model and can create files in workspaces."),
+    Def("cloud.agents.max_active_per_user", Q, "Agent runs at once (per person)",
+        "How many agent runs one person may have queued, running or waiting for approval.", "int", 2, min=1, max=20,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----
     Def("embeddings.url", SYS, "Embedding service address",
         "Base address of an OpenAI-compatible embeddings endpoint (for example http://127.0.0.1:8760). Empty turns "

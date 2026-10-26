@@ -279,7 +279,7 @@ def retrieve(st, s, az: authz.Authz, query: str, *, workspace_id: str | None = N
             fws = s.get(Workspace, f.workspace_id)
             if gate("file.read", fws, files_svc.nodes_for_file(s, f)):
                 permitted[f.id], via_ctx[f.id] = f, c
-    if not context_ids and scope_ws is not None and not ctxs:  # workspace-wide: every readable file, no context
+    if not context_ids and scope_ws is not None:  # workspace-wide: also every readable file here, in a context or not
         for f in s.execute(select(File).where(File.workspace_id == scope_ws.id, File.deleted_at.is_(None))).scalars():
             if gate("file.read", scope_ws, files_svc.nodes_for_file(s, f)):
                 permitted[f.id] = f
