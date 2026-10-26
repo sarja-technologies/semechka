@@ -290,7 +290,7 @@ run time and never stored. **CMSIT AI has none of these switches on**; that deci
 | A. Two companies | pass | other company: 404 on workspace, file, download, retrieval, members; retrieval never returns the other company's sentinel text |
 | B. Departments in one company | pass | engineering gets 404 on finance; the organisation owner cannot read finance files; read-only share, then revoke, takes effect at once |
 | C. Persistent knowledge | pass | question without shared keywords finds the policy passage (hybrid); after restarting the service the same answer and the same context membership |
-| D. Cloud document agent | pass (36 checks on 0.5.6) | real `qwen3.6-35b-a3b` agent: every `python` call waited for approval, ran in the real sandbox, produced a .docx with the correct net profits (14,500 and 15,900) |
+| D. Cloud document agent | pass (full A–H regression on 0.5.6: 36 of 37 checks; the one miss was H's precondition, the run was still queued when the restart came; H rerun alone: 26/26) | real `qwen3.6-35b-a3b` agent: every `python` call waited for approval, ran in the real sandbox, produced a .docx with the correct net profits (14,500 and 15,900) |
 | E. Sandbox restrictions | pass | `sandbox_probe.py` 18/18, **run under the service's own hardening through the relay** |
 | F. Revoke while queued | pass | runs that were really queued were cancelled with zero steps |
 | G. Media, through the browser | pass | an ordinary member made a real picture (17 s) and a real video (6.2 min, queued behind other people's jobs); both survive reload and a new sign-in |
