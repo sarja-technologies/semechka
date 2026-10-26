@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import inspect
 import secrets
@@ -9,6 +10,7 @@ from typing import Callable
 
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from . import audit, services
 from .models import SessionRow, User
@@ -44,6 +46,26 @@ def get_db(request: Request, st: AppState = Depends(get_state)):
         s.close()
 
 
+def flush_seen(st: AppState) -> int:
+    """Save the sessions' last-activity times. Best effort and in one short transaction: a busy database only means the
+    next batch carries them; no request ever fails, or waits, because of it."""
+    batch = dict(st.seen)
+    if not batch:
+        return 0
+    try:
+        with st.db.session(write=True) as s:
+            for h, ts in batch.items():
+                row = s.get(SessionRow, h)
+                if row is not None and row.last_seen < ts:
+                    row.last_seen = ts
+    except OperationalError:
+        return 0
+    for h, ts in batch.items():
+        if st.seen.get(h) == ts:
+            st.seen.pop(h, None)
+    return len(batch)
+
+
 def slow_db(fn):
     """Mark a synchronous endpoint that does slow work (network, hashing many passwords) while it holds its session."""
     fn.__slow_db__ = True
@@ -54,6 +76,12 @@ def begin_write(ctx) -> None:
     """After the slow part of a handler: end the read transaction and continue as a writer (see Database.upgrade)."""
     ctx.s.rollback()
     ctx.st.db.upgrade(ctx.s)
+
+
+async def abegin_write(ctx) -> None:
+    """begin_write for a coroutine handler. Waiting for the write lock on the event loop would stop the very request that
+    holds it from finishing, so the wait happens on a worker thread."""
+    await asyncio.to_thread(begin_write, ctx)
 
 
 def get_db_deferred(st: AppState = Depends(get_state)):
@@ -115,15 +143,16 @@ def _load(request: Request, s, st: AppState, *, require_mfa=True) -> Ctx | None:
         return None
     now = time.time()
     idle = st.settings.deployment(s, "auth.idle_minutes")
-    if row.expires_at < now or (idle and now - row.last_seen > idle * 60):
+    seen = max(row.last_seen, st.seen.get(row.id_hash, 0.0))  # activity is kept in memory and saved in batches (flush_seen)
+    if row.expires_at < now or (idle and now - seen > idle * 60):
         s.delete(row)
         s.commit()
         return None
     user = s.get(User, row.user_id)
     if user is None or user.status != "active":
         return None
-    if now - row.last_seen > 30:
-        row.last_seen = now
+    if now - seen > 30:
+        st.seen[row.id_hash] = now
     return Ctx(user, services.load_principal(s, user), row, s, st, client_ip(request))
 
 

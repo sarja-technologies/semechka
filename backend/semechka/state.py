@@ -23,6 +23,7 @@ class AppState:
     active: dict[str, int] = field(default_factory=dict)  # user_id -> in-flight generations
     health_cache: dict[str, tuple[float, dict]] = field(default_factory=dict)
     started: float = field(default_factory=time.time)
+    seen: dict[str, float] = field(default_factory=dict)  # session id_hash -> last activity, written to the database in batches
     stop_events: dict[str, asyncio.Event] = field(default_factory=dict)
     scheduler: Scheduler = field(default_factory=Scheduler)  # per-backend generation queue (see scheduler.py)
     lifecycle: dict[str, dict] = field(default_factory=dict)  # backend_id -> model load/unload in progress or last

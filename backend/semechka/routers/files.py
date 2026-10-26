@@ -20,7 +20,7 @@ from sqlalchemy import select
 from .. import contexts_svc as C
 from .. import files_svc as F
 from .. import ingest_svc, jobs_svc
-from ..deps import Ctx, begin_write, current
+from ..deps import Ctx, abegin_write, current
 from ..models_files import Context, ContextAttachment, DocText, File, FileVersion, Job
 from ..models_tenancy import Workspace
 from .media import _ranged
@@ -107,7 +107,7 @@ async def upload(wid: str, file: UploadFile = UploadField(...), folder_id: str |
     a = az(ctx)
     ws = run(F.workspace_of, ctx.s, wid, a)
     data = await _read_upload(file, F.max_upload(a, ws))
-    begin_write(ctx)  # the body took as long as the client took; the lock is held only for the write
+    await abegin_write(ctx)  # the body took as long as the client took; the lock is held only for the write
     f, _ = run(F.create_file, ctx.st, ctx.s, a, wid, file.filename or "upload", data, folder_id=folder_id)
     return _file_view(f)
 
@@ -139,7 +139,7 @@ async def upload_version(fid: str, file: UploadFile = UploadField(...), note: st
     a = az(ctx)
     _, ws = run(F.get_file, ctx.s, a, fid)
     data = await _read_upload(file, F.max_upload(a, ws))
-    begin_write(ctx)
+    await abegin_write(ctx)
     v = run(F.new_version, ctx.st, ctx.s, a, fid, data, note=note)
     return {"n": v.n}
 

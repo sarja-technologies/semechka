@@ -28,6 +28,7 @@ from . import (
     services,
 )
 from .config import Config
+from .deps import flush_seen
 from .models import Conversation, UsageEvent
 from .routers import (  # sso: OIDC single sign-on
     admin_config,
@@ -78,10 +79,12 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             if n:
                 log.info("requeued %d job(s) left running by the previous process", n)
         jobs_task = asyncio.create_task(jobs_svc.pump(st)) if cfg.background else None  # durable workspace jobs
+        seen_task = asyncio.create_task(_seen_flusher(st)) if cfg.background else None
         yield
-        for t in (task, media_task, jobs_task):
+        for t in (task, media_task, jobs_task, seen_task):
             if t:
                 t.cancel()
+        await asyncio.to_thread(flush_seen, st)  # what people did in the last seconds survives a restart
 
     app = FastAPI(title="Semechka", version=__version__, lifespan=lifespan, redoc_url=None,
                   # The interactive API reference lists every route; it is off unless an operator asks for it.
@@ -150,6 +153,16 @@ def _mount_spa(app: FastAPI, web: Path):
         if path and f.is_file() and web.resolve() in f.parents:
             return FileResponse(f, headers={"Cache-Control": "public, max-age=3600" if "_app/immutable" not in path else "public, max-age=31536000, immutable"})
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+
+async def _seen_flusher(st: AppState):
+    """Sessions' last-activity times are kept in memory per request and saved here, a batch every 20 seconds."""
+    while True:
+        await asyncio.sleep(20)
+        try:
+            await asyncio.to_thread(flush_seen, st)
+        except Exception:
+            log.exception("saving session activity failed")
 
 
 async def _sweeper(st: AppState):
