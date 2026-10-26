@@ -438,6 +438,12 @@ DEFS: list[Def] = [
         "against the person's current access; agents never get more than the person who started them.",
         "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
         effect="Agents send document passages to the chosen language model and can create files in workspaces."),
+    Def("cloud.agents.models", SYS, "Models agents may use",
+        "Model ids. When this list is not empty, agents can use only these models, whichever model is chosen on the agent and "
+        "whatever else people may use for chat. Small models make arithmetic and reading mistakes, so list only models you have "
+        "checked on your own documents. Empty means any chat model the person and the workspace may use.",
+        "list", [], scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Agent runs and the agent editor offer and accept only these models."),
     Def("cloud.agents.max_active_per_user", Q, "Agent runs at once (per person)",
         "How many agent runs one person may have queued, running or waiting for approval.", "int", 2, min=1, max=20,
         scopes=["deployment"], edit_perm="admin.quotas.edit"),

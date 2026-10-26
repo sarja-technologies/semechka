@@ -23,7 +23,7 @@
     try { list = await get(`/api/workspaces/${wid}/agents`); error = ''; } catch (e) { error = msg(e); } finally { loading = false; }
   }
   async function loadSide() {
-    try { [tools, models, contexts] = await Promise.all([get('/api/agent-tools'), get(`/api/workspaces/${wid}/models?mode=chat`).catch(() => []), get(`/api/workspaces/${wid}/contexts`).catch(() => [])]); } catch { /* shown when the editor opens */ }
+    try { [tools, models, contexts] = await Promise.all([get('/api/agent-tools'), get(`/api/workspaces/${wid}/models?mode=chat&purpose=agent`).catch(() => []), get(`/api/workspaces/${wid}/contexts`).catch(() => [])]); } catch { /* shown when the editor opens */ }
   }
   async function loadAgent() {
     runs = []; mem = null; aErr = '';

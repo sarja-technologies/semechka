@@ -19,9 +19,11 @@ def _allowed(policy: dict | None, model_id: str) -> bool:
     return lst is None or model_id in lst
 
 
-def models_for(st, s, principal, org: Org | None, ws: Workspace | None, mode: str = "chat") -> list[dict]:
+def models_for(st, s, principal, org: Org | None, ws: Workspace | None, mode: str = "chat", only: list[str] | None = None) -> list[dict]:
     out = []
     for m, b in services.accessible_models(s, principal, st, mode, include_hidden=False):
+        if only is not None and m.id not in only:
+            continue
         if not _allowed(org.policy if org else None, m.id) or not _allowed(ws.policy if ws else None, m.id):
             continue
         meta = m.meta or {}

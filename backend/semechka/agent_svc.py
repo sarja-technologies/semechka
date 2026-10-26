@@ -164,6 +164,12 @@ def _snapshot(a: Agent) -> dict:
             "network": a.network}
 
 
+def _check_agent_model(st, s, model_id) -> None:
+    only = agent_models(st, s)
+    if model_id and only and model_id not in only:
+        raise TenancyError("model", "This server limits agents to approved models; pick another model for this agent.")
+
+
 def create_agent(st, s, az: authz.Authz, ws_id: str, name: str, *, description: str = "", instructions: str = "",
                  model_id: str | None = None, **cfg) -> Agent:
     ws = F.workspace_of(s, ws_id, az)
@@ -176,6 +182,7 @@ def create_agent(st, s, az: authz.Authz, ws_id: str, name: str, *, description: 
     quota = (az.org(ws.org_id).quotas or {}).get("agents")
     if quota and len(s.execute(select(Agent.id).where(Agent.org_id == ws.org_id, Agent.archived == False)).all()) >= quota:
         raise TenancyError("quota", f"This organisation is limited to {quota} agents.", 409)
+    _check_agent_model(st, s, model_id)
     n = normalize({"tools": ["search_context", "read_file", "list_files"], "limits": {}, "memory": {}, "network": {},
                    "approval": "sensitive", "context_ids": ["*"], **cfg})
     a = Agent(org_id=ws.org_id, workspace_id=ws.id, name=name[:120], description=description,
@@ -211,6 +218,7 @@ def update_agent(st, s, az: authz.Authz, agent_id: str, *, name=None, descriptio
     if instructions is not None:
         a.instructions_enc = st.vault.encrypt(instructions, f"org:{a.org_id}:content")
     if model_id != "__keep__":
+        _check_agent_model(st, s, model_id)
         a.model_id = model_id
     if archived is not None:
         a.archived = archived
@@ -266,16 +274,24 @@ def start_run(st, s, az: authz.Authz, agent_id: str, task: str, principal) -> Ag
     return run
 
 
+def agent_models(st, s) -> list[str]:
+    """Platform allow-list for agents (empty: no extra restriction)."""
+    return [m for m in (st.settings.deployment(s, "cloud.agents.models") or []) if isinstance(m, str)]
+
+
 def resolve_model(st, s, a: Agent, principal) -> str:
     from . import gateway_svc
     ws = s.get(Workspace, a.workspace_id)
     org = s.get(Org, a.org_id)
+    only = agent_models(st, s)
     if a.model_id:
+        if only and a.model_id not in only:
+            raise TenancyError("model", "This server limits agents to approved models; pick another model for this agent.", 403)
         why = gateway_svc.check(st, s, principal, org, ws, a.model_id, "chat")
         if why:
             raise TenancyError("model", why, 403)
         return a.model_id
-    for m in gateway_svc.models_for(st, s, principal, org, ws, "chat"):
+    for m in gateway_svc.models_for(st, s, principal, org, ws, "chat", only=only or None):
         return m["id"]
     raise TenancyError("model", "No chat model is available to you for this agent.", 409)
 

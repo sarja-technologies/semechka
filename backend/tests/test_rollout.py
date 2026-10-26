@@ -51,3 +51,27 @@ def test_admins_only_rollout_closes_every_cloud_door_to_ordinary_accounts_and_re
     assert env.put("/api/admin/settings/cloud.rollout", json={"value": "everyone"}).status_code == 200
     assert "workspaces" in pages(mia) and mia.get(f"/api/workspaces/{wid}/files").status_code == 200
     assert up(mia, wid, "late.md", b"x").status_code == 200
+
+
+def test_agent_model_allow_list_binds_creation_runs_and_the_picker(env, app, st):
+    """cloud.agents.models: a small or unchecked model can stay available for chat yet never drive an agent."""
+    from .test_agents import run_agent
+    _acme, c, wid, _uid, _ids, _ctx = marketing(env, app)
+    mia = c["mia@acme.test"]
+    good = mia.get(f"/api/workspaces/{wid}/models", params={"mode": "chat"}).json()[0]["id"]
+    aid = mk_agent(mia, wid)  # no model chosen: uses the first allowed one
+    assert env.put("/api/admin/settings/cloud.agents.models", json={"value": ["m_some_other_model"]}).status_code == 200
+    assert mia.get(f"/api/workspaces/{wid}/models", params={"mode": "chat", "purpose": "agent"}).json() == []
+    assert [m["id"] for m in mia.get(f"/api/workspaces/{wid}/models", params={"mode": "chat"}).json()] == [good]  # chat is unaffected
+    r = mia.post(f"/api/agents/{aid}/runs", json={"task": "x"})
+    assert r.status_code == 409  # nothing allowed for agents: refused, not silently run on another model
+    r = mia.post(f"/api/workspaces/{wid}/agents", json={"name": "Pinned", "instructions": "x", "model_id": good, "tools": ["calc"]})
+    assert r.status_code in (400, 403, 422) and "approved models" in r.text
+    assert env.put("/api/admin/settings/cloud.agents.models", json={"value": [good]}).status_code == 200
+    assert [m["id"] for m in mia.get(f"/api/workspaces/{wid}/models", params={"mode": "chat", "purpose": "agent"}).json()] == [good]
+    assert mia.post(f"/api/workspaces/{wid}/agents", json={"name": "Pinned", "instructions": "x", "model_id": good, "tools": ["calc"]}).status_code == 200
+    assert run_agent(mia, aid)
+    # an agent saved earlier on a model that has since been removed from the list is refused at run time too
+    assert env.put("/api/admin/settings/cloud.agents.models", json={"value": ["m_some_other_model"]}).status_code == 200
+    pinned = next(a for a in mia.get(f"/api/workspaces/{wid}/agents").json() if a["name"] == "Pinned")["id"]
+    assert mia.post(f"/api/agents/{pinned}/runs", json={"task": "x"}).status_code == 403

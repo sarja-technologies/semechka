@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from .. import (
+    agent_svc,
     audit,
     embed_svc,
     files_svc,
@@ -63,13 +64,14 @@ def jobs(limit: int = 100, status: str | None = None, ctx: Ctx = Depends(require
 
 
 @router.get("/workspaces/{wid}/models")
-def workspace_models(wid: str, mode: str = "chat", scope: str = "workspace", ctx: Ctx = Depends(current)):
+def workspace_models(wid: str, mode: str = "chat", scope: str = "workspace", purpose: str = "", ctx: Ctx = Depends(current)):
     """The model gateway's answer: models this person may use here for this purpose, with real capabilities.
     scope=org ignores the workspace's own allow-list (so its administrators can edit it)."""
     if mode not in services.MODE_CAPABILITY and mode != "vision":
         raise HTTPException(422, {"code": "invalid", "message": "Unknown mode."})
     a, w = ws_for(ctx, wid, "ws.policy.edit" if scope == "org" else "ws.view")
-    return gateway_svc.models_for(ctx.st, ctx.s, ctx.principal, a.org(w.org_id), None if scope == "org" else w, mode)
+    only = (agent_svc.agent_models(ctx.st, ctx.s) or None) if purpose == "agent" else None
+    return gateway_svc.models_for(ctx.st, ctx.s, ctx.principal, a.org(w.org_id), None if scope == "org" else w, mode, only=only)
 
 
 @router.get("/orgs/{oid}/models")
