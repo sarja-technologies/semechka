@@ -234,3 +234,42 @@ def test_a_burst_of_logins_and_uploads_never_answers_500(owner, app, st, cfg):
         results = list(ex.map(work, people))
     flat = [c for r in results for c in r]
     assert set(flat) == {200}, sorted(set(flat))
+
+
+def test_owner_only_workspace_over_http_listing_download_search_retrieval(owner, app, st):
+    """file_access == owner: a colleague with a workspace role sees, downloads, searches and retrieves none of another
+    person's files, whatever the context says; naming one file in an access rule opens exactly that file."""
+    acme, c = company(owner, app, "Acme", "boss@acme.test", {"ann@acme.test": "dept_admin", "bea@acme.test": "member"})
+    ann, bea = c["ann@acme.test"], c["bea@acme.test"]
+    wid = ann.post(f"/api/orgs/{acme}/workspaces", json={"name": "Desk"}).json()["id"]
+    uid = {m["email"]: m["user_id"] for m in c["boss@acme.test"].get(f"/api/orgs/{acme}/members").json()}
+    assert ann.put(f"/api/workspaces/{wid}/members", json={"principal_type": "user", "principal_id": uid["bea@acme.test"], "role": "contributor"}).status_code == 200
+    a = up(ann, wid, "ann.md", b"# Ann\nThe zebra protocol is annual.\n").json()["id"]
+    b = up(bea, wid, "bea.md", b"# Bea\nThe walrus ledger is private.\n").json()["id"]
+    jobs_svc.run_pending(st)
+    ctx = ann.post(f"/api/workspaces/{wid}/contexts", json={"name": "Shared"}).json()["id"]
+    for f in (a, b):
+        ann.put(f"/api/contexts/{ctx}/items/{f}")
+    names = lambda cl: sorted(f["name"] for f in cl.get(f"/api/workspaces/{wid}/files").json()["files"])  # noqa: E731
+    assert names(bea) == ["ann.md", "bea.md"]  # default behaviour is unchanged
+
+    assert ann.patch(f"/api/workspaces/{wid}", json={"policy": {"file_access": "owner"}}).status_code == 200
+    assert names(bea) == ["bea.md"] and names(ann) == ["ann.md"]
+    assert bea.get(f"/api/files/{a}/content", params={"download": 1}).status_code in (403, 404)
+    assert ann.get(f"/api/files/{b}/content", params={"download": 1}).status_code in (403, 404)
+    assert bea.get(f"/api/files/{a}/content", params={"download": 1}).status_code == ann.get(f"/api/files/{b}/content", params={"download": 1}).status_code
+    r = bea.post(f"/api/workspaces/{wid}/retrieve", json={"query": "zebra protocol annual"}).json()
+    assert not any("zebra" in p["text"] for p in r["passages"])
+    r = bea.post(f"/api/workspaces/{wid}/retrieve", json={"query": "walrus ledger"}).json()
+    assert any("walrus" in p["text"] for p in r["passages"])
+    assert not any(f["name"] == "ann.md" for f in bea.get(f"/api/workspaces/{wid}/search", params={"q": "zebra"}).json()["files"])
+    r = ann.post(f"/api/workspaces/{wid}/retrieve", json={"query": "walrus ledger"}).json()
+    assert not any("walrus" in p["text"] for p in r["passages"])  # not even the workspace's administrator
+    assert ann.delete(f"/api/files/{b}").status_code in (403, 404)
+
+    # naming exactly one file in an access rule shares exactly that file
+    r = ann.post(f"/api/workspaces/{wid}/acl", json={"resource_type": "file", "resource_id": a, "principal_type": "user",
+                                                    "principal_id": uid["bea@acme.test"], "effect": "allow", "perms": ["file.read"]})
+    assert r.status_code == 200, r.text
+    assert names(bea) == ["ann.md", "bea.md"]
+    assert any("zebra" in p["text"] for p in bea.post(f"/api/workspaces/{wid}/retrieve", json={"query": "zebra protocol annual"}).json()["passages"])

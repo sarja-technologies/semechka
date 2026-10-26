@@ -219,6 +219,40 @@ def test_restricted_items_need_an_access_rule_or_the_restricted_permission(w, s)
     assert not w.az("carol").check("file.read", w.mkt, node)
 
 
+def test_owner_only_files_are_denied_to_everyone_else_by_default(w, s):
+    """file_access == "owner": roles, folder rules, workspace rules, restricted access and org admins never reach another
+    person's file. Only an allow rule naming that file does, and a deny still wins."""
+    T.set_workspace_member(s, w.az("alice"), w.mkt.id, "user", w.u["carol"].id, "editor")
+    mine = [Node("file", "fi_c", owner=w.u["carol"].id), Node("folder", "fo_1")]
+    shared = lambda who, perm="file.read": w.az(who).check(perm, w.mkt, mine).allowed  # noqa: E731
+    assert shared("bob") and shared("alice") and shared("carol")  # default: the workspace's roles decide
+    T.update_workspace(s, w.az("alice"), w.mkt.id, policy={"file_access": "owner"})
+    for perm in ("file.read", "file.download", "file.write", "file.delete", "file.restore"):
+        assert shared("carol", perm) == w.az("carol").check(perm, w.mkt).allowed  # the owner keeps what her role gave her
+        assert not shared("bob", perm) and not shared("alice", perm) and not shared("owner", perm) and not shared("admin", perm)
+    assert "owner-only" in w.az("alice").check("file.read", w.mkt, mine).trace[-1]
+    # a file of unknown owner belongs to nobody: deny by default
+    assert not w.az("alice").check("file.read", w.mkt, [Node("file", "fi_x")])
+    # broader rules do not open it
+    T.add_acl(s, w.az("alice"), w.mkt.id, "workspace", w.mkt.id, "user", w.u["bob"].id, "allow", ["file.read"])
+    T.add_acl(s, w.az("alice"), w.mkt.id, "folder", "fo_1", "user", w.u["bob"].id, "allow", ["file.read"])
+    assert not shared("bob")
+    # a rule naming the file opens exactly the permission it names
+    T.add_acl(s, w.az("alice"), w.mkt.id, "file", "fi_c", "user", w.u["bob"].id, "allow", ["file.read"])
+    assert shared("bob") and not shared("bob", "file.download") and not shared("bob", "file.write")
+    T.add_acl(s, w.az("alice"), w.mkt.id, "file", "fi_c", "user", w.u["bob"].id, "deny", ["file.read"])
+    assert not shared("bob")
+    # the owner's own files are unaffected, and other workspaces keep the default
+    own = [Node("file", "fi_o", owner=w.u["bob"].id)]
+    assert w.az("bob").check("file.read", w.mkt, own).allowed
+    assert not w.az("bob").check("file.read", w.mkt, [Node("file", "fi_a", owner=w.u["alice"].id)]).allowed
+    # turning the rule off restores role-based access, and a bad value is refused
+    with pytest.raises(T.TenancyError):
+        T.update_workspace(s, w.az("alice"), w.mkt.id, policy={"file_access": "everyone"})
+    T.update_workspace(s, w.az("alice"), w.mkt.id, policy={})
+    assert w.az("alice").check("file.read", w.mkt, [Node("file", "fi_z", owner=w.u["carol"].id)]).allowed
+
+
 def test_archived_workspace_is_read_only(w, s):
     T.update_workspace(s, w.az("alice"), w.mkt.id, archived=True)
     assert w.az("bob").check("file.read", w.mkt) and not w.az("alice").check("file.write", w.mkt)

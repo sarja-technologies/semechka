@@ -320,6 +320,8 @@ def update_workspace(s, az: authz.Authz, ws_id: str, **changes) -> Workspace:
             bad = [x for x in (val or {}).get("deny", []) if not authz.valid_pattern(x)]
             if bad:
                 raise TenancyError("invalid", f"Unknown permission pattern: {bad[0]}")
+            if (val or {}).get("file_access", "shared") not in ("shared", "owner"):
+                raise TenancyError("invalid", "file_access must be shared or owner.")
             _check_models(s, val)
     for key, val in changes.items():
         setattr(ws, key, val)

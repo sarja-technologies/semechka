@@ -140,7 +140,7 @@ def nodes_for_folder(s, folder_id: str | None) -> list[authz.Node]:
 
 
 def nodes_for_file(s, f: File) -> list[authz.Node]:
-    return [authz.Node("file", f.id, f.restricted), *nodes_for_folder(s, f.folder_id)]
+    return [authz.Node("file", f.id, f.restricted, f.created_by), *nodes_for_folder(s, f.folder_id)]
 
 
 def workspace_of(s, ws_id: str, az: authz.Authz | None = None) -> Workspace:
@@ -392,7 +392,7 @@ def list_children(s, az: authz.Authz, ws_id: str, folder_id: str | None = None, 
     q = select(File).where(File.workspace_id == ws.id, File.folder_id == folder_id)
     q = q.where(File.deleted_at.is_not(None)) if trash else q.where(File.deleted_at.is_(None))
     files = [f for f in s.execute(q.order_by(File.name)).scalars()
-             if az.check("file.read", ws, [authz.Node("file", f.id, f.restricted), *here]).allowed]
+             if az.check("file.read", ws, [authz.Node("file", f.id, f.restricted, f.created_by), *here]).allowed]
     return {"folders": folders, "files": files, "path": [(f.id, f.name) for f in reversed(folder_chain(s, folder_id))]}
 
 

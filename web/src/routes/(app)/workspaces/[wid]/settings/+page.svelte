@@ -9,14 +9,14 @@
   import State from '$lib/components/admin/State.svelte';
 
   const wid = $derived(page.params.wid ?? '');
-  let name = $state(''), desc = $state(''), vis = $state('private'), inherit = $state(true), deny = $state<string[]>([]), limitModels = $state(false), allowed = $state<string[]>([]);
+  let name = $state(''), desc = $state(''), vis = $state('private'), inherit = $state(true), deny = $state<string[]>([]), ownerOnly = $state(false), limitModels = $state(false), allowed = $state<string[]>([]);
   let storage = $state(''), maxUp = $state(''), models = $state<any[]>([]), usage = $state<any>(null), loading = $state(true), error = $state(''), busy = $state(false);
   const manage = $derived(can('ws.members.manage') && !cur.ws?.archived), policy = $derived(can('ws.policy.edit') && !cur.ws?.archived);
 
   async function load() {
     const w = cur.ws; if (!w) return;
     name = w.name; desc = w.description; vis = w.visibility; inherit = w.inherit_members; deny = [...(w.policy?.deny ?? [])];
-    limitModels = Array.isArray(w.policy?.models); allowed = [...(w.policy?.models ?? [])];
+    ownerOnly = w.policy?.file_access === 'owner'; limitModels = Array.isArray(w.policy?.models); allowed = [...(w.policy?.models ?? [])];
     storage = w.quotas?.storage_mb ?? ''; maxUp = w.quotas?.max_upload_mb ?? '';
     try {
       [usage, models] = await Promise.all([get(`/api/workspaces/${wid}/usage`), can('ws.policy.edit') ? get(`/api/workspaces/${wid}/models?mode=chat&scope=org`) : []]);
@@ -30,7 +30,7 @@
     try { await patch(`/api/workspaces/${wid}`, body); toast(done); await refreshWorkspace(); await load(); } catch (e) { toast(msg(e), 'bad'); } finally { busy = false; }
   }
   const saveBasics = () => save({ name, description: desc, visibility: vis, inherit_members: inherit }, 'Saved');
-  const savePolicy = () => save({ policy: { ...(cur.ws.policy ?? {}), deny, ...(limitModels ? { models: allowed } : { models: null }) } }, 'Policy saved');
+  const savePolicy = () => save({ policy: { ...(cur.ws.policy ?? {}), deny, file_access: ownerOnly ? 'owner' : 'shared', ...(limitModels ? { models: allowed } : { models: null }) } }, 'Policy saved');
   const saveQuotas = () => save({ quotas: { ...(cur.ws.quotas ?? {}), storage_mb: storage ? Number(storage) : null, max_upload_mb: maxUp ? Number(maxUp) : null } }, 'Limits saved');
   const archive = (on: boolean) => save({ archived: on }, on ? 'Archived: now read only' : 'Restored');
   const grouped = $derived(PERM_GROUPS.map((g) => [g, cur.perms.filter((p) => p.group === g && !p.id.startsWith('org.') && !['ws.view'].includes(p.id))] as [string, any[]]).filter(([, l]) => l.length));
@@ -66,6 +66,9 @@
       <form onsubmit={(e) => { e.preventDefault(); savePolicy(); }}>
         <div class="cols3">{#each grouped as [g, list]}<fieldset class="field" style="border:0;padding:0"><legend class="label">{g}</legend>
           {#each list as p}<label class="row"><input type="checkbox" value={p.id} bind:group={deny} /><span>{p.label}</span></label>{/each}</fieldset>{/each}</div>
+        <fieldset class="field" style="border:0;padding:0;margin-top:8px"><legend class="label">Who can open a file</legend>
+          <label class="row"><input type="radio" bind:group={ownerOnly} value={false} /><span>Anyone whose role allows it</span></label>
+          <label class="row"><input type="radio" bind:group={ownerOnly} value={true} /><span>Only the person who added it, plus anyone given that file by name. Roles do not reach other people's files, administrators' included.</span></label></fieldset>
         <fieldset class="field" style="border:0;padding:0;margin-top:8px"><legend class="label">Language models</legend>
           <label class="row"><input type="radio" bind:group={limitModels} value={false} /><span>Any model the organisation allows</span></label>
           <label class="row"><input type="radio" bind:group={limitModels} value={true} /><span>Only these</span></label>

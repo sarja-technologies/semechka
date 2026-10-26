@@ -89,6 +89,7 @@ REGISTRY: list[Perm] = [
     _p("job.manage_all", "See and cancel anyone's jobs in the workspace", "Jobs"),
 ]
 BY_ID = {p.id: p for p in REGISTRY}
+FILE_PERMS = frozenset({"file.read", "file.download", "file.write", "file.delete", "file.restore"})
 
 
 def valid_pattern(pattern: str) -> bool:
@@ -150,6 +151,7 @@ class Node:
     type: str
     id: str
     restricted: bool = False
+    owner: str = ""  # files: who created it (used by the per-owner rule below)
 
 
 @dataclass
@@ -292,6 +294,12 @@ class Authz:
             if holds([pat], perm, grant=False):
                 return Decision(False, perm, f"Not allowed by {src}.", [src])
 
+        # per-owner file rule: where a workspace in the chain says file_access == "owner", another person's file is reachable only
+        # through an access rule naming that very file. Roles, folder and workspace rules and restricted-access never reach it.
+        owner_only = any((w.policy or {}).get("file_access") == "owner" for w in chain)
+        foreign_file = owner_only and perm in FILE_PERMS and any(
+            n.type == "file" and n.owner != self.user_id for n in nodes)  # an unknown owner is nobody's: deny by default
+
         # nodes run leaf-first, so the highest index is the restriction nearest the workspace; it governs everything below
         flagged = [i for i, n in enumerate(nodes) if n.restricted]
         restricted_at = max(flagged) if flagged else None
@@ -309,9 +317,11 @@ class Authz:
             role_grants.append(r)
             trace.append(r.label)
 
-        if holds(og, perm, grant=True):
+        if holds(og, perm, grant=True) and not foreign_file:
             grants.append(("organisation role", ", ".join(onames)))
         for r in role_grants:
+            if foreign_file:
+                break
             if holds(r.grants, perm, grant=True):
                 if restricted_at is not None and not holds(r.grants, "ws.restricted.access", grant=True):
                     continue  # a restricted item is not reached through an ordinary role
@@ -330,6 +340,8 @@ class Authz:
                     continue
                 if a.effect == "deny":
                     return Decision(False, perm, "An access rule denies this.", trace + [f"deny on {atype}"])
+                if foreign_file and atype != "file":
+                    continue
                 # an allow above a restricted node does not open it; at or below it does
                 if restricted_at is not None and (idx is None or idx > restricted_at):
                     continue
@@ -340,6 +352,9 @@ class Authz:
                 return Decision(False, perm, f"Denied by {src}.", trace)
         if grants:
             return Decision(True, perm, f"Allowed by {grants[0][0]}.", trace)
+        if foreign_file:
+            return Decision(False, perm, "This workspace keeps each person's files to their owner unless a rule names the file.",
+                            trace + ["owner-only files"])
         return Decision(False, perm, "Nothing grants this to you." if restricted_at is None
                         else "This item is restricted; no access rule or role opens it for you.", trace)
 
