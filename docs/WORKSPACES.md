@@ -14,6 +14,15 @@ Three switches in **Administration, Settings** (all start **off**; nothing chang
 | `cloud.agents.enabled` | Lets people run configured agents |
 | `sandbox.enabled` | Lets agents run Python / command-line tools in the isolated sandbox. Needs the one-time host setup in `sandbox/setup/README.md` |
 
+### Administrators first (`cloud.rollout`)
+
+`cloud.rollout` decides who the switches apply to. **Everyone** (the default) is the behaviour above. **Administrators only**
+keeps the whole cloud surface to people who may edit platform settings: the Workspaces entry is hidden for everyone else, every
+workspace, file, context, organisation and agent endpoint answers an ordinary account `403 rollout` (even one that was added
+to an organisation), and the service refuses to start an agent run for them. Unauthenticated callers still get `401`.
+Set it to `admins` **before** turning a cloud switch on in production, test as an administrator, and set it back to `everyone`
+only when you mean to open the feature to all; nothing is created, moved or lost by either change, and every change is audited.
+
 Optional: `embeddings.url` + `embeddings.model` turn on search **by meaning** next to keyword search (see below).
 **Administration, Cloud workspaces** shows the switches, queue, measured durations, memory and storage at a glance.
 
@@ -70,6 +79,23 @@ agents; never content).
 Retention (per organisation): deleted files are removed after `trash_days` (30), older versions beyond `keep_versions`,
 finished background work after `job_days` (30), file-access records after `access_log_days` (365).
 
+### Keeping files to their owner (`file_access`)
+
+By default a person's access to a file comes from their workspace role, so a contributor can overwrite a colleague's file (every
+change is versioned). Workspace administrators can instead choose **Only the person who added it** under *Settings, Who can
+open a file* (the policy key `file_access: "owner"`; it applies to the workspace and to child workspaces that inherit its
+members). Then, for read, download, write, delete and restore:
+
+* the owner (the uploader) keeps what their own role grants;
+* nobody else is reached by a role, a workspace or folder rule, restricted-access, or an organisation administrator role;
+* only an **allow rule that names that very file** opens it, and only the permissions the rule names; a deny rule still wins;
+* a file with no recorded owner belongs to nobody, so it is closed to everyone except through such a rule;
+* listing, search, retrieval, contexts and agents all follow, because they use the same check; an agent never sees more than the
+  person who started it.
+
+Recovery is the policy itself: an administrator who holds `ws.policy.edit` can set it back (audited); that does not reveal anything
+by itself, it only returns access to the roles.
+
 ## Platform administration (people who run the server)
 
 * **Administration, Organisations**: create an organisation (naming its first owner), see size, suspend or reactivate
@@ -82,6 +108,19 @@ finished background work after `job_days` (30), file-access records after `acces
     authenticated stream (a truncated or altered backup is refused); older backups still restore
 * **Search by meaning** needs an embeddings endpoint. The reference setup runs Qwen3-Embedding-0.6B through llama.cpp on
   loopback (`semechka-embed.service`). When it is down or unset, search falls back to keyword and says so.
+* **Behind a reverse proxy.** Semechka starts uvicorn with `proxy_headers=False` and never reads `X-Forwarded-For`, so a client
+  cannot forge its address, but the address it records is the proxy's. Consequences: the sign-in limiter (60 a minute per
+  address) is shared by **everyone behind the proxy**, and audit and session records show the proxy address. Put rate limiting for
+  untrusted clients in the proxy itself, bind Semechka to loopback or a private interface the proxy alone can reach, and do not
+  enable forwarded-header trust in front of an address anyone else can reach. (`X-Forwarded-Proto` is read only to decide the
+  `Secure` cookie flag.)
+* **Sandbox relay.** The service unit's mount-namespace hardening makes the sandbox account's ids unmapped for the service, so it
+  cannot open the runtime's own socket. `sandbox/setup/3-service-proxy.sh` installs `relay.py` as a user service that listens
+  on `/run/user/<uid>/semechka-sandbox.sock` (mode 0600, directory only that account can enter) and forwards bytes to the
+  runtime, honouring half-close. Set `sandbox.docker_host` to that path. Never mount or hand that socket (or the real one) to a
+  container, an agent or a tool, never expose it on TCP, and keep the sandbox account locked and sudo-less. The relay does not
+  inspect traffic: its safety is who can reach it, so confirm after setup that the socket is `srw-------` and owned by the
+  service account.
 * **Sandbox**: see `sandbox/setup/README.md`. It runs as a locked, sudo-less account with rootless Docker, no network at
   all, read-only system, memory/process/CPU/time limits, thrown away after every call. `scripts/sandbox_probe.py` re-runs 18
   hostile checks against it.

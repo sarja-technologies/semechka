@@ -225,3 +225,10 @@ def purge_user_files(st, user_id: str) -> None:
         mem = st.__dict__.get(store) or {}
         for k in [k for k, v in mem.items() if v.get("user_id") == user_id]:
             mem.pop(k, None)
+
+
+def cloud_open_to(st, s, principal) -> bool:
+    """The rollout rule for the cloud features (workspaces, files, contexts, agents): everyone, or platform administrators only."""
+    if st.settings.deployment(s, "cloud.rollout") != "admins":
+        return True
+    return bool(principal.user_id) and principal.can("admin.settings.edit")

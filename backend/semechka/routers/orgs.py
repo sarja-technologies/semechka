@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from .. import audit, authz
 from .. import tenancy_svc as T
-from ..deps import Ctx, current, require
+from ..deps import Ctx, cloud_gate, current, require
 from ..models import AuditEvent, User
 from ..models_tenancy import (
     AclEntry,
@@ -23,7 +23,7 @@ from ..models_tenancy import (
     WorkspaceMember,
 )
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(cloud_gate)])
 
 
 def az(ctx: Ctx) -> authz.Authz:

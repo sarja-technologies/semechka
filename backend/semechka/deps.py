@@ -176,6 +176,14 @@ def current(request: Request, s=Depends(get_db, scope="function"), st: AppState 
     return ctx
 
 
+def cloud_gate(ctx: Ctx = Depends(current)) -> Ctx:
+    """Router-level guard for every cloud endpoint. The same answer for a signed-in person outside the rollout as for a feature
+    that does not exist for them, so the rollout itself discloses nothing."""
+    if not services.cloud_open_to(ctx.st, ctx.s, ctx.principal):
+        raise HTTPException(403, {"code": "rollout", "message": "This feature is not available to your account yet."})
+    return ctx
+
+
 def require(perm: str) -> Callable:
     def dep(ctx: Ctx = Depends(current)) -> Ctx:
         ctx.need(perm)

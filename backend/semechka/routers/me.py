@@ -75,7 +75,7 @@ def ui_config(ctx_s, st, p, *, preview=False, prefs: dict | None = None) -> dict
                           "available": state["enabled"], "reason": state["reason"]})
         elif iid == "usage" or (iid == "help" and flags["help_links"]):
             pages.append({"id": iid, "label": it.get("label") or LABELS.get(iid, iid.title()), "available": True, "reason": ""})
-    if g("cloud.workspaces.enabled") and p.user_id and not p.user_id.startswith("preview:") and \
+    if g("cloud.workspaces.enabled") and services.cloud_open_to(st, ctx_s, p) and p.user_id and not p.user_id.startswith("preview:") and \
             ctx_s.query(OrgMember).filter(OrgMember.user_id == p.user_id, OrgMember.status == "active").first():
         pages.append({"id": "workspaces", "label": "Workspaces", "available": True, "reason": ""})
     if modes["image"]["enabled"] or modes["video"]["enabled"]:

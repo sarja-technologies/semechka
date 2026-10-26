@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import select
 
-from . import audit, authz, docgen_svc, jobs_svc
+from . import audit, authz, docgen_svc, jobs_svc, services
 from . import contexts_svc as C
 from . import files_svc as F
 from .models import Model
@@ -237,6 +237,8 @@ def start_run(st, s, az: authz.Authz, agent_id: str, task: str, principal) -> Ag
     a, _ws = get_agent(s, az, agent_id, "agent.use")
     if not agents_enabled(st, s):
         raise TenancyError("disabled", "Cloud agents are turned off on this server.", 403)
+    if not services.cloud_open_to(st, s, principal):
+        raise TenancyError("rollout", "Cloud agents are not available to your account yet.", 403)
     if a.archived:
         raise TenancyError("archived", "This agent is archived.", 409)
     cap = (az.org(a.org_id).quotas or {}).get("agent_runs_per_day")

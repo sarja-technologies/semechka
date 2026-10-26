@@ -9,13 +9,13 @@ from sqlalchemy import select
 
 from .. import agent_svc as A
 from .. import audit
-from ..deps import Ctx, current
+from ..deps import Ctx, cloud_gate, current
 from ..models_agents import Agent, AgentMemory, AgentRun, AgentStep, AgentVersion
 from ..models_files import Job
 from ..models_tenancy import Workspace
 from .orgs import az, run, ws_for
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(cloud_gate)])
 
 
 def _agent(a: Agent, st=None, full=False) -> dict:

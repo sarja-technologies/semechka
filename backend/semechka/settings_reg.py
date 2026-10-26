@@ -420,6 +420,12 @@ DEFS: list[Def] = [
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
     # ---- cloud workspaces ----
+    Def("cloud.rollout", SYS, "Who may use the cloud features",
+        "Everyone: anyone the cloud switches and their organisation roles allow. Administrators only: workspaces, files, "
+        "contexts and agents answer only people who may edit platform settings, even if they were added to an organisation; "
+        "nobody else sees the Workspaces entry, reaches its API or can start an agent. Use this while testing in production.",
+        "enum", "everyone", choices=["everyone", "admins"], scopes=["deployment"], edit_perm="admin.settings.edit", public=False,
+        effect="Administrators only keeps the cloud features away from ordinary accounts whatever the switches say."),
     Def("cloud.workspaces.enabled", SYS, "Cloud workspaces",
         "Shows a Workspaces area to people who belong to an organisation: shared files, knowledge contexts and agents "
         "with their own access rules. Off until you turn it on; the API and the data are not affected by the switch.",

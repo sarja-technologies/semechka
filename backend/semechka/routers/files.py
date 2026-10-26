@@ -20,13 +20,13 @@ from sqlalchemy import select
 from .. import contexts_svc as C
 from .. import files_svc as F
 from .. import ingest_svc, jobs_svc
-from ..deps import Ctx, abegin_write, current
+from ..deps import Ctx, abegin_write, cloud_gate, current
 from ..models_files import Context, ContextAttachment, DocText, File, FileVersion, Job
 from ..models_tenancy import Workspace
 from .media import _ranged
 from .orgs import az, org_for, run, ws_for
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(cloud_gate)])
 
 # Types that may be shown inline in the browser. SVG and HTML are deliberately absent: they can carry script.
 INLINE_OK = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain", "text/markdown",

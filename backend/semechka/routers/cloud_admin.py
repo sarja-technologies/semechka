@@ -14,12 +14,12 @@ from .. import (
     services,
     usage_svc,
 )
-from ..deps import Ctx, current, require
+from ..deps import Ctx, cloud_gate, current, require
 from ..models_files import Job
 from ..models_tenancy import Org, OrgMember, Workspace
 from .orgs import org_for, ws_for
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(cloud_gate)])
 
 
 @router.get("/orgs/{oid}/usage")
@@ -42,6 +42,7 @@ def status(ctx: Ctx = Depends(require("admin.system.view"))):
     sb = ctx.st.settings.deployment
     enabled = bool(sb(ctx.s, "sandbox.enabled"))
     d["workspaces_enabled"] = bool(sb(ctx.s, "cloud.workspaces.enabled"))
+    d["rollout"] = sb(ctx.s, "cloud.rollout")
     d["sandbox"] = {"enabled": enabled, "agents_enabled": bool(sb(ctx.s, "cloud.agents.enabled"))}
     if enabled:
         ok, detail = sandbox_svc.available(sb(ctx.s, "sandbox.docker_host"), sb(ctx.s, "sandbox.image"))
