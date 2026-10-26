@@ -46,3 +46,38 @@ malicious or compromised model/agent; hostile document content; a hostile tenant
 * **Contributors may overwrite other people's files** in a workspace (no per-owner rule), though every change is versioned.
 * **Approval is a gate, not a review of the model's reasoning.** A person approving `python` still has to read the code.
 * **Side channels and denial of service by an authenticated tenant** within quotas are not otherwise modelled.
+
+
+## Is a VM boundary required before production sandbox enablement? (assessment, 0.5.7)
+
+**Host facts, read on the Spark on 2026-10-27:** kernel `7.0.0-1019-nvidia`, aarch64; `/dev/kvm` exists (`root:kvm 0660`, ACL) so
+hardware virtualisation is usable in principle; **no** gVisor (`runsc`), Kata, Firecracker, QEMU or Cloud Hypervisor is installed;
+the service account is not in the `kvm` group. What runs today: rootless Docker under the locked, sudo-less `semsbx` account,
+`--network none`, read-only root, uid != 0, zero capabilities, `no-new-privileges`, default seccomp, no mounts or sockets,
+memory/pids/CPU/time limits, an account-wide cgroup ceiling (24 GiB, no swap). 18/18 hostile probes pass, including under the
+service's own hardening through the relay.
+
+**Who can put code there.** Only an agent that was given the Python or command-line tool, started by a person who may use that
+agent, and (default policy `sensitive`) **each call is held for a person's approval**. The code is written by a language model
+that reads documents, so a hostile document or a prompt-injected instruction can influence it; the approver is the control.
+
+**Assessment.**
+
+| Population allowed to run agents with code tools | VM / user-space-kernel boundary needed? |
+|---|---|
+| Platform administrators only, each call approved by the administrator (the admins-only rollout) | **No, not required**, provided the approval prompt is read. The container layer is enough against accidents and routine injection; an attacker would need a kernel or runtime exploit and a person approving their code. The escape lands in `semsbx`, which holds no Semechka data, keys or credentials, but it is on the same machine as the production data and the GPU engine, so the residual risk is real, not zero. |
+| Ordinary users of CMSIT AI, or several mutually distrusting organisations | **Yes, before enabling.** A shared kernel is the whole security boundary between one tenant's hostile code and everyone else's data on this host. |
+
+**Recommendation.** Enable the sandbox in production **only for administrators, only after explicit approval**, with approval
+mode left on. Before opening code execution to anyone else, add a stronger boundary. Options, none installed or enabled by this
+release:
+
+1. **gVisor (`runsc`)** as an additional Docker runtime for `semsbx`'s rootless daemon: a user-space kernel, no KVM needed, arm64
+   builds exist, smallest change. Needs a binary installed on the host (a supply-chain decision to approve) and a re-run of
+   `scripts/sandbox_probe.py` against `--runtime=runsc`; some syscalls and tools behave differently.
+2. **Kata Containers / Firecracker** (a micro-VM per call): the strongest boundary and uses the present `/dev/kvm`, but needs the
+   sandbox account added to the `kvm` group (a privileged change), several packages, and per-call VM memory and start-up cost on a
+   machine whose GPU memory is shared with other people's video jobs.
+3. **A separate machine or VM** for the sandbox host, reached over an authenticated channel instead of the relay.
+
+Nothing here weakens the existing controls, and none of the options is a prerequisite for the admins-only pilot.
