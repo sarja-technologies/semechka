@@ -72,6 +72,20 @@ def verify_backup(backup: pathlib.Path, data: pathlib.Path, max_age_h: float) ->
     return ""
 
 
+def engine_media_jobs(data: pathlib.Path) -> int:
+    """Active image/video jobs of EVERY instance on this host: they all share one inference engine and one GPU memory pool, so
+    a test run on staging must wait for production's video job just as a production run must."""
+    n = 0
+    for db in {data / "semechka.db", *data.parent.parent.glob("*/data/semechka.db")}:
+        try:
+            con = ro(db)
+            n += con.execute("select count(*) from media_jobs where status in ('queued','running')").fetchone()[0]
+            con.close()
+        except sqlite3.Error:
+            n += 0
+    return n
+
+
 def http_code(url: str) -> int:
     try:
         return urllib.request.urlopen(urllib.request.Request(url), timeout=20).status
@@ -238,11 +252,9 @@ def main() -> int:
         check("retrieval returns the uploaded text", hit)
 
         busy = ""
-        for _ in range(40):  # never start the 35B model while someone's image/video work is on the engine
-            con = ro(data / "semechka.db")
-            n = con.execute("select count(*) from media_jobs where status in ('queued','running')").fetchone()[0]
-            con.close()
-            busy = f"{n} image/video job(s) active" if n else ""
+        for _ in range(40):  # never start the 35B model while anyone's image/video work is on the shared engine
+            n = engine_media_jobs(data)
+            busy = f"{n} image/video job(s) active on the shared engine" if n else ""
             if not busy:
                 break
             print(f"   waiting: {busy}", flush=True)

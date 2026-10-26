@@ -405,12 +405,43 @@ start-up work held the writer (logged, retried five minutes later, no data affec
 after 0.5.7 (they now take the write lock; unreleased). The media pump has the same pattern but runs on the event loop, where
 waiting for the lock is unsafe; it logs "media pump failed" at start-up and retries three seconds later. Not changed.
 
+### CMSIT AI rollout applied (2026-10-27 01:35 local / 14:35 UTC, operator route)
+
+Decision from the owner: CMSIT AI is a small private server; routine administration must not need a login, a second factor or
+a typed confirmation. Semechka itself keeps all of its security options (optional MFA, policies, audit); CMSIT AI's own
+`auth.mfa_policy` is still `off` and no authentication setting was touched. The rollout therefore uses the host's own authority,
+like `semechka org purge`: `scripts/spark/rollout_local.py`, run over the existing SSH access with the installed program,
+reads the data directory, writes settings through the audited settings service (actor `operator`) and uses no session, account or
+password. (`rollout.py`, the signed-in variant for deployments that want it, stays.)
+
+Result on **live CMSIT AI** (report `~/semechka-deploy/rollout-report-0.5.7.txt`): 25/25. Recovery point
+`backups/roasted-cmsit-pre-rollout-20261027-013458` verified first (integrity, matches live, same key, opens under 0.5.7).
+Settings now: `cloud.rollout=admins`, `cloud.agents.models=[m_fd49fb91ee1c4a5b8252]` (Qwen3.6 35B-A3B), `cloud.workspaces.enabled=true`,
+`cloud.agents.enabled=true`, sandbox off. Smoke: signed-out 401; the fence judged by role for the real accounts (only the owner
+passes; the two members are refused); agents offered only the 35B model and another model refused; a pilot organisation "CMSIT
+Pilot" owned by the owner account, a workspace, a file ingested and retrieved by the live service, an agent run executed by the live
+service on the 35B model (correct total 13,100, tools read_file/calc, no code execution); owner-only rule on the pilot workspace
+with the owner still reading their file; audit chain verifies; users-table checksum identical; conversations 7 → 7, messages
+79 → 79; every setting outside `cloud.*` and the branding unchanged; models and roles unchanged. Salted untouched (0.4.0).
+Staging was used for rehearsal and restored to its baseline (switches on, sandbox on, rollout everyone).
+
+Not verified on live: nothing was run as an ordinary user (no ordinary account was used, by design). Their sign-in path and
+settings are unchanged by checksum, and the fence is judged by role.
+
+**Incident to know about.** A real video job on CMSIT AI (`mj_6290d86d…`, started 14:29:33 UTC) failed at 14:40:47 UTC with "The
+GPU worker was stopped by the system for running out of memory". The engine log shows `qwen3-coder-next` being loaded at
+14:33:13 by a request that is not attributable from the logs, while my staging test runs used the 35B model on the same engine
+(14:32–14:34 UTC). Those staging runs were not gated on production's video job (the gate looked only at staging's own database), so
+they may have contributed. The production rollout itself waited ~6 minutes for that job and first called the engine at 14:41:10,
+after the job had failed. The gate now checks every instance's media jobs. The affected user needs to resubmit the job.
+
+Also: while the operator script held SQLite's write lock, the live media pump logged six `database is locked` errors (it retries
+every 3 s; no job state was lost).
+
 ### Open items and decisions for the owner
 
-1. Run the rollout on CMSIT AI (administrator only), on the Spark in your own terminal so you can type the password and 2-step
-   code: `ssh -t spark 'cd ~/semechka-deploy/stage-scripts && ROLLOUT_URL=http://192.168.20.193:8787 ROLLOUT_ADMIN_EMAIL=<you> python3 rollout.py go --data-dir ~/semechka-deploy/roasted/data --report ~/semechka-deploy/rollout-report.txt'`.
-   It shows the plan, waits for `APPLY`, applies in order, smoke-tests with your session and rolls the flags back if a critical
-   check fails. Sandbox stays off until you approve it; if
+1. Rollout: done (above). To undo: `rollout.py rollback` (signed in) or set `cloud.agents.enabled` and `cloud.workspaces.enabled`
+   to false in Administration, Settings (the fence and model list can stay). Sandbox stays off until you approve it; if
    you do, first run `sandbox/setup/3-service-proxy.sh`, set `sandbox.docker_host` (step 4 of the sandbox README), and decide on the
    VM boundary (see the assessment in `docs/THREAT_MODEL.md`).
 2. After the fence is up, set `cloud.agents.models` to the model ids you have checked (the 35B "Agent" model); agents then cannot
