@@ -395,7 +395,7 @@ MIGRATIONS: dict[int, Step] = {
             _up_6, _down_6),
     7: Step("0.4.1: image and video generation permissions for everyday roles (where media models are enabled)",
             _up_7, _down_7),
-    8: Step("0.4.1: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
+    8: Step("0.4.2: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
             _up_8, _down_8),
 }
 

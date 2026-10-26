@@ -67,7 +67,7 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 |---|------|--------|----------|
 | M1 | 0.4.1 image/video repair committed | done | commit f752efc; 299 tests; live on CMSIT AI (schema 7) |
 | M1 | Disabled media models audited | done | below |
-| M2 | Tenancy tables + migration 8 | done (not yet deployed) | `models_tenancy.py`, `migrations._up_8/_down_8`; tests `test_migration_7`, suite 326 passed |
+| M2 | Tenancy tables + migration 8 | done, **deployed to CMSIT AI 2026-10-26 (0.4.2, schema 8)** | `models_tenancy.py`, `migrations._up_8/_down_8`; tests `test_migration_7`, suite 326 passed |
 | M2 | `authz` engine + tests | done | `authz.py`; `tests/test_authz.py` 21 tests (tenant boundary, deny-wins, sensitive wildcards, restricted items, foreign ids, agent intersection) |
 | M2 | Org/group/workspace/member/ACL API | done (API only; UI is M7) | `routers/orgs.py`; `tests/test_orgs_http.py` Scenarios A and B at workspace level (file level arrives in M3) |
 | M3 | Workspace filesystem + versions | planned | |
@@ -108,3 +108,14 @@ hunyuanvideo-1.5-t2v, minimax-h3, wan2.2-t2v/i2v-a14b.
   work); in a hosted multi-tenant setup the operator should not use that account as a tenant member.
 * Lint: baseline was 457 findings; adding ruff's FastAPI `extend-immutable-calls` setting brought the repo to 185;
   new files introduce none.
+
+## Deployments
+
+| When | Version / schema | Backup (on the Spark) | Rehearsal | Result |
+|------|------------------|-----------------------|-----------|--------|
+| 2026-10-26 | 0.4.1 / 7 | `backups/roasted-cmsit-pre-0.4.1-20261026-134427` | copy: up, down (roles hash identical) | healthy; member can list image/video models on the copy |
+| 2026-10-26 | 0.4.2 / 8 | `backups/roasted-cmsit-pre-0.4.2-20261026-174016` | copy: up → 1 org, 3 members; down → tables and column gone, roles hash identical; up again | healthy; 3 users, 5 chats, CMSIT AI branding intact; new routes answer 401 unauthenticated; Salted untouched (0.4.0 / 6) |
+
+Rollback of the latest stage: on the Spark, `semechka migrate --to 7 --yes` with the 0.4.2 program (instance data dir
+`~/semechka-deploy/roasted/data`), then install the 0.4.1 tarball from `~/semechka-deploy/releases/`; or restore the
+backup directory above (database `.backup` + `master.key` + `assets`).
