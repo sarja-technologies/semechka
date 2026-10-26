@@ -178,6 +178,7 @@ def scenario_AB(w: World):
     fin = w.workspace(w.u["acme-finance"], w.acme, "Finance")
     eng = w.workspace(w.u["acme-eng"], w.acme, "Engineering")
     glx = w.workspace(w.u["globex-analyst"], w.globex, "Operations")
+    w.u["acme-finance"].delete(f"/api/workspaces/{fin}/members/user/{w.uid['acme-eng']}")  # start from a known state (re-runnable)
     code, f1 = w.u["acme-finance"].upload(fin, "policy.docx", docx_bytes([("h", "Expense Policy"), ("p", FIN_NOTE)]))
     check("A: finance uploads a document", code == 200, code)
     w.u["acme-finance"].upload(fin, "budget.xlsx", xlsx_bytes({"Budget": [["dept", "spend"], ["marketing", 120000], ["finance", 80000]]}))
@@ -250,20 +251,28 @@ def scenario_C(w: World, ids):
     return ctx["id"]
 
 
-def run_agent(c: Client, wid: str, name: str, task: str, model: str, tools: list[str], approval="sensitive", ctx_ids=None, **extra):
+def ensure_agent(c: Client, wid: str, name: str, model: str, tools: list[str], approval="sensitive", ctx_ids=None, **extra) -> str:
     code, lst = c.get(f"/api/workspaces/{wid}/agents")
     aid = next((a["id"] for a in (lst if code == 200 else []) if a["name"] == name), None)
     body = {"name": name, "instructions": extra.pop("instructions", "You are a careful finance analyst. Use tools; never invent numbers."),
             "model_id": model, "tools": tools, "approval": approval, "context_ids": ctx_ids or [], **extra}
     if aid:
         c.req("PATCH", f"/api/agents/{aid}", body)
-    else:
-        code, r = c.post(f"/api/workspaces/{wid}/agents", body)
-        assert code == 200, (code, r)
-        aid = r["id"]
+        return aid
+    code, r = c.post(f"/api/workspaces/{wid}/agents", body)
+    assert code == 200, (code, r)
+    return r["id"]
+
+
+def start(c: Client, aid: str, task: str) -> str:
     code, r = c.post(f"/api/agents/{aid}/runs", {"task": task})
     assert code == 200, (code, r)
-    return aid, r["run_id"]
+    return r["run_id"]
+
+
+def run_agent(c: Client, wid: str, name: str, task: str, model: str, tools: list[str], approval="sensitive", ctx_ids=None, **extra):
+    aid = ensure_agent(c, wid, name, model, tools, approval, ctx_ids, **extra)
+    return aid, start(c, aid, task)
 
 
 def scenario_D(w: World, ids, ctx_id):
@@ -321,13 +330,18 @@ def scenario_F(w: World, ids, ctx_id):
     c, fin = w.u["acme-finance"], ids["fin"]
     e = w.u["acme-eng"]
     c.put(f"/api/workspaces/{fin}/members", {"principal_type": "user", "principal_id": w.uid["acme-eng"], "role": "contributor"})
+    for who in (c, e):  # leftovers of an earlier aborted run would occupy the per-user limit
+        listed = who.get(f"/api/workspaces/{fin}/runs")[1]
+        for r in (listed if isinstance(listed, list) else listed.get("runs", listed.get("items", []))):
+            if r.get("status") in ("queued", "running", "awaiting_approval"):
+                who.post(f"/api/runs/{r['id']}/cancel")
+    time.sleep(2)
     model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
-    runs = []
-    for i in range(4):  # the agent queue has two slots; later runs wait
-        aid, rid = run_agent(e, fin, "Queue filler", f"Summarise policy.docx in detail, attempt {i}.", model, ["search_context", "read_file"], approval="never", ctx_ids=[ctx_id])
-        runs.append(rid)
+    aid = ensure_agent(c, fin, "Queue filler", model, ["search_context", "read_file"], approval="never", ctx_ids=[ctx_id])
+    fill = [start(c, aid, f"Summarise policy.docx in detail, attempt {i}.") for i in range(2)]  # occupy both agent slots
+    runs = fill + [start(e, aid, f"Summarise budget.xlsx in detail, attempt {i}.") for i in range(2)]  # these two must wait
     time.sleep(1)
-    queued = [r for r in runs if e.get(f"/api/runs/{r}")[1].get("status") == "queued"]
+    queued = [r for r in runs[2:] if e.get(f"/api/runs/{r}")[1].get("status") == "queued"]
     check("F: some runs are genuinely queued", bool(queued), len(queued))
     c.delete(f"/api/workspaces/{fin}/members/user/{w.uid['acme-eng']}")
     if queued:
@@ -345,11 +359,16 @@ def scenario_H(w: World, ids, ctx_id):
     model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
     aid, rid = run_agent(c, fin, "Restart survivor", "Read policy.docx and budget.xlsx, then write a short summary document called restart-check.docx.", model,
                          ["list_files", "read_file", "read_table", "create_document"], approval="never", ctx_ids=[ctx_id])
-    for _ in range(60):
-        if c.get(f"/api/runs/{rid}")[1].get("status") == "running":
+    status, nsteps = "", 0
+    for _ in range(240):  # in flight = running AND at least one step already written, so the restart interrupts real work
+        d = c.get(f"/api/runs/{rid}?detail=1")[1]
+        status, nsteps = d.get("status"), len(d.get("steps", []))
+        if status == "running" and nsteps >= 1:
             break
-        time.sleep(1)
-    check("H: the run is in flight", c.get(f"/api/runs/{rid}")[1].get("status") == "running")
+        if status in ("succeeded", "failed", "cancelled"):
+            break
+        time.sleep(0.5)
+    check("H: the run is in flight when the service is restarted", status == "running" and nsteps >= 1, f"{status}, {nsteps} step(s) written")
     ssh("systemctl --user restart semechka-staging.service")
     for _ in range(60):
         try:
@@ -363,7 +382,7 @@ def scenario_H(w: World, ids, ctx_id):
     detail = c.get(f"/api/runs/{rid}?detail=1")[1]
     steps = detail.get("steps", [])
     check("H: no started tool call was replayed", len({(s.get("n")) for s in steps}) == len(steps), len(steps))
-    check("H: exactly one document was produced", [a["name"] for a in detail.get("artifacts") or []].count("restart-check.docx") <= 1, [a["name"] for a in detail.get("artifacts") or []])
+    check("H: exactly one document was produced (not zero, not duplicated)", [a["name"] for a in detail.get("artifacts") or []].count("restart-check.docx") == 1, [a["name"] for a in detail.get("artifacts") or []])
 
 
 def main() -> int:

@@ -32,6 +32,7 @@ MODELS = [  # engine id fragment, alias, tags
     ("qwen3.5-0.8b", "Quick", ["fast"]),
     ("qwen3-4b-instruct", "Balanced", ["general"]),
     ("gpt-oss-120b", "Large", ["large", "reasoning"]),
+    ("qwen3.6-35b-a3b", "Agent", ["general", "large"]),
     ("sdxl-turbo", "Sketch", ["image", "fast"]),
     ("wan2.2-ti2v-5b", "Clip", ["video", "small"]),
 ]
