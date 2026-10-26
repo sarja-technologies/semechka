@@ -77,8 +77,8 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M4 | Agent framework: configs + versions, durable runs/steps, authority = user ∩ agent ∩ workspace, approvals, resume, memory; tools: search_context, list_files, read_file, read_table, table_stats, calc, create_document (docx), create_spreadsheet (xlsx), create_presentation (pptx), write_text_file, remember, recall | done in code + tests (13 agent tests, scripted model); **off by default** (`cloud.agents.enabled`) | `agent_svc.py`, `docgen_svc.py`, `routers/agents.py`, `models_agents.py`, migration 10; mutation-checked authority tests; **not yet exercised against a real language model** (planned with the sandbox in M5/M8) |
 | M5 | Durable jobs (done in M3) + isolated container executor + `python`/`shell`/`fetch_url` agent tools | sandbox **installed on the Spark and probed: 18/18 hostile checks pass**; tools + 8 tests (local stand-in for the container); **sandbox switch OFF on CMSIT AI** | `sandbox_svc.py`, `sandbox/` (image, runner, setup scripts), `scripts/sandbox_probe.py`; privileged setup performed 2026-10-26 (below) |
 | M6 | Model gateway (org + workspace allow-lists), quotas, usage records, platform diagnostics, memory-aware sandbox admission, agent memory | done in code + 5 tests; agent memory done in M4 | `gateway_svc.py`, `usage_svc.py`, `routers/cloud_admin.py`; scheduling reuses the shared generation scheduler (agents rank 400) and the durable job queue (per-kind concurrency, priority) |
-| M7 | Workspace UI + admin UI | planned | |
-| M8 | Security/load/recovery/e2e scenarios A–I | planned | |
+| M7 | Workspace UI + admin UI | done; 11 browser tests (fake model) and the live UI tests below | `web/src/routes/(app)/workspaces`, `(app)/organisation`, `admin/organisations`, `admin/cloud`; `web/e2e/workspaces.spec.ts`, `web/e2e-live/live.spec.ts` |
+| M8 | Security/load/recovery/e2e scenarios A–I | done on the staging instance with real models and the real sandbox; see "Live scenarios" | `scripts/spark/live_scenarios.py`, `load_test.py`, `web/e2e-live`; `docs/THREAT_MODEL.md` |
 
 ## Media model audit (CMSIT AI, 2026-10-26)
 
@@ -150,6 +150,10 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
 | 2026-10-26 | 0.4.2 / 8 | `backups/roasted-cmsit-pre-0.4.2-20261026-174016` | copy: up → 1 org, 3 members; down → tables and column gone, roles hash identical; up again | healthy; 3 users, 5 chats, CMSIT AI branding intact; new routes answer 401 unauthenticated; Salted untouched (0.4.0 / 6) |
 | 2026-10-26 | 0.4.3 / 9 | `backups/roasted-cmsit-pre-0.4.3-20261026-175521` | copy on the Spark: up; real DOCX/XLSX/PPTX uploaded, ingested and retrieved with citations (aarch64); down to 8 removed the file tables and blob directory (roles hash identical); up again | healthy; 3 users, 5 chats, branding intact; new routes 401 unauthenticated; Salted untouched |
 | 2026-10-26 | 0.4.4 / 9 | `backups/roasted-cmsit-pre-0.4.4-20261026-181149` | copy on the Spark with the real embedding model: 4/4 semantic queries, junk query empty | healthy; embeddings enabled via the audited settings service; 3 users, chats 5 → 7 during the session (live use), Salted untouched |
+
+| 2026-10-26 | 0.5.0 / 10 | `backups/roasted-cmsit-pre-0.5.0-20261026-195048` | copy: up/down/up, semantic 4/4 | healthy; all cloud and sandbox switches OFF |
+| 2026-10-26 | 0.5.6 / 10 (no schema change) | `backups/roasted-cmsit-pre-0.5.6-20261026-220105` | copy: up, down to 9, up, semantic 4/4, roles hash identical | healthy; 3 users, 7 conversations, branding intact; Salted untouched (0.4.0 / 6); switches still OFF |
+| 2026-10-26 | staging 0.5.6 / 10 | none (synthetic, disposable) | n/a | port 8790, `~/semechka-deploy/staging`, credentials in `secrets/staging-credentials.txt` (0600), all switches ON |
 
 Rollback of the latest stage: on the Spark, `semechka migrate --to 8 --yes` with the 0.4.4 program (instance data dir
 `~/semechka-deploy/roasted/data`), then install the 0.4.2 tarball (schema 8) from `~/semechka-deploy/releases/`; or restore the
@@ -273,3 +277,103 @@ its arithmetic was correct. It also failed in ways no scripted test could show, 
    reverted file by file, and the scoped diff re-checked. Lint is only ever fixed on files this work owns.
 
 Re-run after the fixes: see "Real-model re-run" below once recorded.
+
+## Live scenarios on the staging instance (2026-10-26)
+
+A separate instance (`staging`, port 8790) with synthetic accounts, the real engine, the real embedding model and the real
+sandbox, all cloud switches on. Everything below ran from the developer machine over the network as signed-in users
+(`scripts/spark/live_scenarios.py` over HTTP; `web/e2e-live/live.spec.ts` in real Chrome). Credentials are read over ssh at
+run time and never stored. **CMSIT AI has none of these switches on**; that decision is the owner's (see the end).
+
+| Scenario | Result | Evidence |
+|---|---|---|
+| A. Two companies | pass | other company: 404 on workspace, file, download, retrieval, members; retrieval never returns the other company's sentinel text |
+| B. Departments in one company | pass | engineering gets 404 on finance; the organisation owner cannot read finance files; read-only share, then revoke, takes effect at once |
+| C. Persistent knowledge | pass | question without shared keywords finds the policy passage (hybrid); after restarting the service the same answer and the same context membership |
+| D. Cloud document agent | pass (36 checks on 0.5.6) | real `qwen3.6-35b-a3b` agent: every `python` call waited for approval, ran in the real sandbox, produced a .docx with the correct net profits (14,500 and 15,900) |
+| E. Sandbox restrictions | pass | `sandbox_probe.py` 18/18, **run under the service's own hardening through the relay** |
+| F. Revoke while queued | pass | runs that were really queued were cancelled with zero steps |
+| G. Media, through the browser | pass | an ordinary member made a real picture (17 s) and a real video (6.2 min, queued behind other people's jobs); both survive reload and a new sign-in |
+| H. Reliability | pass | service restarted while a run was in flight (running, steps already written): it resumed, no tool call was replayed, exactly one document |
+| I. Admin customisation | pass | renaming the product and switching Workspaces off/on in Administration changes what another signed-in person sees; the stored values and the audit trail match |
+| Load | pass | below |
+
+Not claimed: the hard 120B model (`gpt-oss-120b`) could not be loaded for the agent while a real user's Hunyuan video job held
+about 63 GB of the shared GPU; the run correctly waited and failed after 5 minutes with the engine's own message. Agents were
+exercised on the 35B model. The 4B model used the sandbox but wrote wrong figures into a document: **do not use small models
+for agents that compute numbers** (the run now says so; see defect 3).
+
+### Defects only live testing found (all fixed, each with a test)
+
+1. **The sandbox did not work from the real service.** From a shell it did. The service unit has mount-namespace hardening,
+   which puts it in an unprivileged user namespace where the sandbox account's uid/gid are unmapped; the kernel refuses
+   `connect()` to a socket owned by an unmapped id whatever its ACL says. Fix: a private 0600 relay owned by the service
+   account (`sandbox/setup/relay.py`, `3-service-proxy.sh`), no hardening removed. `systemd-socket-proxyd` was tried first and
+   drops output after a half-close.
+2. **An agent turn failed instead of waiting** when the engine's memory was held by someone else's video job. It now waits
+   (up to 15 minutes) and then fails with the engine's own message.
+3. **A model that could not use a tool still answered as if it had.** A run now carries a warning for every tool that failed
+   and never succeeded.
+4. **`database is locked` under concurrency (SQLite).** Four layers, found in this order, each reproduced before it was fixed:
+   (a) read-then-write transactions fail at once after another commit, ignoring the busy timeout; (b) taking the write lock at
+   the start of every request deadlocked when more waiters than pooled connections existed; (c) an async upload waiting for the
+   lock on the event loop stopped the request that held it; (d) every request wrote `sessions.last_seen`. Final design:
+   short synchronous mutating handlers queue on an in-process gate and begin as writers; coroutines and `@slow_db` handlers
+   read first and call `begin_write`/`abegin_write` after the slow part; login verifies the password before taking the lock;
+   session activity is kept in memory and saved in batches. Tests: `tests/test_real_server_load.py` (real sockets; fails
+   without each fix). A rule for future code: never hold a database session across a slow wait.
+5. A load-test script was throttled by the product's own sign-in limit (60 per minute per address). That is the limiter
+   working; note for deployments: **behind a reverse proxy every user shares one address unless forwarded addresses are trusted**.
+
+### Load test (staging, 2026-10-26, version 0.5.6)
+
+100 people, 100 workspaces, 300 files, 300 contexts in one organisation, driven by 16 concurrent clients over HTTP.
+Upload and context creation: 11.8 s in total (per person: upload p50 0.60 s, p95 0.82 s). Ingestion until every file was
+searchable (text extraction, then embeddings): 187 s on one run and 405 s on another (0.7 to 1.6 files/s) depending on how busy
+the shared GPU was with real users' jobs; ingest concurrency is 2 and embedding 1 by design. Retrieval: 500 concurrent queries
+in 21.5 s (23 per second), latency p50 680 ms, p95 743 ms, p99 1.25 s, **500/500 found their own document, 0 errors, 0
+cross-workspace leaks**, all hybrid (keyword plus meaning). A single query unloaded takes about 90 ms.
+
+### Real model inventory (as reported by the engine on 2026-10-26)
+
+Chat/vision: gpt-oss-120b (MXFP4), qwen3.6-35b-a3b (MXFP4_MOE, vision), qwen3-coder-next (MXFP4_MOE), qwen3-4b-instruct-2507
+(Q4_K_M), qwen3.5-0.8b (Q8_0), hermes-4-70b (Q4_K_M), dolphin3.0-r1-mistral-24b (Q6_K), qwen3.8-27b (UD-Q6_K, vision) and
+three more 27B-class and "flash" variants, two of them uncensored/abliterated builds. Image: sdxl-turbo, qwen-image-2512,
+qwen-image-2.1, qwen-image-edit-2511, flux2-klein-4b (z-image-turbo is also served and was tested directly). Video: wan2.2
+(ti2v-5b, t2v-a14b, i2v-a14b), hunyuanvideo-1.5 (t2v, i2v), ltx-2.3, minimax-h3. Embeddings: Qwen3-Embedding-0.6B Q8_0 on
+`127.0.0.1:8760`. Which are enabled for whom is an administrator's choice in Administration, Models.
+
+### Feature matrix
+
+| Capability | State |
+|---|---|
+| Organisations, groups, workspaces (nested), roles, deny-wins ACLs, "why" explanations | working, live-tested |
+| Files: folders, upload, versions, trash, quotas, per-organisation encryption | working |
+| Ingestion: txt, md, code, csv, json, pdf, docx, xlsx, pptx | working; images, scans, audio, video are stored, not searchable (no OCR/transcription) |
+| Contexts: versions, attach, export/import | working |
+| Retrieval: keyword + embeddings, permission-filtered, cited | working; no reranker |
+| Agents: durable runs, approvals, memory, document and spreadsheet and deck tools | working, live-tested with the 35B model |
+| Code tools (`python`, `shell`) in the isolated sandbox | working through the relay; namespace/seccomp isolation, not a VM |
+| `fetch_url` | working, deny-by-default allow-list; residual DNS-rebinding window |
+| Agent image/video generation tool | **not built** (people use the Picture and Video modes) |
+| Image and video generation for members | working, live-tested (the original defect is fixed) |
+| Model gateway, quotas, usage, platform diagnostics | working |
+| Backup/restore (streaming, authenticated), organisation export/purge | working |
+| Switches on CMSIT AI | **all off** |
+
+### Recovery
+
+* Program rollback of CMSIT AI: `~/semechka-deploy/roasted/app` keeps older releases; `install.sh --rollback` (run from the
+  unpacked newer release) returns to the previous recorded version; data schema is unchanged between 0.5.0 and 0.5.6.
+* Data: restore `~/semechka-deploy/backups/roasted-cmsit-pre-0.5.6-20261026-220105` (database `.backup`, `master.key`, assets) or
+  `semechka restore <file>` for a sealed backup.
+* Sandbox: `sandbox/setup/README.md` (rollback of each step). Relay only: `systemctl --user disable --now semechka-sandbox-relay`.
+* Staging can be deleted outright (`systemctl --user disable --now semechka-staging`; remove `~/semechka-deploy/staging`).
+
+### Open items and decisions for the owner
+
+1. Whether to switch on `cloud.workspaces.enabled`, `cloud.agents.enabled`, `sandbox.enabled` on CMSIT AI. If sandbox is
+   enabled, first run `sandbox/setup/3-service-proxy.sh` and set `sandbox.docker_host` (step 4 of the sandbox README).
+2. Agents need a capable model (35B-class or larger); the 120B model cannot share the GPU with video generation.
+3. Not built: OCR/transcription, reranking, an agent media tool, a per-owner file rule, a VM boundary for hostile code.
+4. The 8787 instance is CMSIT AI (production). The earlier "Roasted = disposable" label in notes is wrong.

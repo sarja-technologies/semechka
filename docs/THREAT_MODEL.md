@@ -31,6 +31,8 @@ malicious or compromised model/agent; hostile document content; a hostile tenant
 | 17 | Unauthorised artifact download | Content routes re-check `file.download`; previews are inline only for safe types | `test_files_http`, `test_authz` |
 | 18 | Data lost in backup/restore | Backups are streaming, authenticated per chunk (no silent truncation), include `workspaces/` and `attachments/`; restore verifies before replacing and keeps `.pre-restore` copies; old v1 backups still restore | `test_backup` (16 tests) |
 | 19 | Tenant offboarding | `semechka org export` (sealed) and `org purge` (typed confirmation; blobs, rows, passages, vectors) leave other tenants intact | `test_tenant_ops` |
+| 20 | Sandbox runtime reachable from the service only | The runtime socket is reachable by the service account through a mode-0600 relay in `/run/user/<uid>`; containers never see it; the service's mount-namespace hardening is kept | `sandbox_probe.py` 18/18 run under the service hardening through the relay |
+| 21 | A slow request starving everyone (database write lock) | Short writers queue on a gate; handlers that wait on clients or engines take the lock only after the wait; login hashes before locking; the activity write per request is gone | `tests/test_real_server_load.py` (fails without each fix); 100-user load test |
 
 ## Residual risks and limits (not hidden)
 
