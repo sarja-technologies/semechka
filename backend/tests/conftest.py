@@ -205,3 +205,35 @@ def env(app, st, cfg, script_url):
     return api
 
 
+
+import os as _os
+import subprocess as _subprocess
+import sys as _sys
+import tempfile as _tempfile
+from pathlib import Path as _Path
+
+from semechka import sandbox_svc as _sandbox_svc
+
+
+# ---- local stand-in for the sandbox container (tests of everything AROUND isolation) -------------------------
+@pytest.fixture
+def fake_sandbox(monkeypatch):
+    calls = []
+
+    def run(host, image, spec, inputs, lim, *, job_label=""):
+        calls.append({"host": host, "image": image, "spec": spec, "inputs": dict(inputs), "lim": lim})
+        if spec["mode"] == "tool":
+            return _sandbox_svc.Result(0, False, 0.1, "ffprobe version test\n", "", {}, False, {"peak_memory_mb": 12.5})
+        with _tempfile.TemporaryDirectory() as d:
+            (_Path(d) / "in").mkdir()
+            (_Path(d) / "out").mkdir()
+            for n, b in inputs.items():
+                (_Path(d) / "in" / n).write_bytes(b)
+            r = _subprocess.run([_sys.executable, "-I", "-B", "-c", spec["code"]], cwd=d, capture_output=True, timeout=30,
+                               env={"IN": f"{d}/in", "OUT": f"{d}/out", "PATH": _os.environ["PATH"]}, check=False)
+            files = {p.name: p.read_bytes() for p in (_Path(d) / "out").iterdir() if p.is_file()}
+        return _sandbox_svc.Result(r.returncode, False, 0.2, r.stdout.decode(), r.stderr.decode(), files, False, {"peak_memory_mb": 30.0})
+    monkeypatch.setattr(_sandbox_svc, "run", run)
+    return calls
+
+

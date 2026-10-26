@@ -76,7 +76,7 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M3d | Semantic retrieval (embeddings) + hybrid ranking (BM25 + cosine, reciprocal-rank fusion) | done, **deployed 0.4.4, enabled on CMSIT AI** | `embed_svc.py`; Qwen3-Embedding-0.6B Q8 (Apache-2.0, sha256 verified) served by `semechka-embed.service` on 127.0.0.1:8760; real-model rehearsal on the Spark: 4/4 queries with no shared keywords, junk query returns nothing; `tests/test_semantic.py` (7) with a deterministic fake embedder |
 | M4 | Agent framework: configs + versions, durable runs/steps, authority = user ∩ agent ∩ workspace, approvals, resume, memory; tools: search_context, list_files, read_file, read_table, table_stats, calc, create_document (docx), create_spreadsheet (xlsx), create_presentation (pptx), write_text_file, remember, recall | done in code + tests (13 agent tests, scripted model); **off by default** (`cloud.agents.enabled`) | `agent_svc.py`, `docgen_svc.py`, `routers/agents.py`, `models_agents.py`, migration 10; mutation-checked authority tests; **not yet exercised against a real language model** (planned with the sandbox in M5/M8) |
 | M5 | Durable jobs (done in M3) + isolated container executor + `python`/`shell`/`fetch_url` agent tools | sandbox **installed on the Spark and probed: 18/18 hostile checks pass**; tools + 8 tests (local stand-in for the container); **sandbox switch OFF on CMSIT AI** | `sandbox_svc.py`, `sandbox/` (image, runner, setup scripts), `scripts/sandbox_probe.py`; privileged setup performed 2026-10-26 (below) |
-| M6 | Model gateway, scheduling, agent memory | planned | |
+| M6 | Model gateway (org + workspace allow-lists), quotas, usage records, platform diagnostics, memory-aware sandbox admission, agent memory | done in code + 5 tests; agent memory done in M4 | `gateway_svc.py`, `usage_svc.py`, `routers/cloud_admin.py`; scheduling reuses the shared generation scheduler (agents rank 400) and the durable job queue (per-kind concurrency, priority) |
 | M7 | Workspace UI + admin UI | planned | |
 | M8 | Security/load/recovery/e2e scenarios A–I | planned | |
 
@@ -254,3 +254,22 @@ waited for EOF).
 `/etc/apparmor.d/usr.bin.rootlesskit` (then `apparmor_parser -R`) and
 `/etc/systemd/system/user-1001.slice.d/10-semechka-sandbox.conf`; `apt-get remove docker-ce-rootless-extras slirp4netns`.
 The installed `uidmap`, `acl`, `dbus-user-session` packages are harmless and may stay.
+
+## First run against a REAL language model (2026-10-26, disposable copy on the Spark)
+
+Model `qwen3.6-35b-a3b@MXFP4_MOE` via the Sarness engine, real finance spreadsheets, real embeddings. Run 1 (an
+"analyse, compare, write a management report, remember context" task) used 11 model calls and 9 real tool calls in 257 s;
+its arithmetic was correct. It also failed in ways no scripted test could show, all now fixed and covered by tests:
+
+1. The model finished a long `create_document` call **one closing brace short**. The call did not parse, was not run, and
+   the model then *announced* the report anyway. Fixes: (a) a reply that is only missing closing brackets is repaired by
+   appending exactly those closers (never altering content); anything else gets a specific error returned to the model;
+   (b) every file name in a final answer is checked against what the run really created or what exists in the workspace,
+   and unverified claims are returned in `warnings` next to the answer.
+2. Run 2 (a separate conversation) said it had no saved memory although one item existed: `recall` matched keywords only and
+   the memory sat in the system prompt, where the model overlooked it. Fixes: saved memory now precedes the task, `recall`
+   ranks by meaning when an embedding service is available, and never claims "nothing" when something is saved.
+3. Process: while tidying lint I ran an unscoped `ruff --fix` that rewrote 54 unrelated files. Caught before commit,
+   reverted file by file, and the scoped diff re-checked. Lint is only ever fixed on files this work owns.
+
+Re-run after the fixes: see "Real-model re-run" below once recorded.

@@ -2,43 +2,17 @@
 (`fake_sandbox`), so these tests cover everything around it - approval, permissions, input selection, output vetting,
 limits, observations - and NOT isolation. Isolation is proven against the real sandbox by scripts/sandbox_probe.py
 (18 hostile jobs; results in docs/ENTERPRISE.md)."""
-import os
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
 
 import httpx
 import pytest
 from sqlalchemy import select
 
-from semechka import agent_svc, sandbox_svc
+from semechka import agent_svc
 from semechka.models_agents import AgentStep
 
 from . import fake_llm as L
 from .test_agents import drive, last_obs, marketing, mk_agent, run_agent
 from .test_files_http import up
-
-
-@pytest.fixture
-def fake_sandbox(monkeypatch):
-    calls = []
-
-    def run(host, image, spec, inputs, lim, *, job_label=""):
-        calls.append({"host": host, "image": image, "spec": spec, "inputs": dict(inputs), "lim": lim})
-        if spec["mode"] == "tool":
-            return sandbox_svc.Result(0, False, 0.1, "ffprobe version test\n", "", {}, False, {"peak_memory_mb": 12.5})
-        with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "in").mkdir()
-            (Path(d) / "out").mkdir()
-            for n, b in inputs.items():
-                (Path(d) / "in" / n).write_bytes(b)
-            r = subprocess.run([sys.executable, "-I", "-B", "-c", spec["code"]], cwd=d, capture_output=True, timeout=30,
-                               env={"IN": f"{d}/in", "OUT": f"{d}/out", "PATH": os.environ["PATH"]}, check=False)
-            files = {p.name: p.read_bytes() for p in (Path(d) / "out").iterdir() if p.is_file()}
-        return sandbox_svc.Result(r.returncode, False, 0.2, r.stdout.decode(), r.stderr.decode(), files, False, {"peak_memory_mb": 30.0})
-    monkeypatch.setattr(sandbox_svc, "run", run)
-    return calls
 
 
 def enable_sandbox(env):

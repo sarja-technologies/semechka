@@ -290,6 +290,15 @@ def remove_workspace_member(s, az: authz.Authz, ws_id: str, ptype: str, pid: str
     s.flush()
 
 
+def _check_models(s, policy) -> None:
+    from . import gateway_svc
+    if policy and "models" in policy:
+        try:
+            policy["models"] = gateway_svc.validate_policy_models(s, policy["models"])
+        except ValueError as e:
+            raise TenancyError("invalid", str(e)) from None
+
+
 def update_workspace(s, az: authz.Authz, ws_id: str, **changes) -> Workspace:
     ws = get_workspace(s, ws_id)
     for key, val in changes.items():
@@ -311,6 +320,7 @@ def update_workspace(s, az: authz.Authz, ws_id: str, **changes) -> Workspace:
             bad = [x for x in (val or {}).get("deny", []) if not authz.valid_pattern(x)]
             if bad:
                 raise TenancyError("invalid", f"Unknown permission pattern: {bad[0]}")
+            _check_models(s, val)
     for key, val in changes.items():
         setattr(ws, key, val)
     _audit(s, az.user_id, ws.org_id, "ws.update", ws.id, fields=sorted(changes))

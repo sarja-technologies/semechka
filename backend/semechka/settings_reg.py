@@ -446,6 +446,10 @@ DEFS: list[Def] = [
         edit_perm="admin.quotas.edit"),
     Def("sandbox.timeout_s", Q, "Sandbox time limit per call (seconds)", "A call still running after this is killed.", "int", 120,
         min=5, max=1800, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("sandbox.reserve_mb", Q, "Memory kept free for the model engines (MB)",
+        "A sandbox call only starts when this much memory plus its own limit is free; otherwise it waits up to a minute "
+        "and then reports that the server is busy. 0 turns the check off.", "int", 8192, min=0, max=65536,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
     Def("sandbox.max_concurrent", Q, "Sandbox calls at once (whole server)", "Others wait their turn.", "int", 2, min=1, max=16,
         scopes=["deployment"], edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----

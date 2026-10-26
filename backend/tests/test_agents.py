@@ -229,9 +229,10 @@ def test_model_access_is_rechecked_every_turn(env, app, st):
     mia = c["mia@acme.test"]
     drive(st)
     aid = mk_agent(mia, wid)
-    mia.patch(f"/api/workspaces/{wid}", json={"policy": {"models": ["m_not_this_one"]}})
+    assert mia.patch(f"/api/workspaces/{wid}", json={"policy": {"models": ["m_not_this_one"]}}).status_code == 422  # unknown ids are refused
+    assert mia.patch(f"/api/workspaces/{wid}", json={"policy": {"models": []}}).status_code == 200
     r = mia.post(f"/api/agents/{aid}/runs", json={"task": "x"})
-    assert r.status_code == 409 and "model" in json.dumps(r.json()).lower()  # workspace allow-list excludes every model
+    assert r.status_code == 409 and "model" in json.dumps(r.json()).lower()  # the workspace allow-list excludes every model
 
 
 # ---- approvals --------------------------------------------------------------------------------------------
@@ -363,7 +364,7 @@ def test_memory_is_explicit_inspectable_editable_and_expires(env, app, st):
         raw = s.execute(select(AgentMemory.text_enc)).scalars().all()
         assert raw and all(r.startswith("v1:") and "Tuesdays" not in r for r in raw)
     # a later run is told what was saved
-    L.say(lambda m: L.final("I recall: " + m[0]["content"].split("Saved memory")[1][:120]))
+    L.say(lambda m: L.final("I recall: " + next(x["content"] for x in m if x["role"] == "user")[:200]))
     rid = run_agent(mia, quiet)
     drive(st)
     assert "Tuesdays" in mia.get(f"/api/runs/{rid}").json()["final"]
@@ -404,3 +405,73 @@ def test_other_organisations_cannot_see_agents_runs_or_memory(env, app, st):
     drive(st)
     seen = json.dumps(L.SEEN)
     assert "newsletter" not in seen and "aurora" not in seen
+
+
+# ---- findings from the first run against a REAL language model -----------------------------------------------------
+def test_truncated_json_is_repaired_only_by_adding_closers():
+    """A real model finished a long create_document call one brace short. Only missing closers may be added."""
+    ok = '{"tool": "create_document", "args": {"name": "r.docx", "blocks": [{"type": "paragraph", "text": "a } b ] c"}]}'  # one } short
+    a, why = agent_svc.parse_action_ex(ok)
+    assert a and a["tool"] == "create_document" and a["args"]["blocks"][0]["text"] == "a } b ] c" and why == ""  # braces inside strings untouched
+    assert agent_svc.parse_action('{"final": "done"')["final"] == "done"
+    assert agent_svc.parse_action('Sure! {"tool": "list_files", "args": {}} hope that helps')["tool"] == "list_files"
+    # not simply truncated: never guessed at
+    assert agent_svc.parse_action('{"tool": "x", "args": {}}}}garbage{')["tool"] == "x"  # a complete object followed by junk is fine
+    for bad in ('{"tool": "x", "args": {"a": "unterminated', '{"tool": "x"]', "no json here", '{"other": 1}', ""):
+        got, why = agent_svc.parse_action_ex(bad)
+        assert got is None and why, bad
+    assert agent_svc._close_open_brackets('{"a": [1, 2') == '{"a": [1, 2]}'
+    assert agent_svc._close_open_brackets('{"a": 1}') is None  # already balanced: nothing to repair
+    assert agent_svc._close_open_brackets("{" * 6) is None  # too deep to be a plausible truncation
+
+
+def test_a_bad_reply_is_explained_to_the_model_and_recovered(env, app, st):
+    _acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+    drive(st)
+    aid = mk_agent(mia, wid, tools=["list_files"])
+    L.say('{"tool": "list_files", "args": {}', 'I will list the files now.', L.tool("list_files"), L.final("done"))
+    rid = run_agent(mia, aid)
+    drive(st)
+    r = mia.get(f"/api/runs/{rid}", params={"detail": 1}).json()
+    assert r["status"] == "succeeded"
+    msgs = [m["content"] for m in L.SEEN[2] if m["role"] == "user"]
+    assert any("could not be used" in m and "no JSON object found" in m and "every brace" in m for m in msgs)  # told why, specifically
+    assert [s["status"] for s in r["steps"] if s["kind"] == "tool"] == ["done", "done"]  # the repaired call ran once, then the retry
+
+
+def test_claims_of_files_that_do_not_exist_are_flagged(env, app, st):
+    _acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+    drive(st)
+    aid = mk_agent(mia, wid)
+    # the failure seen live: the model never created the report but announced it
+    L.say(L.final("I created management-report.docx and also updated budget.xlsx for you."))
+    rid = run_agent(mia, aid)
+    drive(st)
+    r = mia.get(f"/api/runs/{rid}").json()
+    assert r["status"] == "succeeded" and r["artifacts"] == []
+    assert len(r["warnings"]) == 1 and "management-report.docx" in r["warnings"][0] and "budget.xlsx" not in " ".join(r["warnings"])  # exists already
+    # an honest run carries no warning
+    L.say(L.tool("create_document", name="plan.docx", title="t", blocks=[{"type": "paragraph", "text": "x"}]), L.final("Saved plan.docx."))
+    rid = run_agent(mia, aid)
+    drive(st)
+    r = mia.get(f"/api/runs/{rid}").json()
+    assert r["warnings"] == [] and [a["name"] for a in r["artifacts"]] == ["plan.docx"]
+
+
+def test_memory_reaches_the_model_next_to_the_task_and_recall_never_denies_what_exists(env, app, st):
+    _acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+    drive(st)
+    aid = mk_agent(mia, wid, name="Remembering", tools=["remember", "recall"], memory={"persistent": True})
+    L.say(L.tool("remember", text="Quarterly board pack is due on the 5th; owner is Dana."), L.final("saved"))
+    run_agent(mia, aid, "note the board pack deadline")
+    drive(st)
+    L.say(L.tool("recall", query="reporting needs"), lambda m: L.final(last_obs(m)))  # no word in common with the saved note
+    rid = run_agent(mia, aid, "what do you remember about reporting?")
+    drive(st)
+    first_user = next(m["content"] for m in L.SEEN[-2] if m["role"] == "user")
+    assert first_user.startswith("Saved memory from earlier runs") and "board pack is due on the 5th" in first_user and "Task:\nwhat do you remember" in first_user
+    final = mia.get(f"/api/runs/{rid}").json()["final"]
+    assert "board pack is due on the 5th" in final and "most recent" in final  # fell back to showing what is saved

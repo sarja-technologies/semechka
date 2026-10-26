@@ -115,7 +115,7 @@ def _run(ctx: Ctx, r: AgentRun, detail=False) -> dict:
     d = {"id": r.id, "agent_id": r.agent_id, "agent_version": r.agent_version, "workspace_id": r.workspace_id, "user_id": r.user_id,
          "status": job.status if job else "unknown", "error": job.error if job else "", "created_at": r.created_at,
          "started_at": job.started_at if job else None, "finished_at": job.finished_at if job else None, "usage": r.usage,
-         "artifacts": r.artifacts, "sources": r.sources,
+         "artifacts": r.artifacts, "sources": r.sources, "warnings": (r.usage or {}).get("warnings", []),
          "steps": [{"n": s.n, "kind": s.kind, "tool": s.tool, "status": s.status, "error": s.error,
                     "seconds": (s.meta or {}).get("seconds"), "model": (s.meta or {}).get("model"),
                     "tokens": ((s.meta or {}).get("usage") or None)} for s in steps]}

@@ -26,7 +26,7 @@ from . import files_svc as F
 from .models import Model
 from .models_agents import Agent, AgentMemory, AgentRun, AgentStep, AgentVersion
 from .models_files import ContextItem, DocText, File, Job
-from .models_tenancy import Workspace
+from .models_tenancy import Org, Workspace
 from .tenancy_svc import TenancyError
 
 log = logging.getLogger(__name__)
@@ -238,6 +238,11 @@ def start_run(st, s, az: authz.Authz, agent_id: str, task: str, principal) -> Ag
         raise TenancyError("disabled", "Cloud agents are turned off on this server.", 403)
     if a.archived:
         raise TenancyError("archived", "This agent is archived.", 409)
+    cap = (az.org(a.org_id).quotas or {}).get("agent_runs_per_day")
+    if cap:
+        from . import usage_svc
+        if usage_svc.runs_today(s, a.org_id) >= int(cap):
+            raise TenancyError("quota", f"Your organisation's limit of {cap} agent runs per day has been reached.", 429)
     task = task.strip()
     if not task or len(task) > 20000:
         raise TenancyError("invalid", "Describe the task (up to 20,000 characters).")
@@ -259,20 +264,16 @@ def start_run(st, s, az: authz.Authz, agent_id: str, task: str, principal) -> Ag
 
 
 def resolve_model(st, s, a: Agent, principal) -> str:
-    from . import services
-    ok = {m.id for m, _ in services.accessible_models(s, principal, st, "chat")}
+    from . import gateway_svc
+    ws = s.get(Workspace, a.workspace_id)
+    org = s.get(Org, a.org_id)
     if a.model_id:
-        if a.model_id not in ok:
-            raise TenancyError("model", "You are not allowed to use the model this agent is set to.", 403)
-        m = s.get(Model, a.model_id)
-        pol = (s.get(Workspace, a.workspace_id).policy or {}).get("models")
-        if pol is not None and m.id not in pol:
-            raise TenancyError("model", "This workspace does not allow that model.", 403)
+        why = gateway_svc.check(st, s, principal, org, ws, a.model_id, "chat")
+        if why:
+            raise TenancyError("model", why, 403)
         return a.model_id
-    pol = (s.get(Workspace, a.workspace_id).policy or {}).get("models")
-    for m, _ in services.accessible_models(s, principal, st, "chat"):
-        if "chat" in (m.capabilities or []) and (pol is None or m.id in pol):
-            return m.id
+    for m in gateway_svc.models_for(st, s, principal, org, ws, "chat"):
+        return m["id"]
     raise TenancyError("model", "No chat model is available to you for this agent.", 409)
 
 
@@ -583,15 +584,33 @@ def live_memory(s, st, a: Agent, user_az: authz.Authz | None = None) -> list[tup
     return [(m, st.vault.decrypt(m.text_enc, f"org:{a.org_id}:content")) for m in rows if not (m.expires_at and m.expires_at < now)]
 
 
-@tool("recall", "Look up this agent's saved memory.", '{"query": "..."}', ["mem.read"])
+@tool("recall", "Look up this agent's saved memory (ranked by meaning when an embedding service is available).", '{"query": "..."}', ["mem.read"])
 def t_recall(tc: ToolCtx, a: dict) -> ToolOut:
     if not memory_cfg(tc.agent)["persistent"]:
         return ToolOut("Persistent memory is switched off for this agent.")
-    words = {w for w in str(a.get("query", "")).lower().split() if len(w) > 2}
     items = live_memory(tc.s, tc.st, tc.agent)
-    scored = sorted(((sum(w in t.lower() for w in words), m, t) for m, t in items), key=lambda x: -x[0])
-    pick = [(m, t) for sc, m, t in scored if sc > 0 or not words][:8]
-    return ToolOut("\n".join(f"- ({m.id}) {t}" for m, t in pick) or "Nothing saved matches.")
+    if not items:
+        return ToolOut("Nothing has been saved yet.")
+    query = str(a.get("query", ""))
+    pick, how = [], "keyword match"
+    from . import embed_svc
+    ecfg = embed_svc.config(tc.st, tc.s)
+    if ecfg is not None and query.strip() and len(items) <= 300:
+        try:
+            vecs = embed_svc.embed(tc.st, ecfg, [t for _, t in items] + [query], query=False)
+            sims = vecs[:-1] @ vecs[-1]
+            order = sorted(range(len(items)), key=lambda i: -float(sims[i]))[:8]
+            pick = [items[i] for i in order if float(sims[i]) >= max(0.3, ecfg.min_score - 0.15)]
+            how = "meaning"
+        except embed_svc.EmbedUnavailable:
+            pass
+    if not pick:
+        words = {w for w in query.lower().split() if len(w) > 2}
+        scored = sorted(((sum(w in t.lower() for w in words), m, t) for m, t in items), key=lambda x: -x[0])
+        pick = [(m, t) for sc, m, t in scored if sc > 0][:8]
+    if not pick:  # nothing matched: show what is there rather than claiming nothing is saved
+        pick, how = items[:5], "most recent (no item matched the query)"
+    return ToolOut(f"Saved memory ({how}):\n" + "\n".join(f"- ({m.id}) {t}" for m, t in pick))
 
 
 SENSITIVE_DEFAULT = {n for n, t in TOOLS.items() if t.sensitive}
@@ -619,19 +638,59 @@ Tools:
 {memory}"""
 
 
-def parse_action(text: str) -> dict | None:
+def _close_open_brackets(s: str) -> str | None:
+    """If `s` (starting at an opening brace) ends with brackets still open, return it with exactly the missing closers
+    appended; None when it is not simply truncated (inside a string, mismatched, or already balanced). Only closers are
+    ever added, so no content can change."""
+    stack, in_str, esc = [], False, False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]" and (not stack or stack.pop() != ch):
+            return None
+    if in_str or not stack or len(stack) > 4:
+        return None
+    return s + "".join(reversed(stack))
+
+
+def parse_action_ex(text: str) -> tuple[dict | None, str]:
+    """-> (action, why_not). `why_not` is written for the model so it can fix its next reply."""
     import re
     s = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL).strip()
     dec = json.JSONDecoder()
+    why = "no JSON object found"
     for i, ch in enumerate(s):
-        if ch == "{":
+        if ch != "{":
+            continue
+        try:
+            obj, _ = dec.raw_decode(s[i:])
+        except ValueError as e:
+            why = f"invalid JSON ({e})"
+            fixed = _close_open_brackets(s[i:])
+            if fixed is None:
+                continue
             try:
-                obj, _ = dec.raw_decode(s[i:])
+                obj = json.loads(fixed)
             except ValueError:
                 continue
-            if isinstance(obj, dict) and (isinstance(obj.get("tool"), str) or isinstance(obj.get("final"), str)):
-                return obj
-    return None
+        if isinstance(obj, dict) and (isinstance(obj.get("tool"), str) or isinstance(obj.get("final"), str)):
+            return obj, ""
+        why = 'the JSON object has neither a "tool" nor a "final" key'
+    return None, why
+
+
+def parse_action(text: str) -> dict | None:
+    return parse_action_ex(text)[0]
 
 
 @dataclass
@@ -666,27 +725,36 @@ def _steps(s, run_id):
 def _system_prompt(st, s, agent: Agent, run: AgentRun, ws: Workspace, person: str) -> str:
     lim = {**DEFAULT_LIMITS, **(agent.limits or {})}
     docs = "\n".join(f"- {n}: {TOOLS[n].summary} Arguments: {TOOLS[n].args}" for n in agent.tools if n in TOOLS)
-    mem = ""
-    if memory_cfg(agent)["persistent"]:
-        items = live_memory(s, st, agent)[:20]
-        if items:
-            mem = "\nSaved memory from earlier runs (may be outdated; verify against the documents):\n" + "\n".join(f"- {t}" for _, t in items)
     return SYSTEM.format(name=agent.name, person=person, ws=ws.name, instructions=instructions_of(st, agent),
-                         max_steps=lim["max_steps"], tools=docs or "(none)", memory=mem)
+                         max_steps=lim["max_steps"], tools=docs or "(none)", memory="")
+
+
+def memory_block(st, s, agent: Agent) -> str:
+    """Saved memory goes in front of the task, where a model reads it, not buried in the system prompt."""
+    if not memory_cfg(agent)["persistent"]:
+        return ""
+    items = live_memory(s, st, agent)[:20]
+    if not items:
+        return ""
+    return ("Saved memory from earlier runs of this agent (may be outdated; verify against the documents). Use it where relevant:\n"
+            + "\n".join(f"- {t}" for _, t in items))
 
 
 def _messages(st, s, agent, run, ws, person, steps) -> list[dict]:
     lim = {**DEFAULT_LIMITS, **(agent.limits or {})}
+    task = _dec(st, run.org_id, run.task_enc)
+    mem = memory_block(st, s, agent)
     msgs = [{"role": "system", "content": _system_prompt(st, s, agent, run, ws, person)},
-            {"role": "user", "content": _dec(st, run.org_id, run.task_enc)}]
+            {"role": "user", "content": (mem + "\n\nTask:\n" + task) if mem else task}]
     bad = 0
     for stp in steps:
         if stp.kind == "model":
             msgs.append({"role": "assistant", "content": _dec(st, run.org_id, stp.result_enc)})
             if stp.meta.get("parse_error"):
                 bad += 1
-                msgs.append({"role": "user", "content": "Your reply was not a single JSON object with a \"tool\" or \"final\" key. "
-                                                         "Reply again with exactly one JSON object and nothing else."})
+                msgs.append({"role": "user", "content": f"Your reply could not be used: {stp.meta.get('parse_error')}. Nothing was done. "
+                                                         "Reply again with exactly one complete JSON object (check that every brace and "
+                                                         "bracket is closed) and nothing else."})
         elif stp.kind == "tool":
             body = _clip(_dec(st, run.org_id, stp.result_enc), lim["max_observation_chars"])
             if stp.status == "done":
@@ -813,9 +881,9 @@ def _record_model(st, job_id: str, turn: Turn, text: str, info: dict) -> dict | 
         run = s.get(AgentRun, job.payload["run_id"])
         agent = s.get(Agent, run.agent_id)
         n = (max([x.n for x in _steps(s, run.id)] or [0])) + 1
-        action = parse_action(text)
+        action, why = parse_action_ex(text)
         meta = {"model": info["model"], "seconds": info["seconds"], **({"usage": info["usage"]} if info.get("usage") else {}),
-                **({"timings": info["timings"]} if info.get("timings") else {}), **({} if action else {"parse_error": True})}
+                **({"timings": info["timings"]} if info.get("timings") else {}), **({} if action else {"parse_error": why})}
         s.add(AgentStep(run_id=run.id, n=n, kind="model", status="done", result_enc=_enc(st, run.org_id, text[:MAX_RUN_CHARS]),
                         meta=meta, finished_at=time.time()))
         u = dict(run.usage or {})
@@ -853,7 +921,32 @@ def _finish_run(st, s, run: AgentRun, job: Job, final: str) -> dict:
             srcs[(x["file_id"], x.get("loc", ""))] = x
     run.final_enc = _enc(st, run.org_id, final[:MAX_RUN_CHARS])
     run.artifacts, run.sources = list(arts.values()), list(srcs.values())[:50]
-    return {"run_id": run.id, "artifacts": len(arts), "steps": len(steps)}
+    warnings = unverified_claims(s, run, final, {a["name"].lower() for a in arts.values()})
+    if warnings:
+        run.usage = {**(run.usage or {}), "warnings": warnings}
+    return {"run_id": run.id, "artifacts": len(arts), "steps": len(steps), "warnings": len(warnings)}
+
+
+_FILE_MENTION = None
+
+
+def unverified_claims(s, run: AgentRun, final: str, made: set[str]) -> list[str]:
+    """A model can say it saved a file it never saved. Check every file name the answer mentions against what this run
+    really created, or what already exists in the workspace; anything else is reported next to the answer."""
+    import re
+    ext = r"(?:docx|xlsx|pptx|csv|md|txt|pdf|png|json)"
+    names = {m.group(1) for m in re.finditer(r"""["'`*]([^"'`*\n]{1,100}\.""" + ext + r""")["'`*]""", final, re.IGNORECASE)}  # quoted: may contain spaces
+    names |= {m.group(0) for m in re.finditer(r"(?<![\w.\-])[\w][\w\-.]{0,100}\." + ext + r"\b", final, re.IGNORECASE)}  # bare: no spaces
+    out = []
+    for n in sorted(names):
+        key = n.strip().lower()
+        if key in made:
+            continue
+        exists = s.execute(select(File.id).where(File.workspace_id == run.workspace_id, File.deleted_at.is_(None))
+                           .where(File.name.ilike(n.strip()))).first()
+        if not exists:
+            out.append(f"The answer mentions '{n.strip()}', but this run did not create it and no such file exists in the workspace.")
+    return out
 
 
 def _execute_tool(st, job_id: str, step_n: int) -> None:
@@ -960,11 +1053,27 @@ def _gather_inputs(tc: ToolCtx, refs) -> dict[str, bytes]:
     return out
 
 
+def _admit_memory(tc: ToolCtx, need_mb: int, wait_s: float = 60.0) -> None:
+    """Admission by MEASURED free memory: the model engines share this machine's RAM, so a sandbox call waits (up to a
+    minute) for headroom rather than risk pushing the host into out-of-memory kills, and says so if none appears."""
+    from . import usage_svc
+    reserve = int(tc.st.settings.deployment(tc.s, "sandbox.reserve_mb") or 0)
+    deadline = time.monotonic() + wait_s
+    while True:
+        free = usage_svc.mem_available_mb()
+        if free is None or free >= need_mb + reserve:
+            return
+        if time.monotonic() > deadline:
+            raise ToolError(f"The server is short of memory right now ({free} MB free, {need_mb + reserve} MB needed); try again later.")
+        time.sleep(2)
+
+
 def _run_sandbox(tc: ToolCtx, spec: dict, a: dict) -> ToolOut:
     SB, host, image, lim, cap = _sandbox_cfg(tc)
     inputs = _gather_inputs(tc, a.get("files"))
     sem = _SANDBOX_GATE.setdefault(cap, __import__("threading").BoundedSemaphore(cap))
     with sem:  # the whole server runs at most `cap` sandboxes at a time; the rest wait here
+        _admit_memory(tc, lim.memory_mb)
         try:
             res = SB.run(host, image, spec, inputs, lim, job_label=tc.job.id)
         except SB.SandboxError as e:

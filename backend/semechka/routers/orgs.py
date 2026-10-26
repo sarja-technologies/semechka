@@ -132,6 +132,7 @@ def patch_org(oid: str, body: OrgPatch, ctx: Ctx = Depends(current)):
         bad = [x for x in body.policy.get("deny", []) if not authz.valid_pattern(x)]
         if bad:
             raise HTTPException(422, {"code": "invalid", "message": f"Unknown permission pattern: {bad[0]}"})
+        run(T._check_models, ctx.s, body.policy)
         o.policy = body.policy
     for k in ("name", "quotas", "auto_join"):
         if getattr(body, k) is not None:
