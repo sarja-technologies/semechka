@@ -29,8 +29,11 @@ async def chat(req: Request):
             return JSONResponse({"error": {"code": 400, "type": "exceed_context_size_error",
                                            "message": f"request ({chars // 4} tokens) exceeds the available context size "
                                                       f"({LIMITS['ctx']} tokens), try increasing it"}}, status_code=400)
+    scripted = _agent_reply(body["messages"])  # only when the agent protocol is in the system prompt
     last = body["messages"][-1]["content"]
     words = ["Hello", " from", " the", " fake", " model"]
+    if scripted is not None:
+        words = [scripted[i:i + 30] for i in range(0, len(scripted), 30)]
     if isinstance(last, list):  # multimodal content parts: answer about the text part only
         last = " ".join(p.get("text", "") for p in last if isinstance(p, dict))
     if "benchmark-markdown" in last:
@@ -50,6 +53,27 @@ async def chat(req: Request):
                                      "timings": {"predicted_per_second": 123.4, "prompt_per_second": 900.0}}) + "\n\n"
         yield "data: [DONE]\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+def _agent_reply(messages) -> str | None:
+    """A deterministic 'agent model' for browser tests: list the files, write a one-page report, then answer.
+    It reads only the conversation, so it works across restarts and needs no state."""
+    system = messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
+    if not isinstance(system, str) or "You work in steps. On EVERY turn reply with exactly ONE JSON object" not in system:
+        return None
+    done = sum(1 for m in messages if m["role"] == "user" and isinstance(m["content"], str) and m["content"].startswith("Tool result for"))
+    task = next((m["content"] for m in messages if m["role"] == "user"), "")
+    if "ask-for-approval" in task:  # one sensitive action, then the answer
+        if done == 0:
+            return json.dumps({"tool": "write_text_file", "args": {"name": "approved-note.md", "content": "# Note\nWritten after a person approved it."}})
+        return json.dumps({"final": "Done. I saved approved-note.md."})
+    if done == 0:
+        return json.dumps({"tool": "list_files", "args": {}})
+    if done == 1:
+        return json.dumps({"tool": "create_document", "args": {"name": "agent-report.docx", "title": "Agent report", "blocks": [
+            {"type": "heading", "text": "Summary"}, {"type": "paragraph", "text": "Prepared by the browser-test agent from the workspace files."},
+            {"type": "bullets", "items": ["First finding", "Second finding"]}]}})
+    return json.dumps({"final": "Done. I saved agent-report.docx in the workspace."})
 
 
 _BENCH_SECTION = """## Section {n}

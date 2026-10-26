@@ -82,10 +82,22 @@ def patch_folder(fid: str, body: FolderPatch, ctx: Ctx = Depends(current)):
                             move="parent_id" in body.model_fields_set, restricted=body.restricted))
 
 
+def _index_status(s, files) -> dict[str, str]:
+    """Whether each file's CURRENT version is searchable: ok | pending | unsupported | failed."""
+    if not files:
+        return {}
+    from sqlalchemy import and_
+    rows = s.execute(select(DocText.file_id, DocText.status).join(FileVersion, FileVersion.id == DocText.version_id)
+                     .join(File, and_(File.id == FileVersion.file_id, File.current == FileVersion.n))
+                     .where(DocText.file_id.in_([f.id for f in files]))).all()
+    return dict(rows)
+
+
 @router.get("/workspaces/{wid}/files")
 def list_files(wid: str, folder_id: str | None = None, trash: bool = False, ctx: Ctx = Depends(current)):
     r = run(F.list_children, ctx.s, az(ctx), wid, folder_id, trash=trash)
-    return {"folders": [_folder_view(x) for x in r["folders"]], "files": [_file_view(x) for x in r["files"]],
+    status = _index_status(ctx.s, r["files"])
+    return {"folders": [_folder_view(x) for x in r["folders"]], "files": [_file_view(x, {"index": status.get(x.id, "pending")}) for x in r["files"]],
             "path": [{"id": i, "name": n} for i, n in r["path"]]}
 
 
@@ -178,6 +190,13 @@ def untrash(fid: str, ctx: Ctx = Depends(current)):
     return _file_view(run(F.untrash_file, ctx.s, az(ctx), fid))
 
 
+@router.get("/workspaces/{wid}/all-files")
+def all_files(wid: str, ctx: Ctx = Depends(current)):
+    rows = run(F.all_files, ctx.s, az(ctx), wid)
+    status = _index_status(ctx.s, [f for f, _ in rows])
+    return [_file_view(f, {"path": p, "index": status.get(f.id, "pending")}) for f, p in rows]
+
+
 @router.get("/workspaces/{wid}/search")
 def search(wid: str, q: str, k: int = 8, ctx: Ctx = Depends(current)):
     """File names and, where indexed, passages - only from what the caller may read."""
@@ -205,7 +224,8 @@ def _ctx_view(c: Context, a=None, items=None) -> dict:
 def list_contexts(wid: str, ctx: Ctx = Depends(current)):
     a = az(ctx)
     run(F.workspace_of, ctx.s, wid, a)
-    return [_ctx_view(c) for c in C.contexts_for_workspace(ctx.s, a, wid)]
+    # the count only includes files this person may read, so it cannot hint at restricted ones
+    return [{**_ctx_view(c), "files": len(C.context_items(ctx.s, a, c)), "home": c.workspace_id != wid} for c in C.contexts_for_workspace(ctx.s, a, wid)]
 
 
 class CtxIn(BaseModel):

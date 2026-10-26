@@ -460,11 +460,15 @@ def test_other_adapters_report_media_as_unsupported():
     assert adapters.REGISTRY["sarness"].manifest.media and not adapters.REGISTRY["ollama"].manifest.media
 
 
-def test_backup_carries_the_encrypted_gallery(mo, cfg):
-    import io
+def test_backup_carries_the_encrypted_gallery(mo, cfg, tmp_path):
     import tarfile
 
-    from semechka.cli import _snapshot
+    from semechka.cli import _write_snapshot
+    from semechka.crypto import SealReader
     finish(mo, img(mo).json()["id"])
-    with tarfile.open(fileobj=io.BytesIO(_snapshot(cfg)), mode="r:gz") as tf:
-        assert any(n.startswith("assets/") and n.endswith(".bin") for n in tf.getnames())
+    out = tmp_path / "gallery.smck"
+    with open(out, "wb") as f:
+        _write_snapshot(cfg, f, passphrase="a long backup passphrase")
+    with open(out, "rb") as f, tarfile.open(fileobj=SealReader(f, "a long backup passphrase"), mode="r|gz") as tf:
+        names = tf.getnames()
+    assert any(n.startswith("assets/") and n.endswith(".bin") for n in names)

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from .. import services
 from ..deps import Ctx, current, mfa_required_for
 from ..models import Role, Team
+from ..models_tenancy import OrgMember
 
 LABELS = {"agents": "Assistants", "knowledge": "Knowledge", "code": "Code"}  # 'agents' is the stored id; it has no tools
 
@@ -74,6 +75,9 @@ def ui_config(ctx_s, st, p, *, preview=False, prefs: dict | None = None) -> dict
                           "available": state["enabled"], "reason": state["reason"]})
         elif iid == "usage" or (iid == "help" and flags["help_links"]):
             pages.append({"id": iid, "label": it.get("label") or LABELS.get(iid, iid.title()), "available": True, "reason": ""})
+    if g("cloud.workspaces.enabled") and p.user_id and not p.user_id.startswith("preview:") and \
+            ctx_s.query(OrgMember).filter(OrgMember.user_id == p.user_id, OrgMember.status == "active").first():
+        pages.append({"id": "workspaces", "label": "Workspaces", "available": True, "reason": ""})
     if modes["image"]["enabled"] or modes["video"]["enabled"]:
         pages.insert(0, {"id": "library", "label": "Library", "available": True, "reason": ""})
     ops = operations(ctx_s, st, p, g, modes)

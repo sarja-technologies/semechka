@@ -91,3 +91,108 @@ def open_with_passphrase(blob: bytes, passphrase: str) -> bytes:
     salt, nonce, ct = blob[5:21], blob[21:33], blob[33:]
     key = Scrypt(salt=salt, length=32, n=2**15, r=8, p=1).derive(passphrase.encode())
     return AESGCM(key).decrypt(nonce, ct, b"semechka-backup")
+
+
+# ---- streaming backups (SMCK2) --------------------------------------------------------------------------------------
+# Backups can be many gigabytes (workspace files), so they are sealed as a stream of independently authenticated chunks
+# instead of one blob in memory. Each chunk's nonce is a random per-backup prefix plus its index; its associated data is
+# the index and a "final" flag, so reordering, dropping, truncating or extending the stream fails authentication.
+SMCK2 = b"SMCK2"
+CHUNK = 1 << 20
+_TAG = 16
+
+
+def _stream_key(passphrase: str, salt: bytes) -> bytes:
+    return Scrypt(salt=salt, length=32, n=2**15, r=8, p=1).derive(passphrase.encode())
+
+
+def _chunk_ad(i: int, final: bool) -> bytes:
+    return b"semechka-backup2" + i.to_bytes(8, "big") + (b"\x01" if final else b"\x00")
+
+
+class SealWriter:
+    """File-like writer: everything written is encrypted into `raw` in CHUNK-sized authenticated pieces."""
+
+    def __init__(self, raw, passphrase: str, chunk: int = CHUNK):
+        self.raw, self.chunk, self.i, self.buf, self.closed = raw, chunk, 0, bytearray(), False
+        salt, self.prefix = os.urandom(16), os.urandom(8)
+        self.aes = AESGCM(_stream_key(passphrase, salt))
+        raw.write(SMCK2 + salt + self.prefix + chunk.to_bytes(4, "big"))
+
+    def _seal(self, data: bytes, final: bool) -> None:
+        self.raw.write(self.aes.encrypt(self.prefix + self.i.to_bytes(4, "big"), data, _chunk_ad(self.i, final)))
+        self.i += 1
+
+    def write(self, b) -> int:
+        self.buf += b
+        while len(self.buf) > self.chunk:  # keep at least one byte back: the last chunk must be marked final
+            self._seal(bytes(self.buf[:self.chunk]), False)
+            del self.buf[:self.chunk]
+        return len(b)
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        if not self.closed:
+            self._seal(bytes(self.buf), True)
+            self.closed = True
+
+
+class SealReader:
+    """File-like reader for SMCK2. Raises ValueError for a wrong passphrase, damage, truncation or extension."""
+
+    def __init__(self, raw, passphrase: str):
+        head = raw.read(len(SMCK2) + 16 + 8 + 4)
+        if len(head) < len(SMCK2) + 28 or not head.startswith(SMCK2):
+            raise ValueError("not a Semechka backup")
+        self.raw = raw
+        self.chunk = int.from_bytes(head[-4:], "big")
+        if not 1024 <= self.chunk <= 64 * CHUNK:
+            raise ValueError("unreadable backup header")
+        self.prefix = head[len(SMCK2) + 16:len(SMCK2) + 24]
+        self.aes = AESGCM(_stream_key(passphrase, head[len(SMCK2):len(SMCK2) + 16]))
+        self.i, self.out, self.done = 0, b"", False
+        self.cur = self._read_cipher()
+        self.nxt = self._read_cipher()
+
+    def _read_cipher(self) -> bytes:
+        want, parts = self.chunk + _TAG, []
+        while want:
+            b = self.raw.read(want)
+            if not b:
+                break
+            parts.append(b)
+            want -= len(b)
+        return b"".join(parts)
+
+    def _fill(self) -> bool:
+        if self.done:
+            return False
+        final = not self.nxt
+        if len(self.cur) < _TAG or (not final and len(self.cur) != self.chunk + _TAG):
+            raise ValueError("backup is truncated or damaged")
+        try:
+            self.out = self.aes.decrypt(self.prefix + self.i.to_bytes(4, "big"), self.cur, _chunk_ad(self.i, final))
+        except Exception:  # noqa: BLE001  InvalidTag: wrong passphrase or tampering; the reason is deliberately not distinguished
+            raise ValueError("wrong passphrase, or the backup is damaged") from None
+        self.i += 1
+        self.done = final
+        self.cur, self.nxt = self.nxt, (b"" if final else self._read_cipher())
+        return True
+
+    def read(self, n: int = -1) -> bytes:
+        parts, need = [], n
+        while n < 0 or need > 0:
+            if not self.out and not self._fill():
+                break
+            take = self.out if n < 0 else self.out[:need]
+            self.out = self.out[len(take):]
+            parts.append(take)
+            need -= len(take)
+        return b"".join(parts)
+
+    def verify_end(self) -> None:
+        """Read to the end so the final chunk is authenticated (a tar reader may stop before it)."""
+        while self.read(1 << 20):
+            pass

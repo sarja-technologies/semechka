@@ -130,3 +130,78 @@ def test_sandbox_calls_never_exceed_the_platform_ceiling(env, app, st, fake_sand
     assert tool_steps(mia, rid)[0]["status"] == "done"
     lim = fake_sandbox[0]["lim"]
     assert lim.memory_mb == 512 and lim.timeout_s == 30
+
+
+def test_workspaces_entry_is_off_by_default_and_only_for_organisation_members(env, app, st):
+    _acme, c, _wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+
+    def pages(client):
+        return [p["id"] for p in client.get("/api/me").json()["ui"]["pages"]]
+    assert "workspaces" not in pages(mia) and "workspaces" not in pages(env)  # the switch is off
+    assert env.put("/api/admin/settings/cloud.workspaces.enabled", json={"value": True}).status_code == 200
+    assert "workspaces" in pages(mia) and "workspaces" in pages(env)
+    stranger = make_stranger(env, app)
+    assert "workspaces" not in pages(stranger)  # not in any organisation: nothing to show
+
+
+def make_stranger(env, app):
+    from .conftest import make_user
+    s = make_user(env, app, "stranger@example.test")
+    from semechka.models_tenancy import OrgMember
+    from semechka.state import AppState  # noqa: F401
+    with app.state.sem.db.session() as sess:
+        sess.query(OrgMember).filter(OrgMember.user_id == s.user_id).delete()
+    return s
+
+
+def test_platform_admins_list_and_suspend_organisations_and_it_bites_immediately(env, app, st):
+    acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia, boss = c["mia@acme.test"], c["boss@acme.test"]
+    drive(st)
+    orgs = {o["slug"]: o for o in env.get("/api/admin/orgs").json()}
+    assert orgs["acme"]["members"] == 4 and orgs["acme"]["workspaces"] == 1 and orgs["acme"]["storage_bytes"] > 0 and orgs["acme"]["status"] == "active"
+    assert mia.get("/api/admin/orgs").status_code == 403 and boss.get("/api/admin/orgs").status_code == 403  # tenants administer themselves, not the platform
+    assert mia.get(f"/api/workspaces/{wid}").status_code == 200
+    assert env.patch(f"/api/admin/orgs/{acme}", json={"status": "suspended"}).status_code == 200
+    assert mia.get(f"/api/workspaces/{wid}").status_code == 404
+    assert acme not in [o["id"] for o in mia.get("/api/orgs").json()]
+    assert boss.get(f"/api/orgs/{acme}/members").status_code == 404
+    assert mia.get(f"/api/workspaces/{wid}/files").status_code == 404
+    assert env.patch(f"/api/admin/orgs/{acme}", json={"status": "active"}).status_code == 200  # nothing was deleted
+    assert mia.get(f"/api/workspaces/{wid}").status_code == 200 and len(mia.get(f"/api/workspaces/{wid}/files").json()["files"]) == 3
+    assert env.patch(f"/api/admin/orgs/{acme}", json={"status": "bogus"}).status_code == 422
+    assert env.patch("/api/admin/orgs/o_nope", json={"status": "active"}).status_code == 404
+
+
+def test_file_lists_say_whether_each_file_is_searchable(env, app, st):
+    _acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+    up(mia, wid, "pic.png", b"\x89PNG\r\n\x1a\n" + b"0" * 30)
+    before = {f["name"]: f["index"] for f in mia.get(f"/api/workspaces/{wid}/files").json()["files"]}
+    assert set(before.values()) == {"pending"}  # nothing has run yet: said honestly
+    drive(st)
+    after = {f["name"]: f["index"] for f in mia.get(f"/api/workspaces/{wid}/files").json()["files"]}
+    assert after["budget.xlsx"] == "ok" and after["brand-guidelines.md"] == "ok" and after["pic.png"] == "unsupported"
+
+
+def test_pickers_get_flat_file_lists_and_model_lists_scoped_by_permission(env, app, st):
+    acme, c, wid, uid, _ids, _ctx_id = marketing(env, app)
+    mia, view, boss = c["mia@acme.test"], c["view@acme.test"], c["boss@acme.test"]
+    fo = mia.post(f"/api/workspaces/{wid}/folders", json={"name": "Reports"}).json()["id"]
+    up(mia, wid, "q3.md", b"quarter three", folder_id=fo)
+    secret = mia.post(f"/api/workspaces/{wid}/folders", json={"name": "Board"}).json()["id"]
+    up(mia, wid, "minutes.md", b"private minutes", folder_id=secret)
+    mia.patch(f"/api/folders/{secret}", json={"restricted": True})
+    mia.put(f"/api/workspaces/{wid}/members", json={"principal_type": "user", "principal_id": uid["view@acme.test"], "role": "viewer"})
+    drive(st)
+    flat = {f["name"]: f["path"] for f in mia.get(f"/api/workspaces/{wid}/all-files").json()}
+    assert flat["q3.md"] == "Reports" and flat["budget.xlsx"] == "" and flat["minutes.md"] == "Board"
+    seen = {f["name"] for f in view.get(f"/api/workspaces/{wid}/all-files").json()}
+    assert "minutes.md" not in seen and "q3.md" in seen  # a restricted folder's files are not even listed
+    assert c["out@acme.test"].get(f"/api/workspaces/{wid}/all-files").status_code == 404
+    # model lists: org-wide view needs the right to edit the workspace's policy / manage the organisation's models
+    assert view.get(f"/api/workspaces/{wid}/models", params={"scope": "org"}).status_code == 403
+    assert mia.get(f"/api/workspaces/{wid}/models", params={"scope": "org"}).status_code == 200
+    assert boss.get(f"/api/orgs/{acme}/models").status_code == 200 and mia.get(f"/api/orgs/{acme}/models").status_code == 403
+    assert all("alias" in m and m["capabilities"] for m in boss.get(f"/api/orgs/{acme}/models").json())

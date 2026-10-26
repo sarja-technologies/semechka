@@ -419,6 +419,12 @@ DEFS: list[Def] = [
     Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    # ---- cloud workspaces ----
+    Def("cloud.workspaces.enabled", SYS, "Cloud workspaces",
+        "Shows a Workspaces area to people who belong to an organisation: shared files, knowledge contexts and agents "
+        "with their own access rules. Off until you turn it on; the API and the data are not affected by the switch.",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit", public=False,
+        effect="Adds the Workspaces entry to navigation for organisation members."),
     # ---- cloud agents ----
     Def("cloud.agents.enabled", SYS, "Cloud agents",
         "Lets people with the right workspace role run configured agents that read their authorised documents, "

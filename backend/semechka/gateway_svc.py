@@ -31,6 +31,20 @@ def models_for(st, s, principal, org: Org | None, ws: Workspace | None, mode: st
     return out
 
 
+def platform_models(s, mode: str | None = None) -> list[dict]:
+    """Every model the platform has enabled (what an organisation administrator may allow or withhold). Names and
+    capabilities only."""
+    out = []
+    for m in catalog_svc.ordered_models(s):
+        if not m.enabled or not m.available or m.hidden:
+            continue
+        caps = catalog_svc.capabilities(m)
+        if mode and mode not in caps:
+            continue
+        out.append({"id": m.id, "alias": m.alias, "capabilities": caps})
+    return out
+
+
 def check(st, s, principal, org: Org | None, ws: Workspace | None, model_id: str, mode: str = "chat") -> str | None:
     """None when allowed, else the reason (written for the person)."""
     if org is not None and not _allowed(org.policy, model_id):

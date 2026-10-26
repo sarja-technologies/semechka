@@ -396,6 +396,27 @@ def list_children(s, az: authz.Authz, ws_id: str, folder_id: str | None = None, 
     return {"folders": folders, "files": files, "path": [(f.id, f.name) for f in reversed(folder_chain(s, folder_id))]}
 
 
+def all_files(s, az: authz.Authz, ws_id: str, limit: int = 2000) -> list[tuple[File, str]]:
+    """Every readable, non-deleted file of the workspace with its folder path ("Reports / 2026"), for pickers."""
+    ws = workspace_of(s, ws_id, az)
+    folders = {f.id: f for f in s.execute(select(Folder).where(Folder.workspace_id == ws.id)).scalars()}
+
+    def path(fid):
+        names, seen = [], set()
+        while fid and fid in folders and fid not in seen:
+            seen.add(fid)
+            names.append(folders[fid].name)
+            fid = folders[fid].parent_id
+        return " / ".join(reversed(names))
+    out = []
+    for f in s.execute(select(File).where(File.workspace_id == ws.id, File.deleted_at.is_(None)).order_by(File.name).limit(limit * 3)).scalars():
+        if az.check("file.read", ws, nodes_for_file(s, f)).allowed:
+            out.append((f, path(f.folder_id)))
+            if len(out) >= limit:
+                break
+    return out
+
+
 def search_names(s, az: authz.Authz, ws_id: str, q: str, limit: int = 50) -> list[File]:
     ws = workspace_of(s, ws_id, az)
     like = f"%{q.strip().replace('%', '').replace('_', '')}%"

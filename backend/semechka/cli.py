@@ -16,10 +16,14 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import __version__
-from . import migrations
+from . import __version__, migrations
 from .config import Config
-from .crypto import open_with_passphrase, seal_with_passphrase
+from .crypto import (
+    SMCK2,
+    SealReader,
+    SealWriter,
+    open_with_passphrase,
+)
 
 
 def _lan_ip() -> str | None:
@@ -150,30 +154,42 @@ def cmd_status(a, cfg: Config):
     sys.exit(0 if up else 3)
 
 
-def _snapshot(cfg: Config) -> bytes:
+BACKUP_DIRS = ("assets", "attachments", "workspaces")  # everything on disk that the database refers to
+
+
+def _add_tree(tf, root: Path, arc: str) -> None:
+    """Add a directory to a tar stream, tolerating files that vanish while the service keeps running."""
+    for dp, _dirs, files in os.walk(root):
+        for fn in sorted(files):
+            p = Path(dp) / fn
+            try:
+                tf.add(p, arcname=f"{arc}/{p.relative_to(root).as_posix()}", recursive=False)
+            except FileNotFoundError:
+                continue
+
+
+def _write_snapshot(cfg: Config, sink, *, sealed_chunk: int | None = None, passphrase: str) -> None:
     if cfg.database_url and not cfg.database_url.startswith("sqlite"):
         raise SystemExit("Backup of external databases is not implemented. Use your database's own tooling together "
                          f"with a copy of {cfg.key_path}.")
-    dbp = cfg.data_dir / "semechka.db"
-    buf = io.BytesIO()
     with tempfile.TemporaryDirectory() as td:
         copy = Path(td) / "semechka.db"
-        src = sqlite3.connect(dbp)
-        dst = sqlite3.connect(copy)
-        src.backup(dst)  # consistent online copy
+        src, dst = sqlite3.connect(cfg.data_dir / "semechka.db"), sqlite3.connect(copy)
+        src.backup(dst)  # consistent online copy; files copied afterwards can only be newer than the rows
         dst.close()
         src.close()
-        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        w = SealWriter(sink, passphrase, **({"chunk": sealed_chunk} if sealed_chunk else {}))
+        with tarfile.open(fileobj=w, mode="w|gz") as tf:
             tf.add(copy, arcname="semechka.db")
             tf.add(cfg.key_path, arcname="master.key")
-            assets = cfg.data_dir / "assets"
-            if assets.exists():
-                tf.add(assets, arcname="assets")
-            meta = json.dumps({"version": __version__, "created": time.time()}).encode()
+            for d in BACKUP_DIRS:
+                if (cfg.data_dir / d).exists():
+                    _add_tree(tf, cfg.data_dir / d, d)
+            meta = json.dumps({"version": __version__, "created": time.time(), "format": 2, "dirs": list(BACKUP_DIRS)}).encode()
             ti = tarfile.TarInfo("backup.json")
             ti.size = len(meta)
             tf.addfile(ti, io.BytesIO(meta))
-    return buf.getvalue()
+        w.close()
 
 
 def cmd_backup(a, cfg: Config):
@@ -181,46 +197,116 @@ def cmd_backup(a, cfg: Config):
     if len(pw) < 12:
         raise SystemExit("Use a passphrase of at least 12 characters. If you lose it the backup cannot be opened.")
     out = Path(a.output or f"semechka-backup-{time.strftime('%Y%m%d-%H%M%S')}.smck")
-    blob = seal_with_passphrase(_snapshot(cfg), pw)
-    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(blob)
-    print(f"Encrypted backup written to {out} ({len(blob) / 1024:.0f} KiB). It contains the master key, so keep the passphrase safe.")
+    part = out.with_name(out.name + ".part")  # a failed backup never leaves a file that looks complete
+    try:
+        fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            _write_snapshot(cfg, f, passphrase=pw)
+            f.flush()
+            os.fsync(f.fileno())
+        if out.exists():
+            raise SystemExit(f"{out} already exists; choose another name.")
+        os.replace(part, out)
+    finally:
+        part.unlink(missing_ok=True)
+    print(f"Encrypted backup written to {out} ({out.stat().st_size / 1048576:.1f} MiB), including workspace files. "
+          "It contains the master key, so keep the passphrase safe.")
+
+
+def _safe_extract(tf, dest: str) -> None:
+    for m in tf:  # stream mode: members are visited once, in order
+        if m.name.startswith(("/", "..")) or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
+            raise SystemExit("Backup contains an unsafe path; refusing.")
+        tf.extract(m, dest, filter="data")
 
 
 def cmd_restore(a, cfg: Config):
     pw = os.environ.get("SEMECHKA_BACKUP_PASSPHRASE") or getpass.getpass("Backup passphrase: ")
-    try:
-        raw = open_with_passphrase(Path(a.file).read_bytes(), pw)
-    except Exception:  # noqa: BLE001
-        raise SystemExit("Could not open the backup: wrong passphrase or damaged file. Nothing was changed.")
+    path = Path(a.file)
     if not _port_free("127.0.0.1", cfg.port):
         raise SystemExit("Stop the running service before restoring.")
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     existing = (cfg.data_dir / "semechka.db").exists()
     if existing and not a.force:
         raise SystemExit("A database already exists here. Re-run with --force to replace it (the current data is kept as a .pre-restore copy).")
-    with tempfile.TemporaryDirectory() as td, tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tf:
-        for m in tf.getmembers():  # refuse path tricks
-            if m.name.startswith(("/", "..")) or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
-                raise SystemExit("Backup contains an unsafe path; refusing.")
-        tf.extractall(td, filter="data")
+    with tempfile.TemporaryDirectory(dir=cfg.data_dir) as td:  # same filesystem as the data, so placing it is a rename
+        with open(path, "rb") as f:
+            magic = f.read(5)
+            f.seek(0)
+            try:
+                if magic == SMCK2:
+                    r = SealReader(f, pw)
+                    with tarfile.open(fileobj=r, mode="r|gz") as tf:
+                        _safe_extract(tf, td)
+                    r.verify_end()  # the stream's final chunk must authenticate: a truncated file is refused
+                else:
+                    with tarfile.open(fileobj=io.BytesIO(open_with_passphrase(path.read_bytes(), pw)), mode="r:gz") as tf:
+                        for m in tf.getmembers():
+                            if m.name.startswith(("/", "..")) or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
+                                raise SystemExit("Backup contains an unsafe path; refusing.")
+                        tf.extractall(td, filter="data")
+            except SystemExit:
+                raise
+            except (ValueError, tarfile.TarError, OSError, EOFError):
+                raise SystemExit("Could not open the backup: wrong passphrase or damaged file. Nothing was changed.") from None
         con = sqlite3.connect(Path(td) / "semechka.db")
         if con.execute("pragma integrity_check").fetchone()[0] != "ok":
             raise SystemExit("Backup database failed its integrity check. Nothing was changed.")
         con.close()
         stamp = time.strftime("%Y%m%d-%H%M%S")
         if existing:
-            for n in ("semechka.db", "semechka.db-wal", "semechka.db-shm", "master.key"):
+            for n in ("semechka.db", "semechka.db-wal", "semechka.db-shm", "master.key", *BACKUP_DIRS):
                 p = cfg.data_dir / n
                 if p.exists():
                     p.rename(cfg.data_dir / f"{n}.pre-restore-{stamp}")
         shutil.copy2(Path(td) / "semechka.db", cfg.data_dir / "semechka.db")
         shutil.copy2(Path(td) / "master.key", cfg.data_dir / "master.key")
         os.chmod(cfg.data_dir / "master.key", 0o600)
-        if (Path(td) / "assets").exists():
-            shutil.copytree(Path(td) / "assets", cfg.data_dir / "assets", dirs_exist_ok=True)
+        for d in BACKUP_DIRS:
+            if (Path(td) / d).exists():
+                shutil.move(str(Path(td) / d), cfg.data_dir / d)
     print("Restored. Start the service with `semechka serve`.")
+
+
+def _state(cfg: Config):
+    from .state import AppState
+    cfg.background = False
+    return AppState.build(cfg)
+
+
+def cmd_org(a, cfg: Config):
+    """Operator commands for one organisation's data: list, export (sealed), purge (permanent)."""
+    from . import tenant_ops_svc as T
+    st = _state(cfg)
+    with st.db.session() as s:
+        if a.action == "list":
+            from sqlalchemy import select
+
+            from .models_tenancy import Org
+            for o in s.execute(select(Org).order_by(Org.name)).scalars():
+                print(f"{o.slug:<24} {o.status:<10} {o.name}")
+            return
+        try:
+            org = T.find_org(s, a.slug)
+        except LookupError as e:
+            raise SystemExit(str(e)) from None
+        if a.action == "export":
+            pw = os.environ.get("SEMECHKA_BACKUP_PASSPHRASE") or getpass.getpass("Passphrase for the export: ")
+            if len(pw) < 12:
+                raise SystemExit("Use a passphrase of at least 12 characters.")
+            out = Path(a.output or f"semechka-org-{org.slug}-{time.strftime('%Y%m%d-%H%M%S')}.smck")
+            fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                c = T.export_org(st, s, org, f, pw, history=not a.no_history)
+            print(f"Exported {c['files']} file version(s), {c['bytes'] / 1048576:.1f} MiB, to {out}. Open it with the same passphrase.")
+        elif a.action == "purge":
+            if a.confirm != org.slug:
+                raise SystemExit(f"This permanently deletes every file, passage, agent and person-link of '{org.name}'. "
+                                 f"Re-run with  --confirm {org.slug}  to proceed. There is no undo; take a backup first.")
+            if org.is_default and not a.force:
+                raise SystemExit("This is the default organisation. Add --force if you really mean it.")
+            c = T.purge_org(st, s, org)
+            print(f"Purged '{org.slug}': {c['files']} files, {c['workspaces']} workspaces, {c['members']} memberships removed.")
 
 
 def cmd_update(a, cfg: Config):
@@ -304,6 +390,14 @@ def main(argv=None):
     u.add_argument("--purge-data", action="store_true")
     u.set_defaults(fn=cmd_uninstall)
     # Listed here for --help; its own parser handles the options (see reset.py).
+    og = sub.add_parser("org", help="operator tools for one organisation's data: list, export (sealed), purge (permanent)")
+    og.add_argument("action", choices=["list", "export", "purge"])
+    og.add_argument("slug", nargs="?", default="")
+    og.add_argument("-o", "--output")
+    og.add_argument("--no-history", action="store_true", help="export only current file versions")
+    og.add_argument("--confirm", default="", help="for purge: repeat the organisation's short name")
+    og.add_argument("--force", action="store_true")
+    og.set_defaults(fn=cmd_org)
     sub.add_parser("reset", help="return a disposable instance to the first-run wizard (semechka reset --help)", add_help=False)
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["reset"]:
