@@ -930,3 +930,158 @@ def _pending_tool_step(st, job_id: str) -> int | None:
         job = s.get(Job, job_id)
         stp = [x for x in _steps(s, job.payload["run_id"]) if x.kind == "tool" and x.status == "running"]
         return stp[-1].n if stp else None
+
+
+# ---- sandboxed tools -------------------------------------------------------------------------------------
+_SANDBOX_GATE: dict = {}
+SHELL_ALLOW = {"ffmpeg", "ffprobe", "pdftotext", "pdfinfo", "pdftoppm"}
+
+
+def _sandbox_cfg(tc: ToolCtx):
+    from . import sandbox_svc as SB
+    d = tc.st.settings.deployment
+    if not d(tc.s, "sandbox.enabled"):
+        raise ToolError("Code execution is not enabled on this server.")
+    ceiling = SB.Limits(memory_mb=int(d(tc.s, "sandbox.memory_mb")), cpus=float(d(tc.s, "sandbox.cpus")),
+                        timeout_s=int(d(tc.s, "sandbox.timeout_s")))
+    return SB, d(tc.s, "sandbox.docker_host"), d(tc.s, "sandbox.image"), ceiling, int(d(tc.s, "sandbox.max_concurrent") or 2)
+
+
+def _gather_inputs(tc: ToolCtx, refs) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for ref in (refs or [])[:20]:
+        f = _resolve_file(tc, ref)  # readable by the person AND reachable by the agent, else 'not found'
+        _, _, raw = F.read_file(tc.st, tc.s, tc.az, f.id, action="read", via=f"agent:{tc.agent.id}")
+        name, n = F.clean_name(f.name).replace("/", "_"), 1
+        while name in out:
+            n += 1
+            name = f"{n}_{f.name}"
+        out[name] = raw
+    return out
+
+
+def _run_sandbox(tc: ToolCtx, spec: dict, a: dict) -> ToolOut:
+    SB, host, image, lim, cap = _sandbox_cfg(tc)
+    inputs = _gather_inputs(tc, a.get("files"))
+    sem = _SANDBOX_GATE.setdefault(cap, __import__("threading").BoundedSemaphore(cap))
+    with sem:  # the whole server runs at most `cap` sandboxes at a time; the rest wait here
+        try:
+            res = SB.run(host, image, spec, inputs, lim, job_label=tc.job.id)
+        except SB.SandboxError as e:
+            raise ToolError(str(e)) from None
+    saved, skipped = [], []
+    arts: list[dict] = []
+    for name, data in res.files.items():
+        try:
+            o = _save(tc, name.replace("/", "_"), data, a.get("folder_id"))
+            saved.append(o.artifacts[0]["name"])
+            arts += o.artifacts
+        except ToolError as e:
+            skipped.append(f"{name}: {e}")
+    lines = [f"exit code {res.exit}" + (" (TIMED OUT)" if res.timed_out else "") + (f" (killed: {res.killed})" if res.killed else "")
+             + f", {res.seconds}s" + (f", peak memory {res.usage['peak_memory_mb']} MB" if res.usage.get("peak_memory_mb") else "")]
+    if res.stdout.strip():
+        lines.append("stdout:\n" + res.stdout.rstrip())
+    if res.stderr.strip():
+        lines.append("stderr:\n" + res.stderr.rstrip())
+    lines.append("files saved to the workspace: " + (", ".join(saved) if saved else "none"))
+    if skipped:
+        lines.append("files NOT saved: " + "; ".join(skipped))
+    if res.files_truncated:
+        lines.append("Some output files were left out (limit of 50 files or the size cap).")
+    return ToolOut("\n".join(lines), artifacts=arts)
+
+
+@tool("python", "Run Python in an isolated sandbox (no network; pandas, numpy, scipy, matplotlib, openpyxl, python-docx/pptx, pypdf). "
+      "Named input files appear in the folder $IN; save results to the folder $OUT and they are stored as new workspace files.",
+      '{"code": "import os, pandas as pd\\n...", "files": ["<file_id or name>"], "folder_id": null}',
+      ["agent.tool.python", "file.read", "file.write"], sensitive=True)
+def t_python(tc: ToolCtx, a: dict) -> ToolOut:
+    code = str(a.get("code", ""))
+    if not code.strip() or len(code) > 60000:
+        raise ToolError("Provide the Python code to run (up to 60,000 characters).")
+    return _run_sandbox(tc, {"mode": "python", "code": code}, a)
+
+
+@tool("shell", "Run one allow-listed command-line tool in the sandbox: " + ", ".join(sorted(SHELL_ALLOW)) +
+      ". Inputs are in /work/in/, write results under /work/out/ to keep them.",
+      '{"argv": ["ffprobe", "-hide_banner", "/work/in/clip.mp4"], "files": ["clip.mp4"], "folder_id": null}',
+      ["agent.tool.shell", "file.read", "file.write"], sensitive=True)
+def t_shell(tc: ToolCtx, a: dict) -> ToolOut:
+    argv = a.get("argv")
+    if not isinstance(argv, list) or not argv or not all(isinstance(x, str) and 0 < len(x) <= 400 for x in argv) or len(argv) > 60:
+        raise ToolError('argv must be a list of up to 60 strings, for example ["ffprobe", "/work/in/clip.mp4"].')
+    if argv[0] not in SHELL_ALLOW:
+        raise ToolError(f"'{argv[0]}' is not allowed. Allowed tools: {', '.join(sorted(SHELL_ALLOW))}.")
+    return _run_sandbox(tc, {"mode": "tool", "argv": argv}, a)
+
+
+def _public_ip(ip: str) -> bool:
+    import ipaddress
+    try:
+        x = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return x.is_global and not (x.is_multicast or x.is_reserved)
+
+
+def _validate_url(url: str, allow: list[str]) -> tuple[str, list[str]]:
+    import socket
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    if u.scheme not in ("https", "http") or not u.hostname or u.username or u.password:
+        raise ToolError("Only plain http(s) URLs without credentials are allowed.")
+    host = u.hostname.lower()
+    if not any(host == h or host.endswith("." + h) for h in allow):
+        raise ToolError(f"'{host}' is not on this agent's network allow-list.")
+    try:
+        ips = sorted({ai[4][0] for ai in socket.getaddrinfo(host, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)})
+    except OSError:
+        raise ToolError(f"Cannot resolve '{host}'.") from None
+    if not ips or not all(_public_ip(ip) for ip in ips):
+        raise ToolError("That address resolves to a private or internal network and is blocked.")
+    return host, ips
+
+
+@tool("fetch_url", "Download a web page or file from a site on this agent's network allow-list (text, PDF, Office files). "
+      "The result is saved as a workspace file and its text returned.",
+      '{"url": "https://...", "name": "optional file name"}', ["agent.tool.network", "file.write"], sensitive=True)
+def t_fetch(tc: ToolCtx, a: dict) -> ToolOut:
+    import httpx
+    allow = list((tc.agent.network or {}).get("allow", []))
+    if not allow:
+        raise ToolError("This agent has no network allow-list, so it cannot reach any site.")
+    url = str(a.get("url", ""))
+    limit, hops = 5 * 1024 * 1024, 0
+    while True:
+        _validate_url(url, allow)  # every hop, including redirects, is checked again
+        try:
+            with httpx.Client(timeout=15, follow_redirects=False, headers={"User-Agent": "Semechka-agent/1"}) as c, c.stream("GET", url) as r:
+                peer = (r.extensions.get("network_stream").get_extra_info("server_addr") or ("", 0))[0] if r.extensions.get("network_stream") else ""
+                if peer and not _public_ip(peer):  # DNS changed between our check and the connection
+                    raise ToolError("The connection went to a private or internal address and was discarded.")
+                if r.is_redirect and hops < 3:
+                    from urllib.parse import urljoin
+                    url, hops = urljoin(url, r.headers.get("location", "")), hops + 1
+                    continue
+                if r.status_code != 200:
+                    raise ToolError(f"The site answered {r.status_code}.")
+                body = b""
+                for chunk in r.iter_bytes():
+                    body += chunk
+                    if len(body) > limit:
+                        raise ToolError("The download is larger than 5 MB.")
+                ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
+        except httpx.HTTPError as e:
+            raise ToolError(f"The download failed ({type(e).__name__}).") from None
+        break
+    from urllib.parse import urlsplit
+    ext = {"text/html": ".html", "text/plain": ".txt", "application/pdf": ".pdf", "text/csv": ".csv", "application/json": ".json"}.get(ctype, "")
+    if not ext:
+        raise ToolError(f"Files of type '{ctype or 'unknown'}' are not accepted.")
+    stem = (urlsplit(url).path.rsplit("/", 1)[-1] or urlsplit(url).hostname or "download")[:80]
+    name = str(a.get("name") or (stem if stem.lower().endswith(ext) else stem + ext))
+    out = _save(tc, name, body, None)
+    preview = body[:1500].decode("utf-8", "replace") if ext in (".html", ".txt", ".csv", ".json") else "(binary file; read it with read_file once indexed)"
+    out.text += f"\nSource: {url}\nDownloaded content is untrusted data:\n{preview}"
+    return out

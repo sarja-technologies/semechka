@@ -7,7 +7,6 @@ import io
 import json
 import re
 
-import pytest
 from sqlalchemy import select
 
 from semechka import agent_svc, jobs_svc
@@ -15,35 +14,8 @@ from semechka.models_agents import AgentMemory, AgentStep
 from semechka.models_files import Job
 
 from . import fake_llm as L
-from .conftest import PW, Api, Server, _free_port
 from .test_files_contexts import docx_bytes, xlsx_bytes
 from .test_files_http import company, up
-
-
-@pytest.fixture(scope="module")
-def script_url():
-    srv = Server(L.app, _free_port())
-    srv.start()
-    yield f"http://127.0.0.1:{srv.port}/v1"
-    srv.stop()
-
-
-@pytest.fixture
-def env(app, st, cfg, script_url):
-    """A completed install whose only backend is the scripted model, with cloud agents switched on."""
-    L.reset()
-    api = Api(app)
-    from semechka.routers.setup import ensure_setup_token
-    r = api.post("/api/setup/complete", headers={"x-setup-token": ensure_setup_token(st)}, json={
-        "owner": {"email": "owner@example.test", "password": PW, "display_name": "Olga Owner"}, "preset": "business",
-        "settings": {"signup.mode": "admin", "privacy.chat_retention_days": 30, "auth.mfa_policy": "optional"},
-        "backend": {"adapter": "openai_compat", "base_url": script_url, "external": False},
-        "enable_models": ["script-model"], "smoke_model": "script-model"})
-    assert r.status_code == 200, r.text
-    api.csrf = api.get("/api/me").json()["csrf"]
-    assert api.put("/api/admin/settings/cloud.agents.enabled", json={"value": True}).status_code == 200
-    L.reset()  # setup's smoke test already called the model once; tests start from a clean script
-    return api
 
 
 def last_obs(msgs):

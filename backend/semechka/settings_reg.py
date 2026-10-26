@@ -8,8 +8,9 @@ are all generated from this list, so a control can never exist without a server-
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 SCOPE_ORDER = ["deployment", "role", "team", "user"]  # least -> most specific
 ALL_SCOPES = ["deployment", "role", "team", "user"]
@@ -427,6 +428,25 @@ DEFS: list[Def] = [
         effect="Agents send document passages to the chosen language model and can create files in workspaces."),
     Def("cloud.agents.max_active_per_user", Q, "Agent runs at once (per person)",
         "How many agent runs one person may have queued, running or waiting for approval.", "int", 2, min=1, max=20,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    # ---- code execution sandbox ----
+    Def("sandbox.enabled", SYS, "Code execution sandbox",
+        "Lets agents that have the Python or command-line tools run code in a locked-down container: no network, "
+        "read-only system, memory, process, CPU and time limits, thrown away after every call. Needs the sandbox "
+        "runtime installed on this server (see sandbox/setup/README.md). Off until you turn it on.",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Agents can run code they or a language model wrote, on this machine, inside the sandbox."),
+    Def("sandbox.docker_host", SYS, "Sandbox runtime address", "The socket of the unprivileged container runtime used for the sandbox.",
+        "string", "unix:///home/semsbx/run/docker.sock", scopes=["deployment"], edit_perm="admin.settings.edit", apply="live"),
+    Def("sandbox.image", SYS, "Sandbox image", "The container image every sandbox call starts from.", "string",
+        "semechka-sandbox:1", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("sandbox.memory_mb", Q, "Sandbox memory per call (MB)", "Hard limit; a call that exceeds it is killed.", "int", 1024,
+        min=128, max=16384, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("sandbox.cpus", Q, "Sandbox CPUs per call", "Hard limit.", "float", 2, min=0.5, max=16, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("sandbox.timeout_s", Q, "Sandbox time limit per call (seconds)", "A call still running after this is killed.", "int", 120,
+        min=5, max=1800, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("sandbox.max_concurrent", Q, "Sandbox calls at once (whole server)", "Others wait their turn.", "int", 2, min=1, max=16,
         scopes=["deployment"], edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----
     Def("embeddings.url", SYS, "Embedding service address",

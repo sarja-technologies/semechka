@@ -75,7 +75,7 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done, **deployed 0.4.3** | `contexts_svc.py`; cache key = exact permitted (file, version) set |
 | M3d | Semantic retrieval (embeddings) + hybrid ranking (BM25 + cosine, reciprocal-rank fusion) | done, **deployed 0.4.4, enabled on CMSIT AI** | `embed_svc.py`; Qwen3-Embedding-0.6B Q8 (Apache-2.0, sha256 verified) served by `semechka-embed.service` on 127.0.0.1:8760; real-model rehearsal on the Spark: 4/4 queries with no shared keywords, junk query returns nothing; `tests/test_semantic.py` (7) with a deterministic fake embedder |
 | M4 | Agent framework: configs + versions, durable runs/steps, authority = user ∩ agent ∩ workspace, approvals, resume, memory; tools: search_context, list_files, read_file, read_table, table_stats, calc, create_document (docx), create_spreadsheet (xlsx), create_presentation (pptx), write_text_file, remember, recall | done in code + tests (13 agent tests, scripted model); **off by default** (`cloud.agents.enabled`) | `agent_svc.py`, `docgen_svc.py`, `routers/agents.py`, `models_agents.py`, migration 10; mutation-checked authority tests; **not yet exercised against a real language model** (planned with the sandbox in M5/M8) |
-| M5 | Durable jobs + container executor | planned, **blocked** on runtime | |
+| M5 | Durable jobs (done in M3) + isolated container executor + `python`/`shell`/`fetch_url` agent tools | sandbox **installed on the Spark and probed: 18/18 hostile checks pass**; tools + 8 tests (local stand-in for the container); **sandbox switch OFF on CMSIT AI** | `sandbox_svc.py`, `sandbox/` (image, runner, setup scripts), `scripts/sandbox_probe.py`; privileged setup performed 2026-10-26 (below) |
 | M6 | Model gateway, scheduling, agent memory | planned | |
 | M7 | Workspace UI + admin UI | planned | |
 | M8 | Security/load/recovery/e2e scenarios A–I | planned | |
@@ -112,7 +112,7 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
 
 ## Blockers (as of 2026-10-26)
 
-* Container runtime: the privileged one-time setup above has not been done yet (done at M5, with rollback notes).
+* None for the sandbox any more (see "Sandbox: what was installed"). Remaining open items are listed in the milestone table.
 
 ## Decisions made while building M2
 
@@ -196,3 +196,61 @@ backup directory above (database `.backup` + `master.key` + `assets`).
   tools until the sandbox exists (M5); generated PDF is not offered; `media` tool for agents is not built.
 * Mutation checks run: removing the agent scope from `AgentAuthz`, and removing the per-turn authority recheck, each
   make a test fail.
+
+## Sandbox: what was installed on the Spark (2026-10-26, authorised by the owner's brief)
+
+Privileged steps were run once with `sudo -S` fed from the documented DGX Spark credential file over stdin; no secret was
+printed, logged or committed. The scripts are `sandbox/setup/1-root.sh` and `2-sbxuser.sh`.
+
+* Packages (apt): `uidmap`, `slirp4netns`, `docker-ce-rootless-extras`, `acl`, `dbus-user-session`. The existing rootful Docker
+  daemon, the `docker` group and `fylume`'s groups were **not** touched (`fylume` is still denied on `/var/run/docker.sock`).
+* Account `semsbx` (uid 1001): locked password, no sudo, no SSH, lingering enabled, own subuid/subgid range 165536+65536.
+* AppArmor profile `/etc/apparmor.d/usr.bin.rootlesskit` (lets rootlesskit create its user namespace; Ubuntu 24.04 blocks it
+  by default).
+* Resource ceiling for everything that account runs (`user-1001.slice`): memory 24 GiB (high 20), no swap, 3000 tasks,
+  800 % CPU, IO weight 50 - the machine's unified memory is shared with the LLM engines.
+* Rootless Docker 29.6.2 for `semsbx`: socket `/home/semsbx/run/docker.sock` readable only by `semsbx` and, through a POSIX
+  ACL re-applied at each daemon start, by the single user `fylume`. **`"bridge": "none"`** - the daemon cannot give a container
+  any network. seccomp (builtin), rootless, cgroup namespaces and no-new-privileges are active.
+* Image `semechka-sandbox:1` (from `python:3.12-slim`, digest `sha256:a0f57064...`; pandas, numpy, scipy, matplotlib, openpyxl,
+  python-docx/pptx, pypdf, ffmpeg, poppler) built with `docker build --network host`.
+* Why an ACL and not a group: adding `fylume` to a group only takes effect when its user manager restarts, which would
+  have restarted the production Semechka instances and the engine.
+
+### What a sandbox call gets (all verified by `scripts/sandbox_probe.py` on the Spark)
+
+`--network none`; read-only root; `/work` and `/tmp` are size-capped tmpfs (noexec); uid 65534; all capabilities dropped;
+no-new-privileges; seccomp; pids, memory (no swap), CPU, ulimit and wall-clock limits; `--rm`; labels + reaper; no bind
+mounts, volumes or docker socket; inputs streamed in over stdin, outputs streamed out over stdout (framed with a per-call
+random token, size-capped, regular files only, symlinks dropped); logs captured by the runner in capped memory, so a job
+cannot destroy its own evidence by filling the disk; everything the job started is killed when it exits.
+
+Probe result 2026-10-26, image `sha256:4481c987...`, 18/18 PASS: image available; python in/out round trip; no network of any
+kind (LAN, host loopback engine, Semechka itself, internet IP, metadata IP, DNS - only `lo` exists); read-only root and
+immutable runner; scratch writable but not executable; uid 65534 with CapEff 0, NoNewPrivs 1, seccomp filter; no docker
+socket, no host mounts, nothing in /home; own pid namespace (3 processes), no secrets in env; cannot mount, setuid(0), write
+sysctl or open /dev/mem; CPU loop stopped at the time limit; fork bomb capped at 59 processes (BlockingIOError); 2 GiB
+allocation killed under a 256 MB limit; disk fills stop at the tmpfs size (ENOSPC); a second job sees nothing of the first;
+symlinks not exported; allow-listed ffprobe runs; log output truncated at its cap; no container survives its call.
+Two bugs found and fixed by the probe along the way (a log-capture design that a job could starve; an output reader that
+waited for EOF).
+
+### Isolation: what is and is not claimed
+
+* Claimed: the controls above hold, as tested. The daemon runs as an unprivileged user in a user namespace, so a container
+  escape would land in `semsbx`, which owns no Semechka data, keys or credentials, and whose resources are capped.
+* Not claimed: protection against a Linux kernel or runtime vulnerability (shared kernel; not a VM); protection against
+  side channels; fitness for hostile multi-tenant code beyond what the probe shows. For genuinely adversarial tenants,
+  add a VM boundary (gVisor/Kata/Firecracker) - not available on this host today.
+* `/sys/kernel/debug` lists as an empty masked directory and `/proc/kcore` is `/dev/null` (Docker's standard masking).
+* `fetch_url` is the only agent tool with network access, runs on the host (not in the sandbox), needs a per-agent
+  allow-list, `agent.tool.network`, and approval; resolves and re-checks every hop for private/loopback/link-local
+  addresses and discards a response whose connected peer was internal. A DNS-rebinding race between our check and the
+  connection remains possible for a blind GET to an internal address; the response is never returned to the model.
+
+### Rollback of the sandbox
+
+`systemctl --user -M semsbx@ disable --now docker`; `userdel -r semsbx`; `groupdel semsbx-api`; remove
+`/etc/apparmor.d/usr.bin.rootlesskit` (then `apparmor_parser -R`) and
+`/etc/systemd/system/user-1001.slice.d/10-semechka-sandbox.conf`; `apt-get remove docker-ce-rootless-extras slirp4netns`.
+The installed `uidmap`, `acl`, `dbus-user-session` packages are harmless and may stay.
