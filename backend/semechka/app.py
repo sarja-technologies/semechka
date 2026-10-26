@@ -17,9 +17,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import delete, select
 
-from . import __version__, attachments_svc, audit, media_svc, services
+from . import (
+    __version__,
+    attachments_svc,
+    audit,
+    files_svc,
+    jobs_svc,
+    media_svc,
+    services,
+)
 from .config import Config
-from .models import AuditEvent, Conversation, UsageEvent
+from .models import Conversation, UsageEvent
 from .routers import (  # sso: OIDC single sign-on
     admin_config,
     admin_content,
@@ -28,6 +36,7 @@ from .routers import (  # sso: OIDC single sign-on
     auth,
     catalog,
     chat,
+    files,
     knowledge,
     lifecycle,
     me,
@@ -61,8 +70,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                   f"  (read it with: cat {cfg.setup_token_path})\n", flush=True)
         task = asyncio.create_task(_sweeper(st)) if cfg.background else None
         media_task = asyncio.create_task(media_svc.pump(st)) if cfg.background else None  # media block
+        jobs_task = asyncio.create_task(jobs_svc.pump(st)) if cfg.background else None  # durable workspace jobs
         yield
-        for t in (task, media_task):
+        for t in (task, media_task, jobs_task):
             if t:
                 t.cancel()
 
@@ -105,7 +115,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router):
         app.include_router(r)
 
     web = cfg.web_dir
@@ -141,7 +151,7 @@ async def _sweeper(st: AppState):
         try:
             r = await asyncio.to_thread(sweep_once, st)
             await chat.cancel_jobs(st, r.get("cancel_jobs") or [])
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("retention sweep failed")
         await asyncio.sleep(300)
 
@@ -149,7 +159,7 @@ async def _sweeper(st: AppState):
 def sweep_once(st: AppState) -> dict:
     now = time.time()
     with st.db.session() as s:
-        expired = s.execute(select(Conversation).where(Conversation.expires_at != None, Conversation.expires_at < now)).scalars().all()  # noqa: E711
+        expired = s.execute(select(Conversation).where(Conversation.expires_at != None, Conversation.expires_at < now)).scalars().all()
         running: list[str] = []
         for c in expired:  # with the conversation go its attachments and the media it produced
             attachments_svc.delete_for_conversation(st, s, c.user_id, c.id)
@@ -162,5 +172,7 @@ def sweep_once(st: AppState) -> dict:
         if n:
             audit.record(s, "", "retention.sweep", "", {"conversations_deleted": n})
     media_svc.sweep(st)  # media block: asset and job retention
+    with st.db.session() as s2:
+        files_svc.sweep(st, s2)  # workspace trash, old versions, finished jobs, access records
     # jobs of expired conversations that are still running hold no content any more; the caller cancels them
     return {"conversations": n, "usage_rows": n_usage, "attachments": n_att, "cancel_jobs": running}

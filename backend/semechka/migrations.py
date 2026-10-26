@@ -331,13 +331,15 @@ def _down_7(conn: Connection, _c: Ctx) -> None:
 # ---- 8: organisations, workspaces and access rules -----------------------------------------------
 _TABLES_8 = ["acl_entries", "workspace_members", "workspaces", "org_group_members", "org_groups", "org_members",
              "org_roles", "orgs"]  # drop order: children first
+_TABLES_9 = ["context_versions", "context_attachments", "context_items", "contexts", "jobs", "ws_chunks", "ws_doc_text",
+             "ws_file_access", "ws_file_versions", "ws_files", "ws_folders"]
 
 
 def _up_8(conn: Connection, _c: Ctx) -> None:
     """Existing installs get a Default organisation holding every existing person; conversations stay personal."""
     from sqlalchemy.orm import Session
 
-    from . import models_tenancy, tenancy_svc  # noqa: F401
+    from . import models_tenancy, tenancy_svc
     from .db import Base
     Base.metadata.create_all(conn, tables=[Base.metadata.tables[n] for n in reversed(_TABLES_8)])
     add_column_if_missing(conn, "audit_events", "org_id", "VARCHAR(32)")
@@ -385,6 +387,21 @@ def _down_8(conn: Connection, _c: Ctx) -> None:
     conn.execute(text("delete from meta where key='seeded_default_org'"))
 
 
+# ---- 9: workspace files, durable jobs, contexts -----------------------------------------------------
+def _up_9(conn: Connection, _c: Ctx) -> None:
+    from . import models_files  # noqa: F401
+    from .db import Base
+    Base.metadata.create_all(conn, tables=[Base.metadata.tables[n] for n in reversed(_TABLES_9)])
+
+
+def _down_9(conn: Connection, c: Ctx) -> None:
+    # Workspace files exist only in this release: the tables go, and so do the encrypted blobs they pointed at.
+    for tbl in _TABLES_9:
+        drop_table_if_present(conn, tbl)
+    if c.data_dir:
+        shutil.rmtree(c.data_dir / "workspaces", ignore_errors=True)
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
@@ -397,6 +414,7 @@ MIGRATIONS: dict[int, Step] = {
             _up_7, _down_7),
     8: Step("0.4.2: organisations, groups, workspaces and access rules (existing people join a Default organisation)",
             _up_8, _down_8),
+    9: Step("0.4.2: workspace files and versions, durable jobs, contexts and the retrieval index", _up_9, _down_9),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

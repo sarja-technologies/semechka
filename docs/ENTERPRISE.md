@@ -70,8 +70,10 @@ ephemeral rootless container per task. Blocked today: the `fylume` user has no c
 | M2 | Tenancy tables + migration 8 | done, **deployed to CMSIT AI 2026-10-26 (0.4.2, schema 8)** | `models_tenancy.py`, `migrations._up_8/_down_8`; tests `test_migration_7`, suite 326 passed |
 | M2 | `authz` engine + tests | done | `authz.py`; `tests/test_authz.py` 21 tests (tenant boundary, deny-wins, sensitive wildcards, restricted items, foreign ids, agent intersection) |
 | M2 | Org/group/workspace/member/ACL API | done (API only; UI is M7) | `routers/orgs.py`; `tests/test_orgs_http.py` Scenarios A and B at workspace level (file level arrives in M3) |
-| M3 | Workspace filesystem + versions | planned | |
-| M3 | Contexts, ingestion, hybrid retrieval | planned | |
+| M3a | Workspace filesystem, versions, trash, quotas, encrypted per-org store | done (not yet deployed) | `files_svc.py`, `routers/files.py`; `tests/test_files_contexts.py` (19), `tests/test_files_http.py` (4) |
+| M3b | Durable jobs + ingestion (txt/md/code/csv/json/pdf/docx/xlsx/pptx; images/video/archives reported unsupported) | done (not yet deployed) | `jobs_svc.py`, `ingest_svc.py`, `extract_svc.py`; real generated Office/PDF files in tests; zip-bomb and path-traversal archives refused |
+| M3c | Named contexts, versions, attach, export/import, permission-filtered **keyword (BM25)** retrieval with citations | done (not yet deployed) | `contexts_svc.py`; cache key = exact permitted (file, version) set |
+| M3d | Semantic retrieval (embeddings) + hybrid ranking | **not started** | needs a real embedding model; none installed, engine exposes no embedding endpoint. Nothing in the product claims semantic search. |
 | M4 | Document tools (docx/xlsx/pptx/pdf) | planned | |
 | M5 | Durable jobs + container executor | planned, **blocked** on runtime | |
 | M6 | Model gateway, scheduling, agent memory | planned | |
@@ -112,3 +114,17 @@ user-namespace + seccomp + cgroup isolation shared with the host kernel; **not**
 
 * Container runtime: the privileged one-time setup above has not been done yet (done at M5, with rollback notes).
 * Embeddings: the engine exposes no embedding endpoint and no embedding model is installed (see M3d).
+
+## Decisions made while building M3
+
+* Workspace/folder/file/context reads that the caller cannot see answer 404 at the service layer too (not only HTTP).
+* A context is read through its home workspace's rules; attaching it elsewhere never widens access. Adding a file to a
+  context requires being able to read that file yourself (no side doors).
+* The only deduplication is "identical re-upload to the same file creates no new version"; there is deliberately no
+  cross-file or cross-tenant dedupe.
+* Only the current version of a file is searchable; restoring an older version re-ingests it. Context item pinning to
+  an old version is not offered (the column exists but is unused).
+* Retention (per organisation, `Org.policy`): `trash_days` (30), `keep_versions` (all), `job_days` (30),
+  `access_log_days` (365); run by the existing sweeper.
+* Known gaps: no OCR for scans/images, no audio/video transcription; archives are stored, never opened; contributors
+  may overwrite other people's files (no per-owner rule).

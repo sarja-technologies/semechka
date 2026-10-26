@@ -98,7 +98,7 @@ def test_organisation_administrators_manage_people_not_content(w):
         assert a.check_org("org.members.manage", w.acme.id)
         assert not a.check("file.read", w.mkt) and not a.check("ctx.read", w.mkt) and not a.check("mem.read", w.mkt)
         assert not a.check("ws.view", w.mkt)  # private workspace: not even its existence
-        assert w.mkt.id in [x.id for x in a.visible_workspaces(w.acme.id)] or True
+        assert w.mkt.id in [x.id for x in a.visible_workspaces(w.acme.id)]  # names only (org.workspaces.list_all)
 
 
 def test_wildcards_never_grant_content_but_always_deny_it(w, s):

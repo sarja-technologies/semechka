@@ -22,9 +22,9 @@ def login(app, email):
 def test_existing_and_new_users_join_the_default_organisation(owner, app):
     orgs = owner.get("/api/orgs").json()
     assert len(orgs) == 1 and orgs[0]["is_default"] and "org.members.manage" in orgs[0]["my_permissions"]
+    before = len(owner.get(f"/api/orgs/{orgs[0]['id']}/members").json())
     make_user(owner, app, "newbie@example.test")
-    members = owner.get(f"/api/orgs/{orgs[0]['id']}/members").json()
-    assert {m["display_name"] for m in members} >= {["newbie", "example.test"][0]} or len(members) == 2
+    assert len(owner.get(f"/api/orgs/{orgs[0]['id']}/members").json()) == before + 1
 
 
 # ---- Scenario A -----------------------------------------------------------------------------------------
@@ -97,9 +97,8 @@ def test_one_company_three_departments_distinct_access(owner, app):
     r = eng.put(f"/api/workspaces/{ws['Marketing']}/members", json={"principal_type": "user", "principal_id": users["eng@example.test"], "role": "ws_admin"})
     assert r.status_code == 403
     ex = mia.get(f"/api/workspaces/{ws['Marketing']}/explain", params={"perm": "file.write", "user_id": users["eng@example.test"]}).json()
-    assert ex["allowed"] is False and "viewer" in str(ex["via"]).lower() or ex["allowed"] is False
+    assert ex["allowed"] is False and any("viewer" in str(v).lower() for v in ex["via"])
     # Fin shares a read-only view of Finance with temp via an access rule; temp gets read, not write
-    assert fin.post(f"/api/workspaces/{ws['Finance']}/members", json={}).status_code in (404, 405, 422)
     assert fin.put(f"/api/workspaces/{ws['Finance']}/members", json={"principal_type": "user", "principal_id": users["temp@example.test"], "role": "viewer"}).status_code == 200
     temp = login(app, "temp@example.test")
     assert "file.read" in temp.get(f"/api/workspaces/{ws['Finance']}").json()["my_permissions"]
@@ -133,7 +132,6 @@ def test_custom_role_edit_changes_what_people_can_do(owner, app):
 def test_creating_a_second_organisation_stops_auto_join(owner, app):
     default = owner.get("/api/orgs").json()[0]["id"]
     make_user(owner, app, "before@example.test")
-    assert any(m["display_name"] == "before" or True for m in owner.get(f"/api/orgs/{default}/members").json())
     n_before = len(owner.get(f"/api/orgs/{default}/members").json())
     org_with_owner(owner, app, "Acme", "acme-owner@example.test")
     assert owner.get(f"/api/orgs/{default}").json()["auto_join"] is False
