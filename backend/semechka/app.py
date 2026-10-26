@@ -21,6 +21,7 @@ from . import (
     __version__,
     attachments_svc,
     audit,
+    embed_svc,
     files_svc,
     jobs_svc,
     media_svc,
@@ -174,5 +175,6 @@ def sweep_once(st: AppState) -> dict:
     media_svc.sweep(st)  # media block: asset and job retention
     with st.db.session() as s2:
         files_svc.sweep(st, s2)  # workspace trash, old versions, finished jobs, access records
+    embed_svc.backfill(st)  # vectors for anything indexed while the embedding service was off or down
     # jobs of expired conversations that are still running hold no content any more; the caller cancels them
     return {"conversations": n, "usage_rows": n_usage, "attachments": n_att, "cancel_jobs": running}

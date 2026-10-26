@@ -20,7 +20,7 @@ from .models_tenancy import OrgMember, Workspace
 log = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 300
-CONCURRENCY = {"ingest": 2}  # per kind; anything else runs one at a time
+CONCURRENCY = {"ingest": 2, "embed": 1}  # per kind; anything else runs one at a time
 HANDLERS: dict[str, Callable] = {}
 _running: dict[str, int] = {}
 _lock = threading.Lock()

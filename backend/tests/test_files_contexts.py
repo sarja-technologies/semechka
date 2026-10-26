@@ -433,3 +433,19 @@ def test_deleting_a_file_removes_it_from_retrieval_and_purge_removes_everything(
 
 def test_membership_rows_for_the_world_are_sane(w, s):
     assert s.get(OrgMember, (w.acme.id, w.u["bob"].id)).status == "active"
+
+
+def test_a_shared_index_would_let_hidden_passages_crowd_out_visible_ones(w, st, s):
+    """Results are re-mapped through the requester's own permitted set, so a stale cache could not show hidden text -
+    but it could fill the top-k with passages the requester cannot see and starve them of real answers. The index is
+    therefore keyed by the permitted set, and this proves it: bob asks for ONE result right after alice (who can see a
+    far better match) warmed the cache."""
+    secret = w.upload("alice", "exec-pay.txt", b"salary salary salary salary bands for executives salary review salary")
+    visible = w.upload("alice", "staff-pay.txt", b"The salary review process for all staff happens in spring.")
+    c = make_ctx(w, [secret, visible])
+    w.ingest()
+    F.rename_or_move(s, w.az("alice"), secret.id, restricted=True)
+    top_alice = C.retrieve(st, s, w.az("alice"), "salary", context_ids=[c.id], k=1).hits
+    assert [h.file_name for h in top_alice] == ["exec-pay.txt"]  # the stronger match, and it warms the cache
+    top_bob = C.retrieve(st, s, w.az("bob"), "salary", context_ids=[c.id], k=1).hits
+    assert [h.file_name for h in top_bob] == ["staff-pay.txt"]

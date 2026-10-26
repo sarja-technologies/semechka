@@ -100,4 +100,7 @@ def handle_ingest(st, s, job):
                         text_enc=st.vault.encrypt(piece, purpose)))
             n += 1
     touch_contexts(s, f.id, job.created_by, "content changed")
+    from . import embed_svc  # local: embed_svc imports files_svc
+    if n and embed_svc.config(st, s) is not None:
+        embed_svc.enqueue(s, f, v, job.created_by)
     return {"status": "ok", "chunks": n, "chars": len(full)}

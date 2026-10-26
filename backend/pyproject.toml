@@ -1,6 +1,6 @@
 [project]
 name = "semechka"
-version = "0.4.3"
+version = "0.4.4"
 description = "Semechka — a configurable, private AI platform for your own infrastructure."
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -16,6 +16,7 @@ dependencies = [
   "python-docx>=1.1",
   "openpyxl>=3.1",
   "python-pptx>=1.0",
+  "numpy>=2.0",
 ]
 
 [project.optional-dependencies]

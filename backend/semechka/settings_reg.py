@@ -418,6 +418,23 @@ DEFS: list[Def] = [
     Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    # ---- semantic retrieval ----
+    Def("embeddings.url", SYS, "Embedding service address",
+        "Base address of an OpenAI-compatible embeddings endpoint (for example http://127.0.0.1:8760). Empty turns "
+        "semantic search off and workspaces search by keyword only. Keep it on a loopback or private address: "
+        "document text is sent to it.", "string", "", scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Passages of every indexed document are sent to this address to be embedded."),
+    Def("embeddings.model", SYS, "Embedding model name",
+        "The model name sent with each request, and recorded with every stored vector. Changing it makes existing "
+        "vectors stale until they are recomputed.", "string", "", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("embeddings.query_instruction", SYS, "Query instruction",
+        "Some embedding models want an instruction in front of the search question (Qwen3-Embedding does). Leave "
+        "empty for models that do not.", "text",
+        "Given a question, retrieve passages that answer it", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("embeddings.min_score", SYS, "Minimum semantic similarity",
+        "Passages less similar than this to the question are not returned by semantic search. A heuristic calibrated "
+        "on Qwen3-Embedding-0.6B (related text scored 0.50-0.75, unrelated 0.2-0.45); raise it if answers drift.",
+        "float", 0.47, min=0, max=1, scopes=["deployment"], edit_perm="admin.settings.edit"),
     # ---- knowledge fork: generation queue, knowledge limits, code workspace ----
     Def("queue.backend_concurrency", Q, "Simultaneous generations per backend",
         "How many replies one backend works on at once; the rest wait in the queue. A backend's own "

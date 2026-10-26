@@ -20,9 +20,10 @@ import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+import numpy as np
 from sqlalchemy import select
 
-from . import audit, authz, files_svc
+from . import audit, authz, embed_svc, files_svc
 from .ingest_svc import bump_context
 from .knowledge_svc import IndexCache, MemIndex
 from .models_files import (
@@ -207,7 +208,9 @@ class Hit:
     context_name: str | None
     score: float
     text: str
-    mode: str = "keyword"
+    mode: str = "keyword"  # keyword | semantic | hybrid: which rankings actually contributed to this passage
+    bm25: float | None = None
+    cosine: float | None = None
 
 
 @dataclass
@@ -219,6 +222,21 @@ class Retrieval:
 
 
 Gate = Callable[[str, Workspace, list], bool]  # (permission, workspace, nodes) -> allowed. Agents pass an intersected gate.
+
+
+class WsIndex(MemIndex):
+    """BM25 index over the permitted passages, plus (when real vectors exist) a matrix for cosine ranking."""
+
+    def __init__(self, rows, vec_ids: list[int], matrix):
+        super().__init__(rows)
+        self.vec_ids, self.matrix = vec_ids, matrix
+
+    def dense(self, qv, k: int, floor: float) -> list[tuple[int, float]]:
+        if self.matrix is None or not len(self.vec_ids):
+            return []
+        sims = self.matrix @ qv
+        order = np.argsort(-sims)[:k]
+        return [(self.vec_ids[i], float(sims[i])) for i in order if sims[i] >= floor]
 
 
 def _cache(st) -> IndexCache:
@@ -247,6 +265,9 @@ def retrieve(st, s, az: authz.Authz, query: str, *, workspace_id: str | None = N
             home = s.get(Workspace, c.workspace_id)
             if not c.archived and gate("ctx.read", home, ctx_nodes(c)):
                 ctxs.append(c)
+    # one organisation per search: its key encrypts the passages, and mixing two would also mix their audiences
+    org_id = scope_ws.org_id if scope_ws is not None else (ctxs[0].org_id if ctxs else None)
+    ctxs = [c for c in ctxs if c.org_id == org_id]
     # permitted files: file.read on the file's own ancestry, through every context that reaches it
     permitted: dict[str, File] = {}
     via_ctx: dict[str, Context] = {}
@@ -264,31 +285,63 @@ def retrieve(st, s, az: authz.Authz, query: str, *, workspace_id: str | None = N
                 permitted[f.id] = f
     if not permitted:
         return Retrieval([], "keyword", 0)
-    # the permitted (file, version) set IS the cache key
+    # the permitted (file, version) set IS the cache key; so is which passages carry current-model vectors
+    ecfg = embed_svc.config(st, s)
+    model = ecfg.model if ecfg else ""
     chunks = s.execute(select(Chunk).where(Chunk.file_id.in_(list(permitted)))).scalars().all()
     chunks = [ch for ch in chunks if ch.version_id == _current_vid(s, permitted[ch.file_id])]
     org = next(iter(permitted.values())).org_id
-    key = (("ws:" + org + ":" + hashlib.sha256("|".join(sorted(f"{ch.file_id}:{ch.version_id}:{ch.id}" for ch in chunks)).encode()).hexdigest(), 0),)
+    sig = "|".join(sorted(f"{ch.file_id}:{ch.version_id}:{ch.id}:{ch.embed_model if ch.embedding is not None else ''}" for ch in chunks))
+    key = (("ws:" + org + ":" + model + ":" + hashlib.sha256(sig.encode()).hexdigest(), 0),)
     purpose = f"org:{org}:content"
     by_id = {ch.id: ch for ch in chunks}
-    idx = _cache(st).get(key, lambda: MemIndex([(ch.id, st.vault.decrypt(ch.text_enc, purpose)) for ch in chunks]))
-    found = idx.search(query, k)
+
+    def build() -> WsIndex:
+        vids = [ch for ch in chunks if ch.embedding is not None and ch.embed_model == model and model]
+        mat = np.stack([embed_svc.unseal(st, org, ch.id, ch.embedding) for ch in vids]) if vids else None
+        return WsIndex([(ch.id, st.vault.decrypt(ch.text_enc, purpose)) for ch in chunks], [ch.id for ch in vids], mat)
+
+    idx = _cache(st).get(key, build)
+    notes: list[str] = []
+    pool = max(k * 3, 20)
+    bm = idx.search(query, pool)
+    dn: list[tuple[int, float]] = []
+    pending = len(chunks) - len(idx.vec_ids)
+    if ecfg is not None and idx.vec_ids:
+        try:
+            qv = embed_svc.embed(st, ecfg, [query], query=True)[0]
+            dn = idx.dense(qv, pool, ecfg.min_score)
+        except embed_svc.EmbedUnavailable:
+            notes.append("Semantic search is unavailable right now; these are keyword results only.")
+    elif ecfg is not None and chunks:
+        notes.append("Passages are still being embedded; these are keyword results only.")
+    if dn and pending:
+        notes.append(f"{pending} passage(s) are not embedded yet and were searched by keyword only.")
+    # reciprocal rank fusion of the rankings that exist
+    rrf: dict[int, float] = {}
+    for rank, (cid, _) in enumerate(bm):
+        rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (60 + rank)
+    for rank, (cid, _) in enumerate(dn):
+        rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (60 + rank)
+    bm_s, dn_s = dict(bm), dict(dn)
     hits = []
-    for cid, sc in found:
+    for cid, sc in sorted(rrf.items(), key=lambda kv: -kv[1])[:k]:
         ch = by_id.get(cid)
         if ch is None:
             continue
         f = permitted[ch.file_id]
         c = via_ctx.get(f.id)
-        hits.append(Hit(ch.id, f.id, f.name, f.current, ch.loc, c.id if c else None, c.name if c else None, round(sc, 4),
-                        st.vault.decrypt(ch.text_enc, purpose)))
+        mode = "hybrid" if cid in bm_s and cid in dn_s else "semantic" if cid in dn_s else "keyword"
+        hits.append(Hit(ch.id, f.id, f.name, f.current, ch.loc, c.id if c else None, c.name if c else None, round(sc, 5),
+                        st.vault.decrypt(ch.text_enc, purpose), mode, bm_s.get(cid), dn_s.get(cid)))
     seen = set()
     for h in hits:
         if h.file_id not in seen:
             seen.add(h.file_id)
             f = permitted[h.file_id]
             files_svc._log(s, az.user_id, f, f.current, "retrieve", via)
-    return Retrieval(hits, "keyword", len(permitted))
+    overall = "hybrid" if dn else "keyword"
+    return Retrieval(hits, overall, len(permitted), notes)
 
 
 def _current_vid(s, f: File) -> str | None:

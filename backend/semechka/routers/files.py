@@ -184,13 +184,13 @@ def search(wid: str, q: str, k: int = 8, ctx: Ctx = Depends(current)):
     a = az(ctx)
     names = run(F.search_names, ctx.s, a, wid, q)
     r = run(C.retrieve, ctx.st, ctx.s, a, q, workspace_id=wid, k=max(1, min(k, 25)))
-    return {"files": [_file_view(f) for f in names], "passages": [_hit(h) for h in r.hits], "mode": r.mode}
+    return {"files": [_file_view(f) for f in names], "passages": [_hit(h) for h in r.hits], "mode": r.mode, "notes": r.notes}
 
 
 # ---- contexts ------------------------------------------------------------------------------------
 def _hit(h: C.Hit) -> dict:
     return {"file_id": h.file_id, "file": h.file_name, "version": h.version_n, "loc": h.loc, "context_id": h.context_id,
-            "context": h.context_name, "score": h.score, "text": h.text, "mode": h.mode}
+            "context": h.context_name, "score": h.score, "text": h.text, "mode": h.mode, "bm25": h.bm25, "cosine": h.cosine}
 
 
 def _ctx_view(c: Context, a=None, items=None) -> dict:
@@ -307,7 +307,7 @@ def retrieve(wid: str, body: RetrieveIn, ctx: Ctx = Depends(current)):
     a = az(ctx)
     run(F.workspace_of, ctx.s, wid, a)
     r = run(C.retrieve, ctx.st, ctx.s, a, body.query, workspace_id=wid, context_ids=body.context_ids, k=body.k)
-    return {"mode": r.mode, "searched_files": r.searched_files, "passages": [_hit(h) for h in r.hits]}
+    return {"mode": r.mode, "searched_files": r.searched_files, "notes": r.notes, "passages": [_hit(h) for h in r.hits]}
 
 
 # ---- jobs and indexing ---------------------------------------------------------------------------
