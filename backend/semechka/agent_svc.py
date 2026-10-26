@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import operator
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -829,7 +830,30 @@ async def _heartbeat(st, job_id: str):
         await asyncio.to_thread(beat)
 
 
+BUSY_POLL_S = 10.0      # how often a turn asks the engine again while it is occupied by someone else's generation job
+BUSY_WAIT_S = 900.0     # and for how long, before the run fails with the engine's own message
+_BUSY = re.compile(r"busy|not enough (gpu |video )?memory|out of memory|insufficient memory|MiB free", re.IGNORECASE)
+
+
+class EngineBusy(Exception):
+    """The engine refused a turn because its memory is held by another job; the same turn is likely to work shortly."""
+
+
 async def call_model(st, turn: Turn) -> tuple[str, dict]:
+    """One model turn. When the engine says its memory is taken by another generation job, wait and ask again: the shared
+    machine is also used for images and video, and a run should not fail only because it arrived at the wrong moment."""
+    import time as _t
+    deadline = _t.monotonic() + min(turn.max_wait, BUSY_WAIT_S)
+    while True:
+        try:
+            return await _call_model_once(st, turn)
+        except EngineBusy as e:
+            if _t.monotonic() + BUSY_POLL_S > deadline:
+                raise RuntimeError(f"The model backend stayed busy for {int(min(turn.max_wait, BUSY_WAIT_S))} seconds: {e}") from None
+            await asyncio.sleep(BUSY_POLL_S)
+
+
+async def _call_model_once(st, turn: Turn) -> tuple[str, dict]:
     """One non-streaming-to-the-user model turn, queued behind interactive chat on the shared scheduler."""
     import time as _t
 
@@ -870,6 +894,8 @@ async def call_model(st, turn: Turn) -> tuple[str, dict]:
     except QueueError as e:
         raise RuntimeError(f"The model queue did not take this turn: {e}") from None
     except AdapterError as e:
+        if _BUSY.search(str(e)):
+            raise EngineBusy(str(e)) from None
         raise RuntimeError(f"The model backend failed: {e}") from None
     return "".join(text), {"model": alias, "usage": usage, "timings": timings, "seconds": round(_t.monotonic() - t0, 2)}
 

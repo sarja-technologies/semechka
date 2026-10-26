@@ -475,3 +475,33 @@ def test_memory_reaches_the_model_next_to_the_task_and_recall_never_denies_what_
     assert first_user.startswith("Saved memory from earlier runs") and "board pack is due on the 5th" in first_user and "Task:\nwhat do you remember" in first_user
     final = mia.get(f"/api/runs/{rid}").json()["final"]
     assert "board pack is due on the 5th" in final and "most recent" in final  # fell back to showing what is saved
+
+
+def test_a_turn_waits_for_a_busy_engine_instead_of_failing_the_run(monkeypatch):
+    """The engine is shared with image/video jobs; 'GPU is busy' is a reason to wait, any other backend error is not."""
+    import asyncio
+
+    from semechka import agent_svc
+    monkeypatch.setattr(agent_svc, "BUSY_POLL_S", 0.01)
+    calls = []
+
+    async def flaky(st, turn):
+        calls.append(1)
+        if len(calls) < 3:
+            raise agent_svc.EngineBusy("The GPU is busy with a generation job (48720 MiB free, ~70600 MiB needed).")
+        return "ok", {"model": "m"}
+    monkeypatch.setattr(agent_svc, "_call_model_once", flaky)
+    turn = agent_svc.Turn.__new__(agent_svc.Turn)
+    turn.max_wait = 5.0
+    assert asyncio.run(agent_svc.call_model(None, turn)) == ("ok", {"model": "m"}) and len(calls) == 3
+
+    async def never(st, turn):
+        raise agent_svc.EngineBusy("busy")
+    monkeypatch.setattr(agent_svc, "_call_model_once", never)
+    monkeypatch.setattr(agent_svc, "BUSY_WAIT_S", 0.05)
+    try:
+        asyncio.run(agent_svc.call_model(None, turn))
+        raise AssertionError("should have failed")
+    except RuntimeError as e:
+        assert "stayed busy" in str(e)
+    assert agent_svc._BUSY.search("Sarness: The GPU is busy") and not agent_svc._BUSY.search("Sarness: model not found")
