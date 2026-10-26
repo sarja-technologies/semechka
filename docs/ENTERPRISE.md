@@ -387,6 +387,14 @@ Evidence, with what each one is and is not:
 | Rollout rehearsal (`rehearse_rollout.sh`) | **a copy of CMSIT AI's real data/configuration**, run on the Spark with the engine address replaced by a dead one; live DB only read with `.backup` | 27/27: baseline equals production (switches off, branding), `rollout.py apply` fence-first, ordinary account refused everywhere even after being added to an organisation, administrator pilot (upload, retrieval, owner rule, model list), `rollback`, history undo, sealed backup then restore into an empty directory reproduces flags/accounts/messages/roles/models with integrity ok |
 | Production after deploy | **live CMSIT AI**, read-only checks | version 0.5.7, schema 10, row counts and branding unchanged, switches off, 401 for signed-out callers |
 
+| Package rollback (`install.sh --rollback`, from the unpacked 0.5.7 release) | **staging** | 0.5.7 → 0.5.6 → 0.5.7: users, files, schema (10) identical, audit chain intact, service healthy each time, tarball checksum OK. **Finding:** while on 0.5.6 the fence does not exist (0.5.6 does not know `cloud.rollout`), and an ordinary member got HTTP 200 on a workspace endpoint; back on 0.5.7 the same member got 403 again. |
+| `rollout.py go` end to end | **staging** | 22/22: plan, fence, model list, workspaces, agents, pilot organisation and workspace, upload, retrieval, 35B-only picker, refusal of another model, agent run (correct total 13100, 35B model recorded), owner-only rule, audit, history, chain |
+| `rollout.py` failure handling | **staging** | critical smoke failure → flags rolled back, fence and model list stay (exit 2); failure setting the model list → fence on, nothing else on; failure enabling workspaces → fence on, agents never enabled; sandbox switch on → refuses and changes nothing |
+
+**Rollback order matters.** To go back to 0.5.6 (or any version before 0.5.7), first run `rollout.py rollback` (agents off,
+workspaces off), confirm with `rollout.py status`, and only then roll the program back. Rolling the program back while the cloud
+switches are on removes the administrators-only fence.
+
 Not done on production, because it needs an administrator's credentials that were not given to this work: no cloud switch was
 flipped on CMSIT AI, and no signed-in session on 8787 was used. The production procedure is the one rehearsed: run
 `scripts/spark/rollout.py apply` as a CMSIT AI administrator (it sets `cloud.rollout=admins` first), or set the three settings
@@ -399,7 +407,10 @@ waiting for the lock is unsafe; it logs "media pump failed" at start-up and retr
 
 ### Open items and decisions for the owner
 
-1. Run the rollout on CMSIT AI (administrator only): `scripts/spark/rollout.py apply`. Sandbox stays off until you approve it; if
+1. Run the rollout on CMSIT AI (administrator only), on the Spark in your own terminal so you can type the password and 2-step
+   code: `ssh -t spark 'cd ~/semechka-deploy/stage-scripts && ROLLOUT_URL=http://192.168.20.193:8787 ROLLOUT_ADMIN_EMAIL=<you> python3 rollout.py go --data-dir ~/semechka-deploy/roasted/data --report ~/semechka-deploy/rollout-report.txt'`.
+   It shows the plan, waits for `APPLY`, applies in order, smoke-tests with your session and rolls the flags back if a critical
+   check fails. Sandbox stays off until you approve it; if
    you do, first run `sandbox/setup/3-service-proxy.sh`, set `sandbox.docker_host` (step 4 of the sandbox README), and decide on the
    VM boundary (see the assessment in `docs/THREAT_MODEL.md`).
 2. After the fence is up, set `cloud.agents.models` to the model ids you have checked (the 35B "Agent" model); agents then cannot

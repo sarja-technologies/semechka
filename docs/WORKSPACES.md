@@ -20,7 +20,7 @@ Three switches in **Administration, Settings** (all start **off**; nothing chang
 keeps the whole cloud surface to people who may edit platform settings: the Workspaces entry is hidden for everyone else, every
 workspace, file, context, organisation and agent endpoint answers an ordinary account `403 rollout` (even one that was added
 to an organisation), and the service refuses to start an agent run for them. Unauthenticated callers still get `401`.
-Set it to `admins` **before** turning a cloud switch on in production, test as an administrator, and set it back to `everyone`
+Set it to `admins` **before** turning a cloud switch on in production (`scripts/spark/rollout.py` does this in the right order). To return to a version older than 0.5.7, switch the cloud features off first: those versions do not know this setting, so the fence would disappear, test as an administrator, and set it back to `everyone`
 only when you mean to open the feature to all; nothing is created, moved or lost by either change, and every change is audited.
 
 Optional: `embeddings.url` + `embeddings.model` turn on search **by meaning** next to keyword search (see below).
