@@ -46,7 +46,14 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--queries", type=int, default=4)
     a = ap.parse_args()
-    root = Client(f"owner@{DOMAIN}", credentials()[f"owner@{DOMAIN}"])
+    root = None
+    for _ in range(3):  # a previous run may still be inside the sign-in rate-limit window
+        try:
+            root = Client(f"owner@{DOMAIN}", credentials()[f"owner@{DOMAIN}"])
+            break
+        except AssertionError:
+            time.sleep(30)
+    assert root is not None, "could not sign in as the staging owner"
     run_id = secrets.token_hex(3)
     pw = secrets.token_urlsafe(18)
     t0 = time.time()
@@ -60,13 +67,27 @@ def main() -> int:
     code, org = root.post("/api/orgs", {"name": f"LoadCo {run_id}", "owner_email": f"load{run_id}-000@{DOMAIN}"})
     assert code == 200, (code, org)
     oid = org["id"]
-    boss = Client(f"load{run_id}-000@{DOMAIN}", pw)
+    boss = Client(f"load{run_id}-000@{DOMAIN}", pw)  # (one more sign-in; the limiter allows it)
     for i in range(1, a.users):
         boss.post(f"/api/orgs/{oid}/members", {"email": f"load{run_id}-{i:03d}@{DOMAIN}", "roles": ["dept_admin"]})
     print(f"  accounts and organisation ready in {time.time() - t0:.0f}s", flush=True)
 
+    # Sign-in is rate limited per address (60 a minute): every simulated person comes from this one machine, so sign them in at
+    # a legitimate pace first; the concurrent phases below then measure the workspace features, not the limiter.
+    sessions: dict[int, Client] = {}
+    for i in range(a.users):
+        while True:
+            try:
+                sessions[i] = Client(f"load{run_id}-{i:03d}@{DOMAIN}", pw)
+                break
+            except AssertionError as e:
+                if "429" not in str(e):
+                    raise
+                print(f"  signed in {i}; waiting 20s for the sign-in rate limit (60 a minute per address)", flush=True)
+                time.sleep(20)
+
     def setup(i: int):
-        c = Client(f"load{run_id}-{i:03d}@{DOMAIN}", pw)
+        c = sessions[i]
         code, w = c.post(f"/api/orgs/{oid}/workspaces", {"name": f"Team {i}"})
         assert code == 200, (code, w)
         t = time.time()
