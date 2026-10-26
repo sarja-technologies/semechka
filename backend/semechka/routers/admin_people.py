@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
 from .. import audit, perms, security, services
-from ..deps import Ctx, audit_ctx, require
+from ..deps import Ctx, audit_ctx, require, slow_db
 from ..models import (Invite, Role, SessionRow, Team, TeamMember, User, UserOverride, UserRole)
 
 router = APIRouter(prefix="/api/admin")
@@ -278,6 +278,7 @@ class Bulk(BaseModel):
 
 
 @router.post("/users/bulk")
+@slow_db
 def bulk_users(body: Bulk, ctx: Ctx = Depends(require("admin.users.manage"))):
     """'Selected rows' and 'every match across all pages' are distinct requests; the count must be confirmed."""
     if (body.ids is None) == (body.all_matching is None):

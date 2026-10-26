@@ -35,3 +35,24 @@ def test_many_people_signing_in_and_uploading_at_once_over_a_real_server(owner, 
         assert flat <= {200, 403}, (sorted(flat), time.time() - t)
     finally:
         srv.stop()
+
+
+def test_only_short_synchronous_writers_take_the_write_lock_at_the_start(owner, app, st, monkeypatch):
+    """A handler that waits on something else (a client's upload, an engine call) must not hold the lock while it waits."""
+    from semechka.db import Database
+
+    from .test_files_http import company, up
+    acme, c = company(owner, app, "Gate", "boss@gate.test", {})
+    boss = c["boss@gate.test"]
+    calls = []
+    real_writer, real_upgrade = Database.writer, Database.upgrade
+    monkeypatch.setattr(Database, "writer", lambda self: (calls.append("writer"), real_writer(self))[1])
+    monkeypatch.setattr(Database, "upgrade", lambda self, s: (calls.append("upgrade"), real_upgrade(self, s))[1])
+    wid = boss.post(f"/api/orgs/{acme}/workspaces", json={"name": "W"}).json()["id"]  # a short synchronous writer
+    assert calls == ["writer", "upgrade"], calls  # writer() itself upgrades; one gate acquisition
+    calls.clear()
+    assert up(boss, wid, "a.txt", b"hello").status_code == 200  # a coroutine: reads the body first
+    assert calls == ["upgrade"], calls  # ...and takes the lock only after the body is in
+    calls.clear()
+    assert boss.get(f"/api/workspaces/{wid}/files").status_code == 200  # a read
+    assert calls == []

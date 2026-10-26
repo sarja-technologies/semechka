@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import secrets
 import time
 from dataclasses import dataclass
@@ -26,7 +27,13 @@ def get_db(request: Request, st: AppState = Depends(get_state)):
     response has been sent, so a client could be told "signed in" (or "saved") and read the row before it exists, and
     a failed commit would still have answered 200. Streaming endpoints commit before they return and open their own
     sessions inside the stream."""
-    s = st.db.Session() if request.method in ("GET", "HEAD", "OPTIONS") else st.db.writer()  # writers queue for the lock
+    endpoint = request.scope.get("endpoint")
+    # A short synchronous handler that changes data starts as a writer and queues for the lock. A handler that waits on
+    # something else while it holds its session (a coroutine: a client's upload, an engine call; or one marked
+    # @slow_db) must not make every other writer wait with it: it reads first and takes the lock itself, if it
+    # needs to, with begin_write() once the slow part is over.
+    slow = inspect.iscoroutinefunction(endpoint) or getattr(endpoint, "__slow_db__", False)
+    s = st.db.Session() if request.method in ("GET", "HEAD", "OPTIONS") or slow else st.db.writer()
     try:
         yield s
         s.commit()
@@ -35,6 +42,18 @@ def get_db(request: Request, st: AppState = Depends(get_state)):
         raise
     finally:
         s.close()
+
+
+def slow_db(fn):
+    """Mark a synchronous endpoint that does slow work (network, hashing many passwords) while it holds its session."""
+    fn.__slow_db__ = True
+    return fn
+
+
+def begin_write(ctx) -> None:
+    """After the slow part of a handler: end the read transaction and continue as a writer (see Database.upgrade)."""
+    ctx.s.rollback()
+    ctx.st.db.upgrade(ctx.s)
 
 
 def get_db_deferred(st: AppState = Depends(get_state)):

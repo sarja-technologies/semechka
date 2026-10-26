@@ -9,7 +9,7 @@ from sqlalchemy import func, or_, select
 
 from .. import adapters, audit, catalog_svc, perms, services, telemetry
 from ..backends_svc import adapter_for, sync_models
-from ..deps import Ctx, audit_ctx, current, require
+from ..deps import Ctx, audit_ctx, current, require, slow_db
 from ..models import (
     AuditEvent,
     Backend,
@@ -261,6 +261,7 @@ def list_backends(ctx: Ctx = Depends(require("admin.backends.manage"))):
 
 
 @router.post("/backends")
+@slow_db
 def create_backend(body: BackendIn, ctx: Ctx = Depends(require("admin.backends.manage"))):
     if body.adapter not in adapters.REGISTRY:
         raise _err(422, "invalid", "Unknown adapter.")
@@ -474,6 +475,7 @@ class ManualModelIn(BaseModel):
 
 
 @router.post("/models")
+@slow_db
 def register_model(body: ManualModelIn, ctx: Ctx = Depends(require("admin.models.manage"))):
     """Register a model the backend does not list (some hosted APIs serve more than they report). Like a discovered
     model it starts disabled and with no grants; sync never marks it missing because it was never discovered."""
@@ -496,6 +498,7 @@ def register_model(body: ManualModelIn, ctx: Ctx = Depends(require("admin.models
 
 
 @router.delete("/models/{mid}")
+@slow_db
 def unregister_model(mid: str, ctx: Ctx = Depends(require("admin.models.manage"))):
     """Remove a manually registered model that nothing has used yet. Discovered or used models are hidden instead,
     so conversations and usage keep naming the model they ran on."""
