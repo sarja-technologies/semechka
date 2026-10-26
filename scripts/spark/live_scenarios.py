@@ -276,7 +276,7 @@ def scenario_D(w: World, ids, ctx_id):
     wait_jobs(c, fin)
     net = lambda rows: sum(r[1] if r[0] == "Revenue" else -r[1] for r in rows[1:])  # noqa: E731
     exp_oct, exp_sep = net(octo), net(sept)
-    model = w.model.get("Large") or next(iter(w.model.values()))
+    model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
     task = ("Compare pnl-september.xlsx and pnl-october.xlsx. Use the python tool to compute net profit for both months and the "
             "percentage change in marketing spend. Then create a Word document named october-review.docx with the findings.")
     aid, rid = run_agent(c, fin, "Monthly reviewer", task, model, ["list_files", "read_table", "calc", "python", "create_document"], ctx_ids=[ctx_id])
@@ -294,13 +294,14 @@ def scenario_D(w: World, ids, ctx_id):
         del full
     detail = c.get(f"/api/runs/{rid}?detail=1")[1]
     check("D: run finished", r.get("status") == "succeeded", f"{r.get('status')} in {time.time() - t0:.0f}s, {approvals} approval(s)")
-    check("D: code ran only after a person approved", approvals >= 1 or not any(s.get("tool") == "python" for s in detail.get("steps", [])), approvals)
+    n_py = sum(1 for s in detail.get("steps", []) if s.get("tool") == "python")
+    check("D: every code execution waited for a person's approval", n_py >= 1 and approvals >= n_py, f"{approvals} approvals for {n_py} python steps")
     tools_used = [s.get("tool") for s in detail.get("steps", []) if s.get("tool")]
     check("D: the real sandbox ran code", "python" in tools_used, tools_used)
     arts = detail.get("artifacts") or []
     check("D: a document artifact was saved", any(a["name"].endswith(".docx") for a in arts), [a["name"] for a in arts])
     if arts:
-        fid = next(a for a in arts if a["name"].endswith(".docx"))["id"]
+        fid = next(a for a in arts if a["name"].endswith(".docx"))["file_id"]
         code, blob = c.get(f"/api/files/{fid}/content?download=1", raw=True)
         import zipfile
         text = ""
@@ -320,7 +321,7 @@ def scenario_F(w: World, ids, ctx_id):
     c, fin = w.u["acme-finance"], ids["fin"]
     e = w.u["acme-eng"]
     c.put(f"/api/workspaces/{fin}/members", {"principal_type": "user", "principal_id": w.uid["acme-eng"], "role": "contributor"})
-    model = w.model.get("Large") or next(iter(w.model.values()))
+    model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
     runs = []
     for i in range(4):  # the agent queue has two slots; later runs wait
         aid, rid = run_agent(e, fin, "Queue filler", f"Summarise policy.docx in detail, attempt {i}.", model, ["search_context", "read_file"], approval="never", ctx_ids=[ctx_id])
@@ -341,7 +342,7 @@ def scenario_F(w: World, ids, ctx_id):
 def scenario_H(w: World, ids, ctx_id):
     print("== H: the service restarts while an agent is running")
     c, fin = w.u["acme-finance"], ids["fin"]
-    model = w.model.get("Large") or next(iter(w.model.values()))
+    model = w.model.get(os.environ.get("AGENT_MODEL", "Large")) or next(iter(w.model.values()))
     aid, rid = run_agent(c, fin, "Restart survivor", "Read policy.docx and budget.xlsx, then write a short summary document called restart-check.docx.", model,
                          ["list_files", "read_file", "read_table", "create_document"], approval="never", ctx_ids=[ctx_id])
     for _ in range(60):

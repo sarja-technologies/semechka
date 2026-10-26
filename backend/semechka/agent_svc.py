@@ -947,10 +947,23 @@ def _finish_run(st, s, run: AgentRun, job: Job, final: str) -> dict:
             srcs[(x["file_id"], x.get("loc", ""))] = x
     run.final_enc = _enc(st, run.org_id, final[:MAX_RUN_CHARS])
     run.artifacts, run.sources = list(arts.values()), list(srcs.values())[:50]
-    warnings = unverified_claims(s, run, final, {a["name"].lower() for a in arts.values()})
+    warnings = unverified_claims(s, run, final, {a["name"].lower() for a in arts.values()}) + failed_tools(steps)
     if warnings:
         run.usage = {**(run.usage or {}), "warnings": warnings}
     return {"run_id": run.id, "artifacts": len(arts), "steps": len(steps), "warnings": len(warnings)}
+
+
+def failed_tools(steps) -> list[str]:
+    """A model that could not get a tool to work may still answer, from memory, as if it had. For every tool that failed and
+    never once succeeded in this run, say so beside the answer: whatever it computed with that tool was not computed."""
+    ok: dict[str, int] = {}
+    bad: dict[str, int] = {}
+    for stp in steps:
+        if stp.kind == "tool" and stp.tool and stp.status in ("done", "error"):
+            counts = ok if stp.status == "done" else bad
+            counts[stp.tool] = counts.get(stp.tool, 0) + 1
+    return [f"The '{name}' tool failed {n} time{'s' if n != 1 else ''} in this run and never succeeded, so figures or claims "
+            f"in the answer that depend on it were not produced by it and should be checked." for name, n in bad.items() if not ok.get(name)]
 
 
 _FILE_MENTION = None

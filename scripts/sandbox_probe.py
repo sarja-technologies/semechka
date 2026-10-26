@@ -6,7 +6,9 @@ import time
 sys.path.insert(0, sys.argv[1])  # directory containing sandbox_svc.py
 import sandbox_svc as S
 
-HOST, IMG = "unix:///home/semsbx/run/docker.sock", "semechka-sandbox:1"
+import os
+
+HOST, IMG = os.environ.get("SBX_HOST", "unix:///home/semsbx/run/docker.sock"), "semechka-sandbox:1"  # SBX_HOST: probe through the service proxy
 LIM = S.Limits(memory_mb=512, timeout_s=12, pids=64, work_mb=64, tmp_mb=16, max_out_mb=8, max_file_mb=8)
 results = []
 def check(name, ok, evidence=""):

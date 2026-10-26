@@ -505,3 +505,16 @@ def test_a_turn_waits_for_a_busy_engine_instead_of_failing_the_run(monkeypatch):
     except RuntimeError as e:
         assert "stayed busy" in str(e)
     assert agent_svc._BUSY.search("Sarness: The GPU is busy") and not agent_svc._BUSY.search("Sarness: model not found")
+
+
+def test_an_answer_after_a_tool_that_never_worked_carries_a_warning(env, app, st):
+    """Seen live: the code tool was unavailable, the model gave up on it and stated figures from memory as if computed."""
+    _acme, c, wid, _uid, _ids, _ctx_id = marketing(env, app)
+    mia = c["mia@acme.test"]
+    drive(st)
+    aid = mk_agent(mia, wid)
+    L.say(L.tool("read_file", file="fi_does_not_exist"), L.final("The net profit is 14,500."))
+    rid = run_agent(mia, aid)
+    drive(st)
+    r = mia.get(f"/api/runs/{rid}").json()
+    assert r["status"] == "succeeded" and len(r["warnings"]) == 1 and "'read_file' tool failed 1 time" in r["warnings"][0]
