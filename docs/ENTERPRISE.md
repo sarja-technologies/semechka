@@ -90,32 +90,25 @@ Direct engine test, not user-visible, Semechka `enabled` untouched: **z-image-tu
 (worker released afterwards). Not tested (would crowd the other engine's resident LLM): qwen-image-2512/edit-2511,
 hunyuanvideo-1.5-t2v, minimax-h3, wan2.2-t2v/i2v-a14b.
 
+## Execution sandbox: findings and chosen design (2026-10-26)
+
+Probed on the Spark (read-only): Docker 29.6.2 is installed and **rootful**; `fylume` is not in the `docker` group and
+`sudo -n` needs a password; no podman, no `uidmap`/`rootlesskit`/`slirp4netns`. Unprivileged user namespaces are
+restricted by AppArmor (`apparmor_restrict_unprivileged_userns=1`): `bwrap` starts but cannot set up a network
+namespace (`loopback: RTM_NEWADDR: Operation not permitted`), so a no-root namespace sandbox with network isolation
+is **not** possible. User-level cgroup limits do work (`cpu memory pids` delegated; `systemd-run --user --scope`).
+`/home/dembele/Documents/logins/homelabs/dgxspark_creds.txt` exists (3 single-field lines); it will be used only via
+`sudo -S` inside the remote shell and never printed.
+
+**Design (M5):** rootless Docker under a dedicated unprivileged account `semsbx` (own subuid range, no sudo, no access
+to Semechka's data or master key); a sandbox worker running as `semsbx` talks to Semechka only through an
+authenticated job API (per-job token, permissions re-checked on every call). Containers get `--network none` by
+default, read-only root, dropped capabilities, `no-new-privileges`, memory/pids/cpu/disk limits, a timeout, and only
+the staged inputs for that job. Privileged steps needed once: install `uidmap` (+ `docker-ce-rootless-extras`),
+create the account, an AppArmor profile for rootlesskit, enable lingering. Isolation guarantee to document honestly:
+user-namespace + seccomp + cgroup isolation shared with the host kernel; **not** a VM boundary.
+
 ## Blockers (as of 2026-10-26)
 
-* Container runtime: user `fylume` cannot reach `/var/run/docker.sock`; `sudo -n` needs a password; no podman.
-  Needs an authorised rootless setup (see milestone 5).
-
-## Decisions made while building M2
-
-* **Auto-join is single-tenant only.** New platform users join the auto-join organisation (first joiner = owner).
-  Creating a second organisation turns auto-join off and audits it; otherwise companies would share a directory.
-* **Org owners/admins can list workspace names** (`org.workspaces.list_all`) and read their metadata, nothing else;
-  a workspace nobody lets you see answers 404. Members' emails are shown only to people who manage members.
-* **Orphan recovery:** only `org.workspaces.recover` (org owner) can appoint a `ws_admin` to a workspace with none;
-  it cannot grant any other role and does not grant reading rights.
-* Known gap: contributors/editors are not limited to "own files" (no per-owner rule yet).
-* Known gap: platform `owner` is also org owner of the *default* organisation (that is how single-tenant installs
-  work); in a hosted multi-tenant setup the operator should not use that account as a tenant member.
-* Lint: baseline was 457 findings; adding ruff's FastAPI `extend-immutable-calls` setting brought the repo to 185;
-  new files introduce none.
-
-## Deployments
-
-| When | Version / schema | Backup (on the Spark) | Rehearsal | Result |
-|------|------------------|-----------------------|-----------|--------|
-| 2026-10-26 | 0.4.1 / 7 | `backups/roasted-cmsit-pre-0.4.1-20261026-134427` | copy: up, down (roles hash identical) | healthy; member can list image/video models on the copy |
-| 2026-10-26 | 0.4.2 / 8 | `backups/roasted-cmsit-pre-0.4.2-20261026-174016` | copy: up → 1 org, 3 members; down → tables and column gone, roles hash identical; up again | healthy; 3 users, 5 chats, CMSIT AI branding intact; new routes answer 401 unauthenticated; Salted untouched (0.4.0 / 6) |
-
-Rollback of the latest stage: on the Spark, `semechka migrate --to 7 --yes` with the 0.4.2 program (instance data dir
-`~/semechka-deploy/roasted/data`), then install the 0.4.1 tarball from `~/semechka-deploy/releases/`; or restore the
-backup directory above (database `.backup` + `master.key` + `assets`).
+* Container runtime: the privileged one-time setup above has not been done yet (done at M5, with rollback notes).
+* Embeddings: the engine exposes no embedding endpoint and no embedding model is installed (see M3d).
