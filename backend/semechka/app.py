@@ -178,7 +178,7 @@ async def _sweeper(st: AppState):
 
 def sweep_once(st: AppState) -> dict:
     now = time.time()
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:  # (runs in a worker thread; takes the write lock first instead of failing when a writer is active)
         expired = s.execute(select(Conversation).where(Conversation.expires_at != None, Conversation.expires_at < now)).scalars().all()
         running: list[str] = []
         for c in expired:  # with the conversation go its attachments and the media it produced
@@ -192,7 +192,7 @@ def sweep_once(st: AppState) -> dict:
         if n:
             audit.record(s, "", "retention.sweep", "", {"conversations_deleted": n})
     media_svc.sweep(st)  # media block: asset and job retention
-    with st.db.session() as s2:
+    with st.db.session(write=True) as s2:
         files_svc.sweep(st, s2)  # workspace trash, old versions, finished jobs, access records
     embed_svc.backfill(st)  # vectors for anything indexed while the embedding service was off or down
     # jobs of expired conversations that are still running hold no content any more; the caller cancels them

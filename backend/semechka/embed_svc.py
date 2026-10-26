@@ -127,10 +127,11 @@ def handle_embed(st, s, job):
 def backfill(st, limit: int = 200) -> int:
     """Queue embedding for current file versions that lack current-model vectors. Called by the sweeper; a no-op while
     no service is configured or reachable, and never duplicates a job that is already waiting."""
-    with st.db.session() as s:
+    with st.db.session() as s:  # (the health check can wait on the network: do it before taking the write lock)
         cfg = config(st, s)
-        if cfg is None or not healthy(st, cfg):
-            return 0
+    if cfg is None or not healthy(st, cfg):
+        return 0
+    with st.db.session(write=True) as s:
         busy = {j.payload.get("file_id") for j in s.execute(select(jobs_svc.Job).where(
             jobs_svc.Job.kind == "embed", jobs_svc.Job.status.in_(("queued", "running")))).scalars()}
         n = 0
