@@ -149,7 +149,8 @@ _MFA_RANK = {"off": 0, "optional": 1, "roles": 2, "admins": 2, "everyone": 3}
 
 
 def _schemra():
-    from . import schemra_proxy  # imported lazily: it has nothing to do with the registry itself
+    # imported lazily: the proxy module has nothing to do with the registry itself
+    from . import schemra_proxy
     return schemra_proxy
 
 
