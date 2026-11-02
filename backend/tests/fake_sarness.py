@@ -32,7 +32,9 @@ def reset():
     STATE.update(jobs={}, by_key={}, files={}, discards=[], submissions=[], n=0, reject_files=False, uploads={},
                  legacy=False, llm={"state": "stopped", "model_id": None, "active_streams": 0, "error": None},
                  worker_loaded=set(), loads=[], unloads=[], fail_load=False, cut_off=0, switches=[], stream_delay=0.0,
-                 worker_alive=False, worker_stops=0, completions=[])
+                 worker_alive=False, worker_stops=0, completions=[],
+                 # Trinodal AI registered in the engine as a remote endpoint (opt-in: STATE["trinodal"] = True)
+                 trinodal=False, trinodal_delay=0.0, trinodal_closed=0, trinodal_finished=0)
 
 
 reset()
@@ -104,7 +106,12 @@ def worker_stop():
 
 @app.get("/v1/agent/models", dependencies=[Depends(auth)])
 def agent_models():
-    return [{"ref": "local:fake-chat", "name": "Fake chat · Q8_0", "local": True, "context_max": 4096, "size": 1},
+    extra = [{"ref": "endpoint:trinodal:trinodal", "name": "trinodal", "local": False, "provider": "Trinodal AI",
+              "context_max": 8192},
+             # a genuinely external endpoint, to show that only the declared one is treated as local
+             {"ref": "endpoint:other:big", "name": "big", "local": False, "provider": "Other Cloud",
+              "context_max": 8192}] if STATE["trinodal"] else []
+    return extra + [{"ref": "local:fake-chat", "name": "Fake chat · Q8_0", "local": True, "context_max": 4096, "size": 1},
             {"ref": "local:fake-big", "name": "Fake big · Q4_K_M", "local": True, "context_max": 8192, "size": 2,
              "vision": True}]
 
@@ -203,11 +210,37 @@ def _ensure_local(mid: str, ctx: int | None):
     llm.update(state="ready", model_id=mid, ctx=ctx, error=None, active_streams=0, gen=llm.get("gen", 0) + 1)
 
 
+TRINODAL_USAGE = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8,
+                  "trinodal": {"trace_id": "tr-0123456789abcdef", "nodes": ["conversation", "mathematics", "conversation"],
+                               "route": "math.exact", "language_core": {"model": "lc-secret-model", "backend": "llama-cpp"},
+                               "trained_components": ["router-v3"], "ms": 412.5, "llm_calls": 2, "refused": 0, "errors": 0,
+                               # not part of the contract: must never get through
+                               "content": "PRIVATE-TEXT-IN-TRINODAL-USAGE", "nodes_detail": {"x": 1}}}
+
+
+async def _trinodal_completion(body):
+    """Trinodal AI reached through the engine's remote-endpoint support: the upstream `usage` goes through untouched."""
+    async def gen():
+        try:
+            for word in ("Hello", " from", " Trinodal"):
+                yield "data: " + json.dumps({"type": "delta", "content": word}) + "\n\n"
+                if STATE["trinodal_delay"]:
+                    await asyncio.sleep(STATE["trinodal_delay"])
+            yield "data: " + json.dumps({"type": "done", "finish_reason": "stop", "usage": TRINODAL_USAGE}) + "\n\n"
+            STATE["trinodal_finished"] += 1
+        except (asyncio.CancelledError, GeneratorExit):
+            STATE["trinodal_closed"] += 1  # the client went away: this is where a real engine would drop the upstream call
+            raise
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 @app.post("/v1/agent/completions", dependencies=[Depends(auth)])
 async def completions(request: Request):
     body = await request.json()
     ref, params = body.get("model_ref", ""), body.get("params") or {}
     STATE["completions"].append(ref)
+    if ref.startswith("endpoint:trinodal:"):
+        return await _trinodal_completion(body)
     local = ref.startswith("local:")
     if local:
         _ensure_local(ref.split(":", 1)[1], params.get("ctx"))
