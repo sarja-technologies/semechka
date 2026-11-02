@@ -57,6 +57,13 @@ secret setting values. Audit rows are hash-chained and contain no message text.
   who must use MFA and has not set it up can reach only their account page. An administrator's reset of someone's
   second factor needs a reason and is audited.
 
+## Trinodal AI (0.5.8)
+`routers/trinodal.py` is a streaming reverse proxy from `/trinodal/` to the service at the setting `trinodal.url`, with its
+own permission classes (`trinodal.view|train|admin`), the standard CSRF and same-origin rules, a server-side service token and
+audit events; `trinodal_svc.py` holds the pure decisions (permission class of a request, header allow-lists, token file).
+The Sarness adapter marks models of endpoints listed in its `local_endpoints` option as not external and forwards the
+`usage.trinodal` run record, which `services.filter_tech` filters by `tech.*` permission. See [TRINODAL.md](TRINODAL.md).
+
 ## Extension points
 - Replacement frontend: any static site served by `SEMECHKA_WEB_DIR` on the documented API. See API.md,
   CUSTOM_FRONTEND.md, `sdk/js/semechka.mjs` and `examples/minimal-frontend`.

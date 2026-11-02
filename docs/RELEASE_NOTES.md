@@ -1,5 +1,36 @@
 # Release notes
 
+## 0.5.8 (Trinodal AI integration)
+
+Adds the Semechka side of Trinodal AI, a separate modular AI system. Everything is inert until an administrator configures it:
+`trinodal.url` is empty by default, no existing role gains a permission, and the database schema is unchanged (10).
+Guide: [TRINODAL.md](TRINODAL.md).
+
+- **Same-origin management UI at `/trinodal/`.** A streaming reverse proxy serves Trinodal's single-page UI, JSON API and
+  event streams on Semechka's origin. Permissions are checked in the backend per request class (`trinodal.view` reads,
+  `trinodal.train` changes, `trinodal.admin` for `/api/admin/*`); changes need the CSRF token and a same-origin request; the
+  service token lives in a file on the server and is never exposed; headers are allow-listed in both directions so Semechka's CSP
+  stays unchanged; limits, rate limits and audit events (no bodies) apply.
+- **Three new sensitive permissions**: `trinodal.view`, `trinodal.train`, `trinodal.admin`. No wildcard grants them. New
+  installs give Owner all three and Platform Admin view and train. **Existing instances are not changed on upgrade**: an owner
+  grants them through the ordinary, audited role edit (TRINODAL.md).
+- **Trinodal as a local chat model.** The Sarness backend option `local_endpoints` (for example `["trinodal"]`) marks the models
+  of those engine endpoints as not external, so the egress policy and the "external service" notices no longer apply to a service
+  on this machine. Other endpoints of the same engine stay external. Editable in Administration → Backends.
+- **Node path in the technical details.** A Trinodal reply's run record (nodes, route, trace id, language core, timings) is kept
+  with the message and shown only to people holding `tech.node.name`, `tech.job.trace`, `tech.runtime.name` or
+  `tech.perf.duration` for the matching part, as "Path: conversation → mathematics → conversation" and rows, in the live reply,
+  the saved thread and exports.
+- **Navigation**: a "Trinodal" entry (Dashboard, Network Explorer, Training Studio, Training Jobs, Evaluations; training links only
+  with `trinodal.train`) for people with `trinodal.view`, in the conversation sidebar and the account menu, and in the command
+  palette.
+- New settings `trinodal.url`, `trinodal.max_upload_mb`, `trinodal.max_download_mb` (edit permission `trinodal.admin`), and the
+  environment variables `SEMECHKA_TRINODAL_TOKEN_FILE` and `SEMECHKA_INSTANCE_NAME`.
+- New models named like their endpoint (`endpoint:trinodal:trinodal`) are called `trinodal`, and the developer "Trinodal AI" is
+  recognised (lettermark).
+
+Not verified: the real Trinodal service, UI and engine registration (test doubles only; see KNOWN_LIMITATIONS.md).
+
 ## 0.4.0 (2026-10-25)
 
 Semechka 0.4.0 is a self-hosted, single-organisation release. It has had no independent security review. Read

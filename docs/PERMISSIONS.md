@@ -9,8 +9,8 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | **Modes** | | | | | | | | | |
 | `mode.chat` — Use chat | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `mode.code` — Use code workspace | yes | yes | yes | – | – | – | yes | yes | – |
-| `mode.image` — Generate images | yes | – | – | – | – | – | – | – | – |
-| `mode.video` — Generate video | yes | – | – | – | – | – | – | – | – |
+| `mode.image` — Generate images | yes | yes | yes | – | – | – | yes | yes | – |
+| `mode.video` — Generate video | yes | yes | yes | – | – | – | yes | yes | – |
 | `mode.audio` — Use audio (speech) | yes | – | – | – | – | – | – | – | – |
 | `mode.knowledge` — Use knowledge search | yes | yes | yes | – | – | – | yes | yes | – |
 | `mode.agents` — Use assistants (no tool execution) | yes | yes | yes | – | – | – | yes | yes | – |
@@ -74,7 +74,12 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.backup.manage` — Manage backups | yes | yes | – | – | – | – | – | – | – |
 | `admin.preview_role` — Preview the product as another role | yes | yes | yes | – | – | – | – | – | – |
 | `admin.sso.manage` — Configure single sign-on providers | yes | yes | – | – | – | – | – | – | – |
+| `admin.orgs.manage` — Create and suspend organisations | yes | yes | – | – | – | – | – | – | – |
 | `admin.content.read` — Read other people's conversations | – | – | – | – | – | – | – | – | – |
+| **Trinodal AI** | | | | | | | | | |
+| `trinodal.view` — Open Trinodal AI (read only) | yes | yes | – | – | – | – | – | – | – |
+| `trinodal.train` — Use the Trinodal Training Studio | yes | yes | – | – | – | – | – | – | – |
+| `trinodal.admin` — Administer Trinodal AI | yes | – | – | – | – | – | – | – | – |
 
 ## Technical-visibility presets (editable shortcuts)
 

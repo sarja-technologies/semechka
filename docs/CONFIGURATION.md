@@ -72,8 +72,8 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 |---|---|---|---|---|---|---|
 | `modes.chat.enabled` | bool | `True` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.code.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
-| `modes.image.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
-| `modes.video.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
+| `modes.image.enabled` | bool | `True` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
+| `modes.video.enabled` | bool | `True` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.audio.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.knowledge.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.agents.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
@@ -163,6 +163,61 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `media.max_assets` | int | `200` | deployment, role, team, user | min_nonzero | `admin.quotas.edit` |  |
 | `media.default_image_size` | int | `0` | deployment, role, team | specific | `admin.settings.edit` |  |
 | `media.video_max_seconds` | int | `8` | deployment, role, team | min | `admin.quotas.edit` |  |
+
+## System
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `cloud.rollout` | enum | `everyone` | deployment | specific | `admin.settings.edit` | Administrators only keeps the cloud features away from ordinary accounts whatever the switches say. |
+| `cloud.workspaces.enabled` | bool | `False` | deployment | specific | `admin.settings.edit` | Adds the Workspaces entry to navigation for organisation members. |
+| `cloud.agents.enabled` | bool | `False` | deployment | specific | `admin.settings.edit` | Agents send document passages to the chosen language model and can create files in workspaces. |
+| `cloud.agents.models` | list | `[]` | deployment | specific | `admin.settings.edit` | Agent runs and the agent editor offer and accept only these models. |
+
+## Trinodal AI
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `trinodal.url` | string | `` | deployment | specific | `trinodal.admin` | weakening changes need confirmation · Opens (or moves) the proxy that serves the Trinodal management UI to people holding trinodal.* permissions. |
+| `trinodal.max_upload_mb` | int | `256` | deployment | specific | `trinodal.admin` |  |
+| `trinodal.max_download_mb` | int | `512` | deployment | specific | `trinodal.admin` |  |
+
+## Quotas & Scheduling
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `cloud.agents.max_active_per_user` | int | `2` | deployment | specific | `admin.quotas.edit` |  |
+
+## System
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `sandbox.enabled` | bool | `False` | deployment | specific | `admin.settings.edit` | Agents can run code they or a language model wrote, on this machine, inside the sandbox. |
+| `sandbox.docker_host` | string | `unix:///home/semsbx/run/docker.sock` | deployment | specific | `admin.settings.edit` |  |
+| `sandbox.image` | string | `semechka-sandbox:1` | deployment | specific | `admin.settings.edit` |  |
+
+## Quotas & Scheduling
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `sandbox.memory_mb` | int | `1024` | deployment | specific | `admin.quotas.edit` |  |
+| `sandbox.cpus` | float | `2` | deployment | specific | `admin.quotas.edit` |  |
+| `sandbox.timeout_s` | int | `120` | deployment | specific | `admin.quotas.edit` |  |
+| `sandbox.reserve_mb` | int | `8192` | deployment | specific | `admin.quotas.edit` |  |
+| `sandbox.max_concurrent` | int | `2` | deployment | specific | `admin.quotas.edit` |  |
+
+## System
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `embeddings.url` | string | `` | deployment | specific | `admin.settings.edit` | Passages of every indexed document are sent to this address to be embedded. |
+| `embeddings.model` | string | `` | deployment | specific | `admin.settings.edit` |  |
+| `embeddings.query_instruction` | text | `Given a question, retrieve passages that answer it` | deployment | specific | `admin.settings.edit` |  |
+| `embeddings.min_score` | float | `0.47` | deployment | specific | `admin.settings.edit` |  |
+
+## Quotas & Scheduling
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
 | `queue.backend_concurrency` | int | `2` | deployment | specific | `admin.quotas.edit` | Lower values make people wait longer but protect the backend from overload. |
 | `queue.user_slots_per_backend` | int | `1` | deployment | specific | `admin.quotas.edit` |  |
 | `queue.wait_timeout_seconds` | int | `300` | deployment | specific | `admin.quotas.edit` |  |

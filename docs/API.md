@@ -182,3 +182,24 @@ behaviour to know:
 - Access to other people's conversations (`/api/admin/content/...`) needs a permission that no role has by default,
   a privacy policy that allows it, and a reason of at least 10 characters. Every access is recorded and shown to the
   person.
+
+## Trinodal AI (0.5.8)
+
+Off until an administrator sets `trinodal.url`. Details, permissions and the deployment settings are in
+[TRINODAL.md](TRINODAL.md).
+
+| Call | What it does |
+|---|---|
+| `GET /api/trinodal/availability` | What this person may be offered: `{enabled, view, train, admin}`. All `false` for someone with no `trinodal.*` permission, and when the feature is not configured. Never the address or the token. |
+| `GET/HEAD /trinodal/...` | Trinodal's management UI and read-only API, same origin. Needs `trinodal.view`. |
+| `POST/PUT/PATCH/DELETE /trinodal/...` | Changes in Trinodal. Need `trinodal.train` (or `trinodal.admin` under `/trinodal/api/admin/`), a same-origin request and `x-csrf-token`. |
+| `GET /trinodal/api/admin/...` | Trinodal's configuration. Needs `trinodal.admin`. |
+| `GET /trinodal/_semechka/session` | `{csrf, scopes, instance, user}` for Trinodal's UI (answered by Semechka, never forwarded). |
+
+Errors specific to the proxy: 404 (feature off), 502 `trinodal_unreachable` / `trinodal_auth` / `too_large`, 503
+`trinodal_not_configured` (no service token file), 504 `trinodal_timeout`, 413 `too_large`, 429 `rate_limited` /
+`too_many_open`.
+
+A reply from a Trinodal model carries `tech.trinodal` in the stream's `done` event and in every saved message, with only the
+parts the reader's `tech.*` permissions allow (`nodes`, `route`, ... see TRINODAL.md). `GET /api/admin/backends` lists
+`local_endpoints`; `POST`/`PUT /api/admin/backends` accept it (Sarness only).
