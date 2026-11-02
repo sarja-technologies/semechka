@@ -32,6 +32,12 @@ server-enforced enrolment gate · rate limiting (signup, login, TOTP, forgot, se
 verification endpoint · settings changes validated, audited, reversible, with confirmation for weakening changes · secrets write-only and excluded from exports · bind to loopback unless
 the owner sets `access.exposure=lan` (applied at next start) · systemd unit with `NoNewPrivileges`, `ProtectSystem=strict`.
 
+## Schemra proxy
+The optional `/schemra/` reverse proxy (off by default) is covered in `docs/SCHEMRA_INTEGRATION.md`: loopback-only upstream, signed
+identity headers, credentials and forwarding headers stripped both ways, CSRF proof on changes, streamed bodies, audit of every
+change and refusal. Its main residual risk is that Schemra's pages share Semechka's origin (stored XSS in Schemra would reach
+Semechka's API as the signed-in person).
+
 ## Residual risks to review before real use
 1. No TLS in-process. 2. Single-process in-memory limiter/lockout counters reset on restart. 3. SQLite file locking limits write concurrency. 4. No CAPTCHA/passkeys/SAML/SCIM (OpenID Connect sign-in exists; see below).
 5. Audit chain proves tampering of included rows, not truncation of the tail (no external anchor). 6. Search decrypts in process. 7. Master key lives beside the data; no KMS/HSM option.

@@ -57,6 +57,10 @@ secret setting values. Audit rows are hash-chained and contain no message text.
   who must use MFA and has not set it up can reach only their account page. An administrator's reset of someone's
   second factor needs a reason and is audited.
 
+- **Schemra proxy** (`routers/schemra.py`, `schemra_proxy.py`): off by default. `/schemra/…` is an authenticated reverse
+  proxy to a Schemra on loopback with HMAC-signed identity headers and a role mapped from `schemra.*` permissions. A
+  separate program; only HTTP and one secret file connect them. See SCHEMRA_INTEGRATION.md.
+
 ## Extension points
 - Replacement frontend: any static site served by `SEMECHKA_WEB_DIR` on the documented API. See API.md,
   CUSTOM_FRONTEND.md, `sdk/js/semechka.mjs` and `examples/minimal-frontend`.
