@@ -98,8 +98,11 @@ def main() -> int:
             sys.exit("the model is still marked external; local_endpoints did not take effect")
         m.enabled, m.alias = True, "Trinodal AI"
         for rid in [x for x in a.model_roles.split(",") if x]:
-            if not s.execute(select(ModelGrant).where(ModelGrant.model_id == m.id, ModelGrant.subject_type == "role", ModelGrant.subject_id == rid)).first():
-                s.add(ModelGrant(model_id=m.id, subject_type="role", subject_id=rid, effect="allow", modes=None))
+            g = s.execute(select(ModelGrant).where(ModelGrant.model_id == m.id, ModelGrant.subject_type == "role", ModelGrant.subject_id == rid)).scalar_one_or_none()
+            if g is None:      # chat only: Trinodal does not support tool calls, so it is not offered to the code or agent modes
+                s.add(ModelGrant(model_id=m.id, subject_type="role", subject_id=rid, effect="allow", modes=["chat"]))
+            else:
+                g.modes = ["chat"]
         audit.record(s, "operator", "model.enable", m.id, {"alias": "Trinodal AI", "roles": a.model_roles})
         mid = m.id
     print("4. model enabled and granted:", mid)
