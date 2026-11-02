@@ -15,7 +15,7 @@
     app.ready = true;
     const path = page.url.pathname;
     if (!ok && !app.offline && !PUBLIC.some((p) => path.startsWith(p))) goto(`/login?next=${encodeURIComponent(path + page.url.search)}`, { replaceState: true });
-    if (ok && (path === '/login' || path === '/signup' || path === '/setup')) goto('/', { replaceState: true });
+    if (ok && (path === '/login' || path === '/signup' || path === '/setup') && !(page.url.searchParams.get('next') ?? '').startsWith('/schemra')) goto('/', { replaceState: true });
   }
   onMount(() => {
     boot();
