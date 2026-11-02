@@ -105,6 +105,14 @@ REGISTRY: list[Perm] = [
     _p("admin.content.read", "Read other people's conversations", "Administration",
        "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
        "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),
+    # --- Schemra (separate local AI training lab, reached through the authenticated /schemra/ proxy) -------------
+    _p("schemra.view", "Open Schemra (read-only)", "Schemra",
+       "Sign in to the Schemra lab as a viewer: read boards, notes, datasets and results. Schemra decides what a viewer may do."),
+    _p("schemra.operate", "Operate Schemra", "Schemra",
+       "Sign in to the Schemra lab as an operator: chat with agents, edit boards, start training runs and add data."),
+    _p("schemra.admin", "Administer Schemra", "Schemra",
+       "Sign in to the Schemra lab as its administrator: limits, destructive actions and system controls. Training and "
+       "GPU use are Schemra's own; this permission only decides which role Semechka asserts."),
 ]
 
 BY_ID: dict[str, Perm] = {p.id: p for p in REGISTRY}

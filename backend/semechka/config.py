@@ -20,6 +20,8 @@ class Config:
     secure_cookies: bool = field(default_factory=lambda: os.environ.get("SEMECHKA_SECURE_COOKIES", "auto") == "1")
     cookie_mode: str = field(default_factory=lambda: os.environ.get("SEMECHKA_SECURE_COOKIES", "auto"))
     web_dir: Path | None = field(default_factory=lambda: Path(p) if (p := os.environ.get("SEMECHKA_WEB_DIR")) else None)
+    # Where the shared secret for the signed Schemra proxy headers lives (a file, mode 0600; never in the database).
+    schemra_secret_file: str | None = field(default_factory=lambda: os.environ.get("SEMECHKA_SCHEMRA_SECRET_FILE") or None)
     # Test hooks: disable background sweepers.
     background: bool = True
 
@@ -38,3 +40,7 @@ class Config:
     @property
     def setup_token_path(self) -> Path:
         return self.data_dir / "setup-token"
+
+    @property
+    def schemra_secret_path(self) -> Path:
+        return Path(self.schemra_secret_file).expanduser() if self.schemra_secret_file else self.data_dir / "schemra-proxy.secret"
