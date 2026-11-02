@@ -74,7 +74,7 @@ def main() -> int:
         return 0
 
     with st.db.session(write=True) as s:
-        st.settings.set(s, "operator", "trinodal.url", a.url, ip="local")
+        st.settings.set(s, "operator", "trinodal.url", a.url, ip="local", confirm_weaker=True)  # opens the same-origin proxy: explicit operator confirmation
     with st.db.session() as s:
         assert st.settings.deployment(s, "trinodal.url") == a.url
     print("1. trinodal.url set and read back")
