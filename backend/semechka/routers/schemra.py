@@ -264,7 +264,8 @@ async def schemra_proxy(request: Request, g=Depends(gate), st: AppState = Depend
         await client.aclose()
         raise
     stream = sp.is_event_stream(resp.headers.get("content-type", ""))
-    out = sp.response_headers(list(resp.headers.multi_items()), upstream_netloc=g.netloc, conn_netloc=g.conn_origin[7:], stream=stream)
+    out = sp.response_headers(list(resp.headers.multi_items()), upstream_netloc=g.netloc, conn_netloc=g.conn_origin[7:], stream=stream,
+                             api=g.path.startswith("/api/"))
     if out is None:
         await resp.aclose()
         await client.aclose()

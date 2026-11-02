@@ -294,8 +294,12 @@ def rewrite_location(value: str, upstream_netloc: str, conn_netloc: str | None =
 
 
 def response_headers(upstream: list[tuple[str, str]], *, upstream_netloc: str, conn_netloc: str | None = None,
-                     stream: bool) -> list[tuple[str, str]] | None:
-    """Headers for the browser. None means the redirect cannot be kept below /schemra/ (answer 502)."""
+                     stream: bool, api: bool = False) -> list[tuple[str, str]] | None:
+    """Headers for the browser. None means the redirect cannot be kept below /schemra/ (answer 502).
+
+    `api` marks the lab's data endpoints (/api/...): what they return is data, never a page, so it also gets a `sandbox`
+    policy. A file somebody uploaded to the lab and later opened by its address then runs, if it runs at all, in an
+    opaque origin with no access to Semechka's session."""
     out: list[tuple[str, str]] = []
     csp_seen = False
     for k, v in upstream:
@@ -323,6 +327,8 @@ def response_headers(upstream: list[tuple[str, str]], *, upstream_netloc: str, c
     if not csp_seen:
         out.append(("content-security-policy", DEFAULT_CSP))
     out.append(("content-security-policy", FLOOR_CSP))
+    if api:
+        out.append(("content-security-policy", "sandbox"))
     if "cache-control" not in names:
         out.append(("cache-control", "private, no-cache"))
     if "x-content-type-options" not in names:

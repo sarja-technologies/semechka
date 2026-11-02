@@ -131,6 +131,12 @@ async def plain_html(request: Request):
     return Response("<!doctype html><title>lab</title>", media_type="text/html")
 
 
+async def user_file(request: Request):
+    """An uploaded file that is really a web page, served back from the data API."""
+    _record(request)
+    return Response("<script>fetch('/api/me')</script>", media_type="text/html")
+
+
 async def hang(request: Request):
     _record(request)
     await asyncio.sleep(30)
@@ -153,6 +159,6 @@ app = Starlette(routes=[
     Route("/api/lab/status/{code:int}", status, methods=["GET"]),
     Route("/r/rel", redirect_rel), Route("/r/own", redirect_own), Route("/r/prefixed", redirect_prefixed),
     Route("/r/external", redirect_external),
-    Route("/noisy", noisy), Route("/hang", hang),
+    Route("/api/lab/files/{fid}/content", user_file), Route("/noisy", noisy), Route("/hang", hang),
     Route("/{rest:path}", echo, methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]),
 ])

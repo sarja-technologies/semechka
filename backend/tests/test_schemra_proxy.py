@@ -359,6 +359,13 @@ def test_defaults_apply_when_the_lab_sends_no_security_headers(owner, lab):
     assert r.headers["cache-control"] == "private, no-cache"
 
 
+def test_data_endpoints_are_sandboxed_so_an_uploaded_page_cannot_use_the_session(owner, lab):
+    r = owner.get("/schemra/api/lab/files/fil_1/content")
+    assert "sandbox" in r.headers.get_list("content-security-policy") and r.headers["x-content-type-options"] == "nosniff"
+    page = owner.get("/schemra/")
+    assert "sandbox" not in page.headers.get_list("content-security-policy")  # the lab's own pages are not sandboxed
+
+
 def test_redirects_stay_below_the_prefix(owner, lab):
     r = owner.c.get("/schemra/r/rel", follow_redirects=False)
     assert r.status_code == 302 and r.headers["location"] == "/schemra/api/lab/boards?x=1"
