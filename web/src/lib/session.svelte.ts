@@ -13,7 +13,9 @@ export const app = $state({
   themePref: 'light' as string,
   themeName: 'light' as string,
   themeVariant: 'light' as 'light' | 'dark',
-  publicTheme: null as ThemeBundle | null
+  publicTheme: null as ThemeBundle | null,
+  // What this person may be offered of Trinodal AI (from /api/trinodal/availability; permission-based, never an address)
+  trinodal: { enabled: false, view: false, train: false, admin: false }
 });
 
 export const can = (perm: string) => !!app.me?.permissions?.includes(perm) || (!!app.me?.permissions && app.me.permissions.some((p: string) => p === '*'));
@@ -28,10 +30,19 @@ export async function loadPublic() {
   } catch (e) { if (e instanceof ApiError && e.status === 0) app.offline = true; else throw e; }
 }
 
+const NO_TRINODAL = { enabled: false, view: false, train: false, admin: false };
+/** Only people who hold a trinodal.* permission ask; everyone else never learns whether the feature is configured. */
+async function loadTrinodal(me: any) {
+  if (!me.permissions?.some((p: string) => p.startsWith('trinodal.'))) { app.trinodal = { ...NO_TRINODAL }; return; }
+  try { app.trinodal = { ...NO_TRINODAL, ...(await get('/api/trinodal/availability')) }; } catch { app.trinodal = { ...NO_TRINODAL }; }
+}
+
 export async function loadMe(): Promise<boolean> {
   try {
     const me = await get('/api/me');
-    app.me = me; setCsrf(me.csrf);
+    setCsrf(me.csrf);
+    await loadTrinodal(me); // before the shell renders, so the navigation never changes under the person's cursor
+    app.me = me;
     applyBrand({ ...app.brand, ...me.ui.brand }); refreshTheme();
     return true;
   } catch (e) {

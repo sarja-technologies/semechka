@@ -9,7 +9,7 @@
   import { toast } from '$lib/toast.svelte';
   import { list, loadList, loadFolders, dateGroups, drop, upsert, type ConvRow } from '$lib/chat/store.svelte';
   import { errText } from '$lib/chat/thread.svelte';
-  import { navHref } from '$lib/nav';
+  import { navHref, trinodalLinks } from '$lib/nav';
   import Icon from '$lib/components/Icon.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
@@ -20,6 +20,8 @@
   const f = $derived(ui.ui ?? {});
   const base = $derived(list.workspace === 'code' ? '/code' : '/chat');
   const path = $derived(page.url.pathname);
+  const tnl = $derived(trinodalLinks(app.trinodal));
+  let tnlOpen = $state(false);
   const pages = $derived<any[]>((ui.pages ?? []).filter((p: any) => p.available && !(list.workspace === 'code' && p.id === 'code')));
 
   // ---- list --------------------------------------------------------------------------------------------------
@@ -222,12 +224,21 @@
     <div bind:this={sentinel} class="sent">{#if list.loading}<span class="tiny muted" role="status">Loading…</span>{/if}</div>
   </div>
 
-  {#if pages.length || app.me.admin || retention}
+  {#if pages.length || app.me.admin || retention || tnl.length}
     <nav class="pages" aria-label="More">
       {#if retention}<p class="tiny muted ret">{retention}</p>{/if}
       {#each pages as p (p.id)}
         <a href={navHref(p)} class="pg" class:on={path.startsWith(navHref(p))} aria-current={path.startsWith(navHref(p)) ? 'page' : undefined} onclick={close}><Icon name={p.id} size={16} />{p.label}</a>
       {/each}
+      {#if tnl.length}
+        <!-- Trinodal AI: its own interface, served by Semechka at /trinodal/. Full page loads, so SvelteKit must not route them. -->
+        <button class="pg tn" aria-expanded={tnlOpen} aria-controls="tnl-links" onclick={() => (tnlOpen = !tnlOpen)}><Icon name="network" size={16} />Trinodal<span class="tc" class:open={tnlOpen}><Icon name="chevdown" size={14} /></span></button>
+        {#if tnlOpen}
+          <ul id="tnl-links" class="tnl" aria-label="Trinodal AI">
+            {#each tnl as l (l.id)}<li><a href={l.href} class="pg sub" data-sveltekit-reload onclick={close}>{l.label}</a></li>{/each}
+          </ul>
+        {/if}
+      {/if}
     </nav>
   {/if}
   <!-- a focusable splitter (WAI-ARIA window splitter): arrow keys resize it -->
@@ -308,6 +319,11 @@
   .ret { margin: 0 8px 6px; }
   .pg { display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: var(--side-row); color: var(--fg-2); text-decoration: none; border-radius: var(--radius-sm); font-size: 14px; }
   .pg:hover { background: var(--hover); color: var(--fg); } .pg.on { background: var(--selected); color: var(--fg); }
+  button.pg { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: var(--side-row); color: var(--fg-2); border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; width: 100%; }
+  button.pg:hover { background: var(--hover); color: var(--fg); } button.pg:focus-visible, .pg:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tc { margin-left: auto; display: grid; } .tc.open { transform: rotate(180deg); }
+  .tnl { list-style: none; margin: 0; padding: 0 0 0 26px; display: grid; gap: 1px; }
+  .pg.sub { min-height: 32px; }
   .grip { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 2; }
   .grip:hover { background: var(--border-strong); }
   .grip:focus-visible { background: var(--accent); outline: 2px solid var(--accent); outline-offset: 0; }

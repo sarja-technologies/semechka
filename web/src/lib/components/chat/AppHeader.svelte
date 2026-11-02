@@ -8,6 +8,7 @@
   import { toast } from '$lib/toast.svelte';
   import { THEME_LABELS, PRESETS } from '$lib/theme/theme';
   import { openPalette } from '$lib/palette.svelte';
+  import { trinodalLinks } from '$lib/nav';
   import Icon from '$lib/components/Icon.svelte';
   import { errText } from '$lib/chat/thread.svelte';
 
@@ -50,6 +51,7 @@
     if (t === 'system') return PRESETS.light.values.bg;
     return (PRESETS as any)[t]?.values.bg;
   }
+  const tnl = $derived(trinodalLinks(app.trinodal));
   const density = $derived(app.me?.user.prefs?.density ?? app.me?.ui.density ?? 'comfortable');
 </script>
 
@@ -98,6 +100,12 @@
               <button role="menuitemradio" aria-checked={density === v} onclick={() => pref({ density: v })}>{l}{#if density === v}<span class="ck"><Icon name="check" size={14} /></span>{/if}</button>
             {/each}
           </div>
+          {#if tnl.length}
+            <div class="sec" role="group" aria-label="Trinodal AI">
+              <span class="lab tiny muted">Trinodal AI</span>
+              {#each tnl as l (l.id)}<a role="menuitem" href={l.href} data-sveltekit-reload onclick={() => close(false)}><Icon name="network" size={15} /> {l.label}</a>{/each}
+            </div>
+          {/if}
           <div class="sec">
             <a role="menuitem" href="/account" onclick={() => close(false)}><Icon name="user" size={15} /> Account and security</a>
             {#if app.me?.admin}<a role="menuitem" href="/admin" onclick={() => close(false)}><Icon name="settings" size={15} /> Administration</a>{/if}

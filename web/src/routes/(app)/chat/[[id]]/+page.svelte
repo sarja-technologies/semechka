@@ -6,7 +6,7 @@
   import { app, loadMe } from '$lib/session.svelte';
   import { get, patch } from '$lib/api';
   import { toast } from '$lib/toast.svelte';
-  import { TECH_LABELS, fmtTech } from '$lib/techlabels';
+  import { TECH_LABELS, fmtTech, trinodalPath, trinodalRows } from '$lib/techlabels';
   import { list, catalog, type Operation } from '$lib/chat/store.svelte';
   import { Thread, errText, type Msg, type MsgActions } from '$lib/chat/thread.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -165,8 +165,12 @@
         <p class="tiny muted">Only the fields your administrator allows. Reading them gives no control over the system.</p>
         {#if detail && Object.keys(detail.tech ?? {}).length}
           <h3 class="small">{selected ? 'Selected reply' : 'Latest reply'}</h3>
+          {#if trinodalPath(detail.tech.trinodal)}<p class="small tpath">Path: {trinodalPath(detail.tech.trinodal)}</p>{/if}
           <dl class="kv">
-            {#each Object.entries(detail.tech).filter(([k]) => k !== '_unavailable') as [k, v] (k)}<dt>{TECH_LABELS[k] ?? k}</dt><dd>{#if k === 'gen_params' && v && typeof v === 'object'}{#each Object.entries(v) as [a, b2] (a)}<div>{a}: {b2}</div>{/each}{:else}{fmtTech(k, v)}{/if}</dd>{/each}
+            {#each Object.entries(detail.tech).filter(([k]) => k !== '_unavailable') as [k, v] (k)}
+              {#if k === 'trinodal'}{#each trinodalRows(v) as [tl, tv] (tl)}<dt>{tl}</dt><dd>{tv}</dd>{/each}
+              {:else}<dt>{TECH_LABELS[k] ?? k}</dt><dd>{#if k === 'gen_params' && v && typeof v === 'object'}{#each Object.entries(v) as [a, b2] (a)}<div>{a}: {b2}</div>{/each}{:else}{fmtTech(k, v)}{/if}</dd>{/if}
+            {/each}
             {#each detail.tech._unavailable ?? [] as k (k)}<dt>{TECH_LABELS[k] ?? k}</dt><dd class="muted na">Not supplied by this backend</dd>{/each}
           </dl>
         {:else}<p class="small muted">Details appear here after a reply.</p>{/if}
@@ -204,6 +208,7 @@
   .details { border-left: 1px solid var(--border); padding: 12px 16px; overflow: auto; background: var(--card-bg); display: grid; gap: 8px; align-content: start; }
   .dh { display: flex; align-items: center; justify-content: space-between; } .dh h2 { font-size: 15px; }
   .details h3 { margin-top: 8px; }
+  .tpath { margin: 0; overflow-wrap: anywhere; }
   .na { font-family: var(--font); }
   @media (max-width: 1099px) {
     .chat.drawer { grid-template-columns: minmax(0, 1fr); }

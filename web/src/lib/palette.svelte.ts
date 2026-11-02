@@ -4,7 +4,7 @@
 import { goto } from '$app/navigation';
 import { app, can, loadMe, logout } from './session.svelte';
 import { patch, qs } from './api';
-import { navHref } from './nav';
+import { navHref, trinodalLinks } from './nav';
 import { ADMIN_PAGES } from './components/admin/util';
 import { toast } from './toast.svelte';
 
@@ -38,6 +38,7 @@ registerSource({
       if (!n.available) continue; // unavailable modes are explained on their own page; they are not offered as actions
       out.push({ id: `go:${n.id}`, group: 'Go to', label: n.label, run: () => goto(navHref(n)) });
     }
+    for (const l of trinodalLinks(app.trinodal)) out.push({ id: `go:trinodal:${l.id}`, group: 'Go to', label: `Trinodal: ${l.label}`, keywords: 'trinodal nodes network training', run: () => location.assign(l.href) });
     out.push({ id: 'go:account', group: 'Go to', label: 'Account and security', keywords: 'password mfa two-factor sessions', run: () => goto('/account') });
     if (can('admin.overview')) {
       for (const p of ADMIN_PAGES.filter((p) => can(p.perm))) out.push({ id: `go:admin:${p.href}`, group: 'Administration', label: p.label, run: () => goto(p.href) });
