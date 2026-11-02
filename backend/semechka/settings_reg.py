@@ -102,6 +102,27 @@ def _url_or_blank(value):
     return value
 
 
+def _trinodal_url(value):
+    """The address of the Trinodal AI service: an origin only (scheme, host, optional port). The service token is sent to
+    this address, so nothing that could redirect it elsewhere (user info, a path, a query, a fragment) is accepted."""
+    from urllib.parse import urlsplit
+    if value in ("", None):
+        return ""
+    if not isinstance(value, str) or len(value) > 200 or re.search(r"[\s\x00-\x1f\x7f]", value):
+        raise SettingError("Must be an address like http://127.0.0.1:8800")
+    u = urlsplit(value.strip())
+    try:
+        port = u.port
+    except ValueError:
+        raise SettingError("The port is not valid.") from None
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise SettingError("Must start with http:// or https:// and name a host.")
+    if u.username is not None or u.password is not None or u.query or u.fragment or u.path not in ("", "/"):
+        raise SettingError("Give the address only (scheme, host and port): no user name, path, query or fragment.")
+    host = f"[{u.hostname}]" if ":" in u.hostname else u.hostname
+    return f"{u.scheme}://{host}" + (f":{port}" if port else "")
+
+
 def _asset_id(value):
     if value in ("", None):
         return ""
@@ -155,6 +176,7 @@ def _theme():
 
 _PRIVACY_ORDER = {"no_retention": 0, "standard": 1, "user_controlled": 1, "enterprise": 1}
 
+TR = "Trinodal AI"
 C = "Identity & Branding"
 TH = "Theme & Layout"
 UI = "Interface"
@@ -444,6 +466,20 @@ DEFS: list[Def] = [
         "checked on your own documents. Empty means any chat model the person and the workspace may use.",
         "list", [], scopes=["deployment"], edit_perm="admin.settings.edit",
         effect="Agent runs and the agent editor offer and accept only these models."),
+    # ---- Trinodal AI (same-origin management UI behind /trinodal/) ----
+    Def("trinodal.url", TR, "Trinodal AI address",
+        "Where this instance reaches the Trinodal AI service (for example http://127.0.0.1:8800). Empty turns the "
+        "feature off: /trinodal/ answers 404 and the navigation entry is hidden. The service token is read from a "
+        "file on this server (SEMECHKA_TRINODAL_TOKEN_FILE) and is sent to this address, so point it only at a "
+        "service you operate.", "string", "", scopes=["deployment"], edit_perm="trinodal.admin", validator=_trinodal_url,
+        lowers_privacy=lambda o, n: bool(n) and n != o,
+        effect="Opens (or moves) the proxy that serves the Trinodal management UI to people holding trinodal.* permissions."),
+    Def("trinodal.max_upload_mb", TR, "Largest upload to Trinodal (MB)",
+        "Request bodies larger than this (datasets, for example) are refused by the proxy.", "int", 256, min=1, max=4096,
+        scopes=["deployment"], edit_perm="trinodal.admin"),
+    Def("trinodal.max_download_mb", TR, "Largest response from Trinodal (MB)",
+        "Responses larger than this (other than live event streams) are refused or cut off by the proxy.", "int", 512,
+        min=1, max=4096, scopes=["deployment"], edit_perm="trinodal.admin"),
     Def("cloud.agents.max_active_per_user", Q, "Agent runs at once (per person)",
         "How many agent runs one person may have queued, running or waiting for approval.", "int", 2, min=1, max=20,
         scopes=["deployment"], edit_perm="admin.quotas.edit"),

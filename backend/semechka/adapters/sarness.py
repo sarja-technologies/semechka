@@ -20,12 +20,16 @@ Audited against the Sarness Engine HTTP API v1 (engine 0.4.0, API 1.1; its /v1/o
   POST /v1/worker/stop       stops the picture/video worker process, returning all of its memory; 409 while it runs a job
   GET  /v1/jobs?status=      the engine's job queue (all of its clients, so prompts are never copied)
 Semechka does not use Sarness' own conversation store, so no chat content is persisted by Sarness.
-Models Sarness reaches through a remote endpoint are marked external, so the egress policy applies.
+Models Sarness reaches through a remote endpoint are marked external, so the egress policy applies, except for an
+endpoint the administrator lists in the backend option `local_endpoints` (a list of engine endpoint ids): that endpoint
+runs on this machine or network (Trinodal AI is one), so its models are not external. For those, and only those, the
+`usage.trinodal` object an endpoint returns in the final `done` event is passed on, cleaned, as `done["trinodal"]`.
 Image and video models have no load call: the engine loads one when a job needs it.
 """
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import quote
 
 import httpx
@@ -37,6 +41,61 @@ from .sarness_media import SarnessMediaMixin, clean_error
 PRELOAD_OFF = ("Loading a chat model ahead of time is turned off for this engine: it switches its one chat model even "
                "while another client's reply is being written, and offers no way to reserve it. A chat model loads "
                "when someone first uses it.")
+
+
+def endpoint_id(ref: str) -> str | None:
+    """`endpoint:<id>:<model>` -> `<id>`; None for anything else (local models, picture and video models)."""
+    if not isinstance(ref, str) or not ref.startswith("endpoint:"):
+        return None
+    return ref.split(":", 2)[1] if ref.count(":") >= 2 else None
+
+
+def local_endpoints(options: dict | None) -> list[str]:
+    v = (options or {}).get("local_endpoints")
+    return [x for x in v if isinstance(x, str) and x] if isinstance(v, list) else []
+
+
+def is_local_endpoint(ref: str, options: dict | None) -> bool:
+    """True when `ref` is a model on a remote-endpoint entry of the engine that the administrator declared local."""
+    eid = endpoint_id(ref)
+    return eid is not None and eid in local_endpoints(options)
+
+
+_TRINODAL_STR, _TRINODAL_ID = 120, re.compile(r"[\w.:/\- ]{1,64}")
+
+
+def clean_trinodal(u) -> dict | None:
+    """The `usage.trinodal` object of a Trinodal AI reply, reduced to the known fields with bounded size and type. The
+    object is metadata about the run (which nodes took part, timings, counters). It never carries message text, so
+    anything else, or anything out of shape, is dropped rather than shown."""
+    if not isinstance(u, dict):
+        return None
+    out: dict = {}
+
+    def text(v, n=_TRINODAL_STR):
+        return v.strip()[:n] if isinstance(v, str) and v.strip() and v.isprintable() else None
+
+    if (t := text(u.get("trace_id"), 64)) and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", t):
+        out["trace_id"] = t
+    for key in ("nodes", "trained_components"):
+        v = u.get(key)
+        if isinstance(v, list):
+            ids = [x for x in v[:64] if isinstance(x, str) and _TRINODAL_ID.fullmatch(x)]
+            if ids:
+                out[key] = ids
+    if t := text(u.get("route")):
+        out["route"] = t
+    lc = u.get("language_core")
+    if isinstance(lc, dict):
+        core = {k: text(lc.get(k)) for k in ("model", "backend")}
+        core = {k: v for k, v in core.items() if v}
+        if core:
+            out["language_core"] = core
+    for key in ("ms", "llm_calls", "refused", "errors"):
+        v = u.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v < 1e12:
+            out[key] = round(v, 1) if isinstance(v, float) else v
+    return out or None
 
 
 def _h(key):
@@ -182,8 +241,8 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
             else:
                 meta = _clean({"engine_name": a.get("name"), "context": a.get("context_max"), "endpoint": a.get("provider")})
                 loaded = None
-            out.append(DiscoveredModel(ref, caps_list, meta, external=not local or bool(self.options.get("external")),
-                                       loaded=loaded))
+            external = bool(self.options.get("external")) or (not local and not is_local_endpoint(ref, self.options))
+            out.append(DiscoveredModel(ref, caps_list, meta, external=external, loaded=loaded))
         worker_loaded = {m["id"] for m in by_cap.values() if m.get("loaded") and m.get("category") in ("image", "video")}
         ids = [i for i, m in by_cap.items() if m.get("category") in ("image", "video")] if by_cap else \
               [i for i, m in by_inv.items() if m.get("category") in ("image", "video")]
@@ -253,7 +312,8 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
                 "params": {k: params[k] for k in allowed if params.get(k) is not None}}
         if isinstance(params.get("thinking"), bool):
             body["params"]["thinking"] = params["thinking"]  # reasoning on/off; the engine ignores it for models without it
-        finish = usage = timings = None
+        finish = usage = timings = trinodal = None
+        keep_trinodal = is_local_endpoint(model, self.options)  # only an endpoint declared local may add run metadata
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=10)) as c:
                 async with c.stream("POST", self.base_url + "/v1/agent/completions", json=body,
@@ -281,6 +341,8 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
                             if u:
                                 usage = {"prompt_tokens": u.get("prompt_tokens"),
                                          "completion_tokens": u.get("completion_tokens")}
+                                if keep_trinodal:
+                                    trinodal = clean_trinodal(u.get("trinodal"))
                             tm = ev.get("timings")
                             if tm:
                                 timings = {"prompt_per_second": tm.get("prompt_per_second"),
@@ -289,7 +351,10 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
             raise
         except httpx.HTTPError as e:
             raise AdapterError(f"Backend unreachable: {_short(e)}") from e
-        yield {"type": "done", "finish_reason": finish, "usage": usage, "timings": timings}
+        done = {"type": "done", "finish_reason": finish, "usage": usage, "timings": timings}
+        if trinodal:
+            done["trinodal"] = trinodal
+        yield done
 
     async def system_info(self) -> dict | None:
         try:

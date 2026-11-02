@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -246,13 +247,28 @@ class BackendIn(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)  # write-only
     external: bool = False
     enabled: bool = True
+    # Sarness only: ids of the engine's remote-endpoint entries that run on this machine or network (for example
+    # "trinodal"). Their models are not treated as external. None leaves the current list as it is.
+    local_endpoints: list[str] | None = Field(default=None, max_length=20)
+
+
+def _local_endpoints(body: "BackendIn", adapter: str) -> list[str] | None:
+    if body.local_endpoints is None:
+        return None
+    ids = list(dict.fromkeys(x.strip() for x in body.local_endpoints))
+    if ids and adapter != "sarness":
+        raise _err(422, "invalid", "Local endpoints apply to a Sarness Engine only.")
+    if any(not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", x) for x in ids):
+        raise _err(422, "invalid", "An endpoint id is 1-64 letters, digits, dots, dashes or underscores.")
+    return ids
 
 
 def _backend_out(b: Backend) -> dict:
     ad = adapters.REGISTRY.get(b.adapter)
     return {"id": b.id, "name": b.name, "adapter": b.adapter, "base_url": b.base_url, "has_api_key": bool(b.api_key_enc),
             "external": b.external, "enabled": b.enabled, "version": (b.options or {}).get("version"),
-            "last_seen": (b.options or {}).get("last_seen"), "manifest": ad.manifest.as_dict() if ad else None}
+            "last_seen": (b.options or {}).get("last_seen"),
+            "local_endpoints": (b.options or {}).get("local_endpoints") or [], "manifest": ad.manifest.as_dict() if ad else None}
 
 
 @router.get("/backends")
@@ -269,11 +285,14 @@ def create_backend(body: BackendIn, ctx: Ctx = Depends(require("admin.backends.m
         raise _err(422, "invalid", "The address must start with http:// or https://")
     if ctx.s.execute(select(Backend).where(Backend.name == body.name.strip())).scalar_one_or_none():
         raise _err(409, "exists", "A backend with that name exists.")
+    local = _local_endpoints(body, body.adapter)
     b = Backend(name=body.name.strip(), adapter=body.adapter, base_url=body.base_url.rstrip("/"), external=body.external,
-                enabled=body.enabled, api_key_enc=ctx.st.vault.encrypt(body.api_key, "backend") if body.api_key else None)
+                enabled=body.enabled, api_key_enc=ctx.st.vault.encrypt(body.api_key, "backend") if body.api_key else None,
+                options={"local_endpoints": local} if local else {})
     ctx.s.add(b)
     ctx.s.flush()
-    audit_ctx(ctx, "backend.create", b.id, {"adapter": b.adapter, "external": b.external, "url": b.base_url})
+    audit_ctx(ctx, "backend.create", b.id, {"adapter": b.adapter, "external": b.external, "url": b.base_url,
+                                            **({"local_endpoints": local} if local else {})})
     return _backend_out(b)
 
 
@@ -287,7 +306,13 @@ def update_backend(bid: str, body: BackendIn, ctx: Ctx = Depends(require("admin.
     b.name, b.base_url, b.external, b.enabled = body.name.strip(), body.base_url.rstrip("/"), body.external, body.enabled
     if body.api_key:
         b.api_key_enc = ctx.st.vault.encrypt(body.api_key, "backend")
-    audit_ctx(ctx, "backend.update", bid, {"external": b.external, "enabled": b.enabled})
+    detail = {"external": b.external, "enabled": b.enabled}
+    local = _local_endpoints(body, b.adapter)
+    if local is not None and local != ((b.options or {}).get("local_endpoints") or []):
+        detail["local_endpoints"] = {"old": (b.options or {}).get("local_endpoints") or [], "new": local}
+        opts = {k: v for k, v in (b.options or {}).items() if k != "local_endpoints"}
+        b.options = {**opts, **({"local_endpoints": local} if local else {})}
+    audit_ctx(ctx, "backend.update", bid, detail)
     return _backend_out(b)
 
 
@@ -331,7 +356,7 @@ def _model_out(m: Model, b: Backend | None, grants: list[ModelGrant], full_id: b
             "real_id": services.display_id(m.real_id), "alias": m.alias, "enabled": m.enabled, "pinned": m.pinned, "tags": m.tags or [],
             "capabilities": m.capabilities or [], "meta": m.meta or {}, "available": m.available,
             "system_prompt_set": bool(m.system_prompt), "gen_limits": m.gen_limits or {}, "allow_tools": m.allow_tools,
-            "external": bool(b and (b.external or (m.meta or {}).get("external"))),
+            "external": bool(b and services.is_external(m, b)),
             "grants": [{"subject_type": g.subject_type, "subject_id": g.subject_id, "effect": g.effect, "modes": g.modes}
                        for g in grants],
             "hidden": m.hidden, "sort": m.sort, "profile": m.profile or {}, "defaults": m.defaults or {}}

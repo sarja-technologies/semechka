@@ -19,6 +19,9 @@ def friendly_alias(real_id: str) -> str:
     base = real_id.split("/")[-1]
     base = re.sub(r"\.(gguf|bin)$", "", base, flags=re.I)
     base = base.split(":", 1)[-1] if base.startswith(("local:", "endpoint:", "image:", "video:")) else base
+    a, _, b = base.partition(":")
+    if a and a == b:  # endpoint:trinodal:trinodal -> trinodal (an endpoint and its one model share a name)
+        base = b
     return base[:100]
 
 

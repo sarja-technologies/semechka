@@ -20,6 +20,12 @@ class Config:
     secure_cookies: bool = field(default_factory=lambda: os.environ.get("SEMECHKA_SECURE_COOKIES", "auto") == "1")
     cookie_mode: str = field(default_factory=lambda: os.environ.get("SEMECHKA_SECURE_COOKIES", "auto"))
     web_dir: Path | None = field(default_factory=lambda: Path(p) if (p := os.environ.get("SEMECHKA_WEB_DIR")) else None)
+    # Trinodal AI (the same-origin /trinodal/ proxy). The service token is read from this file on every request that
+    # needs it; it is never stored in the database and never returned by any API. Default: <data dir>/trinodal-token.
+    trinodal_token_file: Path | None = field(default_factory=lambda: Path(p).expanduser() if (p := os.environ.get("SEMECHKA_TRINODAL_TOKEN_FILE")) else None)
+    # The name this instance gives itself in the X-Trinodal-Actor header (<name>/<user id>). Default: derived from the
+    # instance's own key, so it is stable and unique without being configured.
+    instance_name: str = field(default_factory=lambda: os.environ.get("SEMECHKA_INSTANCE_NAME", ""))
     # Test hooks: disable background sweepers.
     background: bool = True
 
@@ -34,6 +40,10 @@ class Config:
     @property
     def key_path(self) -> Path:
         return self.data_dir / "master.key"
+
+    @property
+    def trinodal_token_path(self) -> Path:
+        return self.trinodal_token_file or (self.data_dir / "trinodal-token")
 
     @property
     def setup_token_path(self) -> Path:

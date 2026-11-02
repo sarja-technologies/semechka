@@ -26,6 +26,7 @@ class AppState:
     seen: dict[str, float] = field(default_factory=dict)  # session id_hash -> last activity, written to the database in batches
     stop_events: dict[str, asyncio.Event] = field(default_factory=dict)
     scheduler: Scheduler = field(default_factory=Scheduler)  # per-backend generation queue (see scheduler.py)
+    trinodal_open: dict[str, int] = field(default_factory=dict)  # user_id -> requests being served through /trinodal/
     lifecycle: dict[str, dict] = field(default_factory=dict)  # backend_id -> model load/unload in progress or last
 
     @property

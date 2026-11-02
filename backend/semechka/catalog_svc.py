@@ -66,6 +66,9 @@ PROVIDERS: list[Provider] = [
     Provider("ibm", "IBM (Granite)", "Gr", "#2F5E9E", (r"granite",)),
     Provider("nvidia", "NVIDIA (Nemotron)", "Nv", "#4E7A2A", (r"nemotron", r"nvidia")),
     Provider("allenai", "Ai2 (OLMo)", "Ol", "#9A5A2A", (r"\bolmo", r"allenai")),
+    # A modular AI system that answers through the engine's remote-endpoint support (docs/ADAPTERS.md), named for what
+    # it is called, not for any model behind it. Lettermark only: Semechka bundles no logo for it.
+    Provider("trinodal", "Trinodal AI", "Tn", "#3E5C6B", (r"trinodal",)),
 ]
 
 

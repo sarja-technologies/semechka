@@ -105,6 +105,17 @@ REGISTRY: list[Perm] = [
     _p("admin.content.read", "Read other people's conversations", "Administration",
        "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
        "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),
+    # --- Trinodal AI (the modular AI system managed through the same-origin /trinodal/ proxy) ----------------
+    # Sensitive: it opens an operational surface (node execution paths, training data and jobs, service
+    # configuration), so no wildcard grant covers it. Each one must be granted by name.
+    _p("trinodal.view", "Open Trinodal AI (read only)", "Trinodal AI",
+       "Open the Trinodal dashboard, Network Explorer, node inspector and evaluations. Read only. Never included in any wildcard.",
+       sensitive=True),
+    _p("trinodal.train", "Use the Trinodal Training Studio", "Trinodal AI",
+       "Datasets, training jobs and deployment of checkpoints. Never included in any wildcard.", sensitive=True),
+    _p("trinodal.admin", "Administer Trinodal AI", "Trinodal AI",
+       "Trinodal configuration, service tokens and settings, and the address Semechka reaches it at. "
+       "Never included in any wildcard.", sensitive=True),
 ]
 
 BY_ID: dict[str, Perm] = {p.id: p for p in REGISTRY}
@@ -143,10 +154,11 @@ TECH_PRESET_DEFAULTS: dict[str, list[str]] = {
 ROLE_TEMPLATES: list[dict] = [
     dict(id="owner", label="Owner", rank=0, system=True,
          description="Full administration. Does not include content access; that must be granted by name.",
-         grants=["*"], denies=[]),
+         grants=["*", "trinodal.view", "trinodal.train", "trinodal.admin"], denies=[]),
     dict(id="platform_admin", label="Platform Admin", rank=10,
          description="Runs the platform; no access to user content.",
-         grants=["mode.chat", "mode.code", "mode.knowledge", "mode.agents", "mode.image", "mode.video", "chat.ephemeral", "chat.attach", "chat.export", "admin.*", "tech.*", "ops.*", "models.*"],
+         grants=["mode.chat", "mode.code", "mode.knowledge", "mode.agents", "mode.image", "mode.video", "chat.ephemeral", "chat.attach", "chat.export", "admin.*", "tech.*", "ops.*", "models.*",
+                 "trinodal.view", "trinodal.train"],
          denies=[]),
     dict(id="org_admin", label="Organisation Admin", rank=20,
          description="People, branding and policy for the organisation.",

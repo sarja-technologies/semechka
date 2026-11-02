@@ -81,7 +81,15 @@ def model_access(s, p: perms.Principal, m: Model, backend: Backend, st, mode: st
 
 
 def is_external(m: Model, backend: Backend) -> bool:
-    return bool(backend.external or (m.meta or {}).get("external"))
+    if backend.external:
+        return True
+    if backend.adapter == "sarness" and (m.real_id or "").startswith("endpoint:"):
+        # A remote-endpoint model of a Sarness engine is external unless the administrator declared that endpoint local
+        # (backend option local_endpoints, e.g. Trinodal AI on the same machine). Read live, so removing an id from the
+        # list makes its models external again at once, without waiting for the next model sync.
+        from .adapters.sarness import is_local_endpoint
+        return not is_local_endpoint(m.real_id, backend.options)
+    return bool((m.meta or {}).get("external"))
 
 
 def accessible_models(s, p: perms.Principal, st, mode: str = "chat", *, include_hidden: bool = True) -> list[tuple[Model, Backend]]:
@@ -162,8 +170,31 @@ def filter_tech(p: perms.Principal, full: dict) -> dict:
     put("tech.queue.position", ["queue"])
     put("tech.node.name", ["node"])
     put("tech.job.trace", ["trace_id"])
+    tri = _filter_trinodal(p, f.get("trinodal"))
+    if tri:
+        out["trinodal"] = tri
     if out or unavailable:
         out["_unavailable"] = sorted(set(unavailable))
+    return out
+
+
+def _filter_trinodal(p: perms.Principal, full) -> dict:
+    """The Trinodal AI run record (which nodes took part, timings, trace id), reduced to what this person may read. It
+    is run metadata only, and it reaches no one without the matching technical permission: the nodes and route need
+    tech.node.name, the trace id tech.job.trace, the language core's model and backend tech.runtime.name, and the
+    time spent tech.perf.duration."""
+    if not isinstance(full, dict) or not full:
+        return {}
+    out: dict[str, Any] = {}
+
+    def take(perm, keys):
+        if p.can(perm):
+            out.update({k: full[k] for k in keys if full.get(k) is not None})
+
+    take("tech.node.name", ["nodes", "route", "trained_components", "llm_calls", "refused", "errors"])
+    take("tech.job.trace", ["trace_id"])
+    take("tech.runtime.name", ["language_core"])
+    take("tech.perf.duration", ["ms"])
     return out
 
 

@@ -627,6 +627,8 @@ def _stats(m: Model, b: Backend, params: dict, t0: float, t_first: float | None,
         stats["tokens_per_s"], stats["tps_source"] = round(tim["predicted_per_second"], 2), "backend"
     elif ct and t_first and t_end > t_first:
         stats["tokens_per_s"], stats["tps_source"] = round(ct / (t_end - t_first), 2), "measured by Semechka"
+    if isinstance((ev_done or {}).get("trinodal"), dict) and ev_done["trinodal"]:
+        stats["trinodal"] = ev_done["trinodal"]  # run metadata of a Trinodal AI reply; filtered by tech.* permission on every read
     return {k: v for k, v in stats.items() if v is not None}
 
 
