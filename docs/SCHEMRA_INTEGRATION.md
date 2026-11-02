@@ -99,7 +99,7 @@ Semechka removes from the browser's request: every `X-Schemra-*`, `X-Forwarded-*
 
 ```
 X-Forwarded-Prefix: /schemra
-X-Schemra-User:  alice@example.org        the account's e-mail, lower case (the account id u_… if it has characters unsuitable for a header)
+X-Schemra-User:  alice@example.org        the account's e-mail, lower case; the account id u_… instead when the address has characters outside `A-Za-z0-9_.@-` or is longer than 80 (Schemra rejects those)
 X-Schemra-Role:  viewer|operator|admin
 X-Schemra-Ts:    1700000000                integer Unix seconds, taken per request
 X-Schemra-Nonce: 32 random hex characters, new per request

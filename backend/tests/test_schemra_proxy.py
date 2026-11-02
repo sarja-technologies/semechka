@@ -722,7 +722,7 @@ def test_signing_unit_matches_the_documented_vector():
 def test_identity_name_falls_back_to_the_id_for_unsafe_addresses():
     u = SimpleNamespace(email="  Alice@Example.Test ", id="u_1")
     assert sp.identity_name(u) == "alice@example.test"
-    for bad in ("a b@example.test", "ünï@example.test", "a\nb@x", 'a"b@x'):
+    for bad in ("a b@example.test", "ünï@example.test", "a\nb@x", 'a"b@x', "a+tag@example.test", "a%40b@x", "x" * 70 + "@example.test"):
         assert sp.identity_name(SimpleNamespace(email=bad, id="u_1")) == "u_1"
 
 

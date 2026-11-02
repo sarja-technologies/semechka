@@ -116,12 +116,12 @@ def schemra_role(principal) -> str | None:
     return None
 
 
-_SAFE_IDENT = re.compile(r"^[A-Za-z0-9._%+@-]{1,200}$")
+_SAFE_IDENT = re.compile(r"^[A-Za-z0-9_.@-]{1,80}$")  # what Schemra accepts for X-Schemra-User (schemra/lab/authz.py)
 
 
 def identity_name(user) -> str:
     """The value of X-Schemra-User: the account's e-mail address (lower case), or the account id when the address has
-    characters that do not belong in a header."""
+    characters or a length Schemra does not accept (letters, digits, `_ . @ -`, at most 80)."""
     email = (user.email or "").strip().lower()
     return email if _SAFE_IDENT.match(email) else user.id
 
