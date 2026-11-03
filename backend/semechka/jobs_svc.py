@@ -102,6 +102,8 @@ def claim(st, kinds: list[str] | None = None) -> str | None:
             q = q.where(Job.kind.in_(kinds))
         for j in s.execute(q).scalars().all():
             cap = CONCURRENCY.get(j.kind, 1)
+            if callable(cap):  # a kind whose limit is a setting (Work Mode) supplies it as a function of the app state
+                cap = cap(st)
             with _lock:
                 if _running.get(j.kind, 0) >= cap:
                     continue

@@ -26,6 +26,7 @@ from . import (
     jobs_svc,
     media_svc,
     services,
+    work_svc,
 )
 from .config import Config
 from .deps import flush_seen
@@ -53,6 +54,7 @@ from .routers import (  # sso: OIDC single sign-on
     sso,
     theme,
     trinodal,
+    work,
 )
 from .state import AppState
 
@@ -80,10 +82,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             n = await asyncio.to_thread(jobs_svc.recover_on_start, st)  # jobs a previous process left running resume now
             if n:
                 log.info("requeued %d job(s) left running by the previous process", n)
+        work_task = None
+        if cfg.background:
+            await asyncio.to_thread(work_svc.startup, st)  # Work Mode: settle sessions whose runs ended, adopt/clean containers
+            work_task = asyncio.create_task(work_svc.sweeper(st))  # idle stop + periodic reconcile
         jobs_task = asyncio.create_task(jobs_svc.pump(st)) if cfg.background else None  # durable workspace jobs
         seen_task = asyncio.create_task(_seen_flusher(st)) if cfg.background else None
         yield
-        for t in (task, media_task, jobs_task, seen_task):
+        for t in (task, media_task, jobs_task, seen_task, work_task):
             if t:
                 t.cancel()
         await asyncio.to_thread(flush_seen, st)  # what people did in the last seconds survives a restart
@@ -127,7 +133,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router, schemra.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router, schemra.router, work.router):
         app.include_router(r)
 
     web = cfg.web_dir

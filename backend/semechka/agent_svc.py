@@ -44,6 +44,7 @@ class ToolSpec:
     perms: tuple[str, ...]  # permissions the agent must be able to exercise for this tool to be usable at all
     sensitive: bool = False
     fn: object = None
+    mutating: bool = False  # changes state; Work Mode's "ask" autonomy asks before every such call
 
 
 @dataclass
@@ -60,11 +61,59 @@ class ToolError(Exception):
 TOOLS: dict[str, ToolSpec] = {}
 
 
-def tool(name, summary, args, perms, sensitive=False):
+def tool(name, summary, args, perms, sensitive=False, mutating=False):
     def deco(fn):
-        TOOLS[name] = ToolSpec(name, summary, args, tuple(perms), sensitive, fn)
+        TOOLS[name] = ToolSpec(name, summary, args, tuple(perms), sensitive, fn, mutating)
         return fn
     return deco
+
+
+class RunExtension:
+    """Seam for runs that belong to something other than a plain cloud agent (Work Mode: `Agent.kind == 'work'`). The run
+    loop below is NOT forked: it calls these hooks at the few points where such a run differs, and does exactly what it
+    always did when the agent has no extension. Every hook runs inside the loop's own database session `s`, so what it writes
+    is atomic with the step it belongs to. Defaults are no-ops."""
+
+    def disabled_reason(self, st, s, run) -> str | None:
+        """-> why the run must be cancelled now (feature switched off, person lost the permission), else None."""
+        return None
+
+    def before_turn(self, st, s, run, job) -> None:
+        """May raise jobs_svc.JobPaused (after setting job.status = 'awaiting_approval') or jobs_svc.JobCancelled."""
+
+    def on_interrupted(self, st, s, run, steps) -> None:
+        """Tool steps that were mid-flight when the previous worker died; they have just been marked 'interrupted'."""
+
+    def limits(self, st, s, run) -> dict:
+        return {}
+
+    def resolve_model(self, st, s, agent, run, principal) -> str | None:
+        """-> Semechka Model.id for this turn, or None for the default resolution."""
+        return None
+
+    def messages(self, st, s, agent, run, ws, person, steps, lim) -> list[dict]:
+        raise NotImplementedError
+
+    def needs_approval(self, st, s, run, agent, spec, args) -> str | None:
+        """-> the reason a person must approve this call first, or None to run it."""
+        return None
+
+    def on_model(self, st, s, run, n, text, action, parse_error) -> None: ...
+    def on_tool_requested(self, st, s, run, step) -> None: ...
+    def before_tool(self, tc, spec, args) -> None:
+        """May raise ToolError / authz.Forbidden to refuse a call that was already accepted."""
+
+    def on_tool_done(self, tc, step, status, err, text, dur) -> None: ...
+    def on_final(self, st, s, run, final) -> None: ...
+    def on_end(self, st, s, run, outcome, message) -> None:
+        """The job ended: outcome is 'succeeded' | 'failed' | 'cancelled'."""
+
+
+EXTENSIONS: dict[str, RunExtension] = {}
+
+
+def ext_for(agent: Agent | None) -> RunExtension | None:
+    return EXTENSIONS.get(getattr(agent, "kind", "cloud") or "cloud") if agent is not None else None
 
 
 def agent_perms(tools: list[str]) -> set[str]:
@@ -127,6 +176,7 @@ class ToolCtx:
     run: AgentRun
     ws: Workspace
     job: Job
+    step: object = None  # the AgentStep being executed
 
 
 # ---- configuration -----------------------------------------------------------------------------------
@@ -759,18 +809,13 @@ def memory_block(st, s, agent: Agent) -> str:
             + "\n".join(f"- {t}" for _, t in items))
 
 
-def _messages(st, s, agent, run, ws, person, steps) -> list[dict]:
-    lim = {**DEFAULT_LIMITS, **(agent.limits or {})}
-    task = _dec(st, run.org_id, run.task_enc)
-    mem = memory_block(st, s, agent)
-    msgs = [{"role": "system", "content": _system_prompt(st, s, agent, run, ws, person)},
-            {"role": "user", "content": (mem + "\n\nTask:\n" + task) if mem else task}]
-    bad = 0
+def step_messages(st, run, steps, lim) -> list[dict]:
+    """The conversation a run's recorded steps stand for: each model reply, and each tool result or refusal as data."""
+    msgs = []
     for stp in steps:
         if stp.kind == "model":
             msgs.append({"role": "assistant", "content": _dec(st, run.org_id, stp.result_enc)})
             if stp.meta.get("parse_error"):
-                bad += 1
                 msgs.append({"role": "user", "content": f"Your reply could not be used: {stp.meta.get('parse_error')}. Nothing was done. "
                                                          "Reply again with exactly one complete JSON object (check that every brace and "
                                                          "bracket is closed) and nothing else."})
@@ -786,6 +831,14 @@ def _messages(st, s, agent, run, ws, person, steps) -> list[dict]:
     return msgs
 
 
+def _messages(st, s, agent, run, ws, person, steps) -> list[dict]:
+    lim = {**DEFAULT_LIMITS, **(agent.limits or {})}
+    task = _dec(st, run.org_id, run.task_enc)
+    mem = memory_block(st, s, agent)
+    return [{"role": "system", "content": _system_prompt(st, s, agent, run, ws, person)},
+            {"role": "user", "content": (mem + "\n\nTask:\n" + task) if mem else task}] + step_messages(st, run, steps, lim)
+
+
 def _prepare_turn(st, job_id: str) -> Turn:
     from . import services
     from .models import User
@@ -798,21 +851,30 @@ def _prepare_turn(st, job_id: str) -> Turn:
         agent = s.get(Agent, run.agent_id)
         ws = s.get(Workspace, run.workspace_id)
         user = s.get(User, run.user_id)
+        ext = ext_for(agent)
         if job.cancel_requested:
             raise jobs_svc.JobCancelled("Cancelled.")
-        if not agents_enabled(st, s):
+        if ext is None and not agents_enabled(st, s):
             raise jobs_svc.JobCancelled("Cloud agents were turned off.")
         if agent is None or agent.archived or ws is None or ws.archived:
             raise jobs_svc.JobCancelled("The agent or its workspace is no longer available.")
-        why = jobs_svc.still_authorised(s, job)
+        why = jobs_svc.still_authorised(s, job) or (ext.disabled_reason(st, s, run) if ext else None)
         if why:
             raise jobs_svc.JobCancelled(why)
-        lim = {**DEFAULT_LIMITS, **(agent.limits or {})}
+        if ext:
+            try:
+                ext.before_turn(st, s, run, job)
+            except jobs_svc.JobPaused:
+                s.commit()  # the pause (job status) must stick
+                raise
+        lim = {**DEFAULT_LIMITS, **(agent.limits or {}), **(ext.limits(st, s, run) if ext else {})}
         steps = _steps(s, run.id)
         # resume bookkeeping: a tool that was mid-flight when a worker died is reported as interrupted, never replayed
-        for stp in steps:
-            if stp.kind == "tool" and stp.status == "running" and stp.meta.get("started"):
-                stp.status, stp.finished_at = "interrupted", time.time()
+        died = [stp for stp in steps if stp.kind == "tool" and stp.status == "running" and stp.meta.get("started")]
+        for stp in died:
+            stp.status, stp.finished_at = "interrupted", time.time()
+        if died and ext:
+            ext.on_interrupted(st, s, run, died)
         for stp in steps:
             if stp.kind == "tool" and stp.status == "awaiting_approval":
                 job.status = "awaiting_approval"
@@ -830,9 +892,11 @@ def _prepare_turn(st, job_id: str) -> Turn:
         if len(recent) == 3 and all(x.meta.get("parse_error") for x in recent):
             raise RuntimeError("The model did not produce a valid action three times in a row.")
         principal = services.load_principal(s, user)
-        model_pk = resolve_model(st, s, agent, principal)  # the person's CURRENT model access, every turn
+        model_pk = (ext.resolve_model(st, s, agent, run, principal) if ext else None) \
+            or resolve_model(st, s, agent, principal)  # the person's CURRENT model access, every turn
         person = user.display_name
-        return Turn("model", messages=_messages(st, s, agent, run, ws, person, steps), model_pk=model_pk, user_id=user.id,
+        msgs = ext.messages(st, s, agent, run, ws, person, steps, lim) if ext else _messages(st, s, agent, run, ws, person, steps)
+        return Turn("model", messages=msgs, model_pk=model_pk, user_id=user.id,
                     org_id=run.org_id, person=person,
                     max_wait=float(st.settings.deployment(s, "queue.wait_timeout_seconds") or 3600))
 
@@ -925,6 +989,7 @@ def _record_model(st, job_id: str, turn: Turn, text: str, info: dict) -> dict | 
         run = s.get(AgentRun, job.payload["run_id"])
         agent = s.get(Agent, run.agent_id)
         n = (max([x.n for x in _steps(s, run.id)] or [0])) + 1
+        ext = ext_for(agent)
         action, why = parse_action_ex(text)
         meta = {"model": info["model"], "seconds": info["seconds"], **({"usage": info["usage"]} if info.get("usage") else {}),
                 **({"timings": info["timings"]} if info.get("timings") else {}), **({} if action else {"parse_error": why})}
@@ -937,25 +1002,32 @@ def _record_model(st, job_id: str, turn: Turn, text: str, info: dict) -> dict | 
             u[k] = u.get(k, 0) + int(((info.get("usage") or {}).get(key)) or 0)
         run.usage = u
         _touch(job)
+        if ext:
+            ext.on_model(st, s, run, n, text, action, None if action else why)
         if action is None:
             return None
         if "final" in action and "tool" not in action:
-            return _finish_run(st, s, run, job, str(action["final"]))
+            return _finish_run(st, s, run, job, str(action["final"]), ext)
         name = str(action.get("tool"))
         args = action.get("args") if isinstance(action.get("args"), dict) else {}
         spec = TOOLS.get(name)
         step = AgentStep(run_id=run.id, n=n + 1, kind="tool", tool=name[:40], args_enc=_enc(st, run.org_id, json.dumps(args)[:MAX_RUN_CHARS]))
         if spec is None or name not in (agent.tools or []):
             step.status, step.error, step.finished_at = "error", f"'{name}' is not one of your tools. Available: {', '.join(agent.tools or []) or 'none'}.", time.time()
-        elif needs_approval(agent, spec):
-            step.status = "awaiting_approval"
         else:
-            step.status = "running"
+            reason = ext.needs_approval(st, s, run, agent, spec, args) if ext else ("agent policy" if needs_approval(agent, spec) else None)
+            if reason:
+                step.status, step.meta = "awaiting_approval", {"approval_reason": str(reason)[:200]}
+            else:
+                step.status = "running"
         s.add(step)
+        if ext:
+            s.flush()
+            ext.on_tool_requested(st, s, run, step)
         return None
 
 
-def _finish_run(st, s, run: AgentRun, job: Job, final: str) -> dict:
+def _finish_run(st, s, run: AgentRun, job: Job, final: str, ext: RunExtension | None = None) -> dict:
     steps = _steps(s, run.id)
     arts, srcs = {}, {}
     for stp in steps:
@@ -965,9 +1037,12 @@ def _finish_run(st, s, run: AgentRun, job: Job, final: str) -> dict:
             srcs[(x["file_id"], x.get("loc", ""))] = x
     run.final_enc = _enc(st, run.org_id, final[:MAX_RUN_CHARS])
     run.artifacts, run.sources = list(arts.values()), list(srcs.values())[:50]
-    warnings = unverified_claims(s, run, final, {a["name"].lower() for a in arts.values()}) + failed_tools(steps)
+    # a Work Mode run's files live in its container, not in a workspace: the file-name check does not apply to it
+    warnings = ([] if ext else unverified_claims(s, run, final, {a["name"].lower() for a in arts.values()})) + failed_tools(steps)
     if warnings:
         run.usage = {**(run.usage or {}), "warnings": warnings}
+    if ext:
+        ext.on_final(st, s, run, final)
     return {"run_id": run.id, "artifacts": len(arts), "steps": len(steps), "warnings": len(warnings)}
 
 
@@ -1017,7 +1092,8 @@ def _execute_tool(st, job_id: str, step_n: int) -> None:
         t0 = time.monotonic()
         ws = s.get(Workspace, run.workspace_id)
         az = AgentAuthz(s, run.user_id, agent)  # authority recomputed NOW from the person's current memberships
-        tc = ToolCtx(st, s, az, agent, run, ws, job)
+        tc = ToolCtx(st, s, az, agent, run, ws, job, stp)
+        ext = ext_for(agent)
         result_text, status, err = "", "done", ""
         meta = dict(stp.meta)
         try:
@@ -1029,6 +1105,8 @@ def _execute_tool(st, job_id: str, step_n: int) -> None:
                 d = az.check(p, ws)
                 if not d.allowed and p not in ("ctx.read",):
                     raise authz.Forbidden(d)
+            if ext:
+                ext.before_tool(tc, spec, args)
             out = spec.fn(tc, args)
             result_text = out.text
             meta["artifacts"], meta["sources"] = out.artifacts, out.sources
@@ -1051,11 +1129,43 @@ def _execute_tool(st, job_id: str, step_n: int) -> None:
         u["wall_s"] = round(u.get("wall_s", 0) + dur, 2)
         run.usage = u
         audit.record(s, run.user_id, "agent.tool", run.id, {"tool": stp.tool, "status": status, "agent": agent.id}, org_id=run.org_id)
+        if ext:
+            ext.on_tool_done(tc, stp, status, err, result_text, dur)
         _touch(job)
+
+
+def _notify_end(st, job_id: str, outcome: str, message: str = "") -> None:
+    """Tell a run's extension the job is over (the plain-agent path has nothing to do here)."""
+    try:
+        with st.db.session(write=True) as s:
+            job = s.get(Job, job_id)
+            run = s.get(AgentRun, (job.payload or {}).get("run_id")) if job else None
+            ext = ext_for(s.get(Agent, run.agent_id)) if run else None
+            if ext:
+                ext.on_end(st, s, run, outcome, message)
+    except Exception:
+        log.exception("run extension failed to record the end of job %s", job_id)
 
 
 @jobs_svc.handler("agent")
 async def handle_agent(st, job_id: str) -> dict:
+    try:
+        done = await _handle_agent(st, job_id)
+    except jobs_svc.JobPaused:
+        raise
+    except jobs_svc.JobCancelled as e:
+        await asyncio.to_thread(_notify_end, st, job_id, "cancelled", str(e))
+        raise
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        await asyncio.to_thread(_notify_end, st, job_id, "failed", f"{type(e).__name__}: {str(e)[:200]}")
+        raise
+    await asyncio.to_thread(_notify_end, st, job_id, "succeeded")
+    return done
+
+
+async def _handle_agent(st, job_id: str) -> dict:
     hb = asyncio.create_task(_heartbeat(st, job_id))
     try:
         while True:

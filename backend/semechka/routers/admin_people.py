@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
-from .. import audit, perms, security, services
+from .. import audit, perms, security, services, work_svc
 from ..deps import Ctx, audit_ctx, require, slow_db
 from ..models import (Invite, Role, SessionRow, Team, TeamMember, User, UserOverride, UserRole)
 
@@ -265,6 +265,7 @@ def delete_user(uid: str, ctx: Ctx = Depends(require("admin.users.manage"))):
     _last_owner_guard(ctx, u, removing_owner=True)
     audit_ctx(ctx, "user.delete", u.id)
     services.purge_user_files(ctx.st, u.id)
+    work_svc.purge_user(ctx.st, ctx.s, u.id)  # Work Mode: their containers, volumes, artifacts and sessions
     ctx.s.delete(u)
     return {"ok": True}
 
@@ -312,6 +313,7 @@ def bulk_users(body: Bulk, ctx: Ctx = Depends(require("admin.users.manage"))):
             elif body.action == "delete":
                 _last_owner_guard(ctx, u, removing_owner=True)
                 services.purge_user_files(ctx.st, u.id)
+                work_svc.purge_user(ctx.st, ctx.s, u.id)
                 ctx.s.delete(u)
             elif body.action == "add_role":
                 if not any(r.role_id == role.id for r in u.roles):

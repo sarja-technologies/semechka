@@ -135,6 +135,8 @@ def purge_org(st, s, org: Org, *, actor: str = "operator") -> dict:
     oid = org.id
     counts = {"files": s.query(File).filter(File.org_id == oid).count(), "workspaces": s.query(Workspace).filter(Workspace.org_id == oid).count(),
               "members": s.query(OrgMember).filter(OrgMember.org_id == oid).count()}
+    from . import work_svc
+    work_svc.purge_sessions(st, s, org_id=oid)  # Work Mode sessions (containers, volumes, artifacts) before their runs go
     run_ids = [r for (r,) in s.execute(select(AgentRun.id).where(AgentRun.org_id == oid))]
     if run_ids:
         s.query(AgentStep).filter(AgentStep.run_id.in_(run_ids)).delete(synchronize_session=False)
