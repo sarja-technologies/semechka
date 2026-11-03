@@ -1043,3 +1043,78 @@ def test_migration_11_applies_to_the_previous_schema_and_rolls_back_cleanly(wk, 
     assert "work.network" in new_roles["owner"] and "mode.work" not in new_roles["member"]
     assert sid and aid and roles_now
     assert migrations.apply(st.db, cfg.data_dir) == []                                         # idempotent
+
+
+# ---- small models' JSON slips ---------------------------------------------------------------------------------------------
+def test_repair_fixes_the_syntax_slips_small_models_make_and_never_the_content():
+    from semechka.work_prompt import repair
+    code = "with open('a.txt', 'w') as f:\\n    f.write('x')"
+    good = {"tool": "work_python", "args": {"code": "with open('a.txt', 'w') as f:\n    f.write('x')", "timeout_s": 120}}
+    # what a 0.8B model really sent: fenced, apostrophes escaped, closed with ] instead of }
+    real = "```json\n{\"tool\": \"work_python\", \"args\": {\"code\": \"with open(\\'a.txt\\', \\'w\\') as f:\\n    f.write(\\'x\\')\", \"timeout_s\": 120}]\n```"
+    assert repair(real) == (good, "")
+    assert repair('{"tool": "work_shell", "args": {"cmd": "echo hi"}')[0] == {"tool": "work_shell", "args": {"cmd": "echo hi"}}   # missing closer
+    assert repair('Sure! {"tool": "work_shell", "args": {"cmd": "a\nb"}} done')[0]["args"]["cmd"] == "a\nb"                      # raw line break, text around
+    assert repair('{"final": "it\\\\\'s done"}')[0] == {"final": "it\\'s done"}                  # an escaped backslash before an apostrophe is content
+    assert repair('<think>hm {"x": 1}</think>{"final": "ok"}')[0] == {"final": "ok"}
+    act, why = repair('{"tool": "work_shell", "args": {"cmd": "echo "hi""}}')
+    assert act is None and why.startswith("invalid JSON") and "end the object with }}" in why
+    assert repair("no json here") == (None, "no JSON object found")
+    assert repair('{"hello": 1}') == (None, 'the JSON object has neither a "tool" nor a "final" key')
+
+
+def test_a_slightly_broken_action_runs_and_the_run_says_it_was_repaired(wk, st):
+    sid = new_session(wk)
+    broken = "```json\n{\"tool\": \"work_python\", \"args\": {\"code\": \"print(\\'it works\\')\"}]\n```"
+    say_and_run(st, wk, sid, "go", broken, L.final("done"))
+    d = result_of(wk, sid)
+    assert d["status"] == "done" and "it works" in d["text"]
+    with st.db.session() as s:
+        steps = s.execute(select(AgentStep).where(AgentStep.kind == "model").order_by(AgentStep.n)).scalars().all()
+        assert steps[0].meta.get("repaired") is True and "repaired" not in steps[1].meta and "parse_error" not in steps[0].meta
+    # a reply that cannot be repaired tells the model why, naming the real problem (not the inner object)
+    L.reset()
+    say_and_run(st, wk, sid, "again", '{"tool": "work_shell", "args": {"cmd": "echo "x""}}', L.final("ok"))
+    assert any("invalid JSON" in m["content"] and "end the object with" in m["content"] for m in L.SEEN[-1] if m["role"] == "user")
+
+
+# ---- long runs stay inside the model's context window ------------------------------------------------------------------------
+def test_a_long_run_is_shortened_to_fit_the_window_and_keeps_the_recent_steps(wk, st):
+    from semechka import chat_svc
+    from semechka.work_prompt import context_budget_chars
+    sid = new_session(wk, objective="Keep going")
+    mid = [L.tool("work_python", code=f"print('step{i} ' + 'x' * 5000)") for i in range(14)]
+    say_and_run(st, wk, sid, "a medium run", *mid, L.final("done"))
+    mid_total = sum(len(m["content"]) for m in L.SEEN[-1])
+    assert mid_total < 30000 and not any("shortened to fit" in m["content"] for m in L.SEEN[-1])  # shorter results were enough
+    assert any("more characters not shown" in m["content"] for m in L.SEEN[-1])
+    L.reset()
+    chat_svc.learned(st)[sess_row(st, sid).model_id] = {"n_ctx": 8192, "ratio": 0.4}                  # a smaller window: the engine said so
+    calls = [L.tool("work_python", code=f"print('step{i} ' + 'x' * 5000)") for i in range(30)]
+    say_and_run(st, wk, sid, "do many things", *calls, L.final("done"))
+    last = L.SEEN[-1]
+    total = sum(len(m["content"]) for m in last)
+    with st.db.session() as s:
+        budget = context_budget_chars(st, s, sess_row(st, sid).model_id)
+    assert budget == int((8192 - 4096 - 300) / 0.4) and total <= budget + 2500, (total, budget)
+    roles = [m["role"] for m in last]
+    assert roles[0] == "system" and all(a != b for a, b in zip(roles[1:], roles[2:], strict=False))     # still alternating
+    task = next(m["content"] for m in last if m["content"].startswith("do many things"))
+    assert task.startswith("do many things") and "shortened to fit your context window" in task and "- work_python" in task
+    assert "step29" in last[-2]["content"] or "step29" in last[-1]["content"]                          # the newest result is intact
+    assert sum(1 for m in last if m["content"].startswith("Tool result")) < 30                          # older ones were folded away
+    # a short run is left exactly as it is
+    L.reset()
+    say_and_run(st, wk, sid, "small", L.tool("work_shell", cmd="echo hi"), L.final("ok"))
+    assert not any("shortened to fit" in m["content"] for m in L.SEEN[-1])
+    # the engine's own refusal teaches the real window for the next turn
+    chat_svc.learned(st).pop(sess_row(st, sid).model_id)
+    ext = work_svc.WorkExtension()
+    with st.db.session(write=True) as s:
+        sess = s.get(WorkSession, sid)
+        sess.active_run_id = "ar_fake"
+        run = AgentRun(id="ar_fake", job_id="j", agent_id=sess.agent_id, org_id=sess.org_id, workspace_id="w", user_id=sess.user_id, task_enc="", session_id=sid)
+        ext.on_end(st, s, run, "failed", "RuntimeError: request (16674 tokens) exceeds the available context size (8192 tokens)")
+    assert chat_svc.learned(st)[sess_row(st, sid).model_id]["n_ctx"] == 8192
+    with st.db.session() as s:
+        assert context_budget_chars(st, s, sess_row(st, sid).model_id) == int((8192 - 4096 - 300) / 0.4)

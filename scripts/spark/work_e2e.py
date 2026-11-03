@@ -5,7 +5,7 @@ Run it on the host that serves staging. It reads the synthetic staging credentia
 prints them. It switches Work Mode on for staging (settings only), picks a small model by alias, runs one session, prints the
 real event timeline, checks the artifact, and (with --cleanup) deletes the session and unloads the model it used.
 
-    python3 work_e2e.py --base http://192.168.20.193:8790 --model Balanced --task "Write a Python script ..." [--cleanup]
+    python3 work_e2e.py --base http://192.168.20.193:8790 --model Balanced --task "Write a Python script ..." [--cleanup] [--unload]
     python3 work_e2e.py --base ... --session ws_... --events          # print the timeline of an existing session
 """
 from __future__ import annotations
@@ -107,7 +107,10 @@ def main() -> int:
     ap.add_argument("--max-seconds", type=int, default=900)
     ap.add_argument("--session", default="")
     ap.add_argument("--events", action="store_true")
-    ap.add_argument("--cleanup", action="store_true")
+    ap.add_argument("--message", default="", help="with --session: send this message to the existing session and print the timeline")
+    ap.add_argument("--delete", action="store_true", help="with --session: delete that session (container and volume are removed)")
+    ap.add_argument("--cleanup", action="store_true", help="delete the session afterwards (removes its container and volume)")
+    ap.add_argument("--unload", action="store_true", help="unload the model afterwards (through Semechka's admin lifecycle)")
     ap.add_argument("--enable", action="store_true", help="switch Work Mode on (work.enabled, modes.work.enabled) first")
     a = ap.parse_args()
     api = Api(a.base)
@@ -121,6 +124,24 @@ def main() -> int:
                                          "network_allowed": opts.get("network_allowed"), "limits": opts.get("limits")}) if code == 200 else opts)
     if code != 200:
         return 2
+    if a.session and a.delete:
+        code, r = api.req("DELETE", f"/api/work/sessions/{a.session}")
+        print("session deleted ->", code, r)
+        return 0
+    if a.session and a.message:
+        last = api.req("GET", f"/api/work/sessions/{a.session}/state")[1]["last_event_id"]
+        code, r = api.req("POST", f"/api/work/sessions/{a.session}/messages", {"content": a.message})
+        assert code == 200, r
+        events = []
+        seen, t0 = last, time.time()
+        while time.time() - t0 < a.max_seconds:
+            code, body = api.req("GET", f"/api/work/sessions/{a.session}/events?since={seen}&wait=20", timeout=60)
+            for ev in body["events"]:
+                print(show(ev), flush=True)
+                seen = ev["id"]
+            if body["status"] in ("idle", "failed", "cancelled") and not body["events"]:
+                break
+        return 0
     if a.session:
         timeline(api, a.session, False, 5)
         return 0
@@ -156,6 +177,7 @@ def main() -> int:
     if a.cleanup:
         code, _ = api.req("DELETE", f"/api/work/sessions/{sid}")
         print("session deleted ->", code)
+    if a.unload:
         code, r = api.req("POST", f"/api/admin/models/{model['id']}/unload")
         print("model unload ->", code, json.dumps(r)[:200])
     return 0 if ok and state["status"] == "idle" else 1

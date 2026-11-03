@@ -98,6 +98,10 @@ class RunExtension:
         """-> the reason a person must approve this call first, or None to run it."""
         return None
 
+    def repair_action(self, text: str, why: str) -> tuple[dict | None, str]:
+        """The model's reply did not parse. -> (action, why): a repaired action, or the reason to tell the model."""
+        return None, why
+
     def on_model(self, st, s, run, n, text, action, parse_error) -> None: ...
     def on_tool_requested(self, st, s, run, step) -> None: ...
     def before_tool(self, tc, spec, args) -> None:
@@ -991,8 +995,12 @@ def _record_model(st, job_id: str, turn: Turn, text: str, info: dict) -> dict | 
         n = (max([x.n for x in _steps(s, run.id)] or [0])) + 1
         ext = ext_for(agent)
         action, why = parse_action_ex(text)
+        repaired = False
+        if action is None and ext:
+            action, why = ext.repair_action(text, why)
+            repaired = action is not None
         meta = {"model": info["model"], "seconds": info["seconds"], **({"usage": info["usage"]} if info.get("usage") else {}),
-                **({"timings": info["timings"]} if info.get("timings") else {}), **({} if action else {"parse_error": why})}
+                **({"timings": info["timings"]} if info.get("timings") else {}), **({} if action else {"parse_error": why}), **({"repaired": True} if repaired else {})}
         s.add(AgentStep(run_id=run.id, n=n, kind="model", status="done", result_enc=_enc(st, run.org_id, text[:MAX_RUN_CHARS]),
                         meta=meta, finished_at=time.time()))
         u = dict(run.usage or {})

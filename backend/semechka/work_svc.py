@@ -923,6 +923,11 @@ class WorkExtension(agent_svc.RunExtension):
         check_model(st, s, principal, s.get(Org, run.org_id), s.get(Workspace, run.workspace_id), sess.model_id)
         return sess.model_id
 
+    def repair_action(self, text: str, why: str) -> tuple[dict | None, str]:
+        from . import work_prompt
+        action, why2 = work_prompt.repair(text)
+        return (action, "") if action else (None, why2)
+
     # ---- the prompt -------------------------------------------------------------------------------------------
     def messages(self, st, s, agent, run, ws, person, steps, lim) -> list[dict]:
         from . import work_prompt
@@ -936,22 +941,31 @@ class WorkExtension(agent_svc.RunExtension):
         task = agent_svc._dec(st, run.org_id, run.task_enc)
         if hist and hist[-1]["role"] == "user":  # alternate roles: fold a dangling earlier message into this one
             task = hist.pop()["content"] + "\n\n" + task
-        msgs += hist
-        msgs.append({"role": "user", "content": task})
         extra = s.execute(select(WorkMessage).where(WorkMessage.session_id == sess.id, WorkMessage.run_id == run.id, WorkMessage.role == "user",
                                                     WorkMessage.seq > task_seq).order_by(WorkMessage.seq)).scalars().all()
         # a message sent mid-run is placed where it happened: before the first step recorded after it
-        cuts, rest = [], list(extra)
+        at, rest = [], list(extra)
         for i, stp in enumerate(steps):
             while rest and rest[0].created_at <= stp.started_at:
-                cuts.append((i, rest.pop(0)))
-        cuts += [(len(steps), m) for m in rest]
-        pos = 0
-        for i, m in cuts:
-            msgs += agent_svc.step_messages(st, run, steps[pos:i], lim)
+                at.append((i, rest.pop(0)))
+        at += [(len(steps), m) for m in rest]
+        # a long run must still fit the model's window: older steps shrink, then collapse into a digest (the session state block,
+        # the history and the files in the workspace carry what matters)
+        base = len(msgs[0]["content"]) + sum(len(m["content"]) for m in hist) + len(task) + sum(len(m.content_enc) // 2 for _, m in at)
+        first, lim2, dig = work_prompt.fit_steps(st, run, steps, lim, work_prompt.context_budget_chars(st, s, sess.model_id), base)
+        early = [m for i, m in at if i <= first and first]
+        if early:
+            task += "".join("\n\nThe person sent another message while you were working:\n" + dec(st, sess.org_id, m.content_enc) for m in early)
+        if dig:
+            task += "\n\n[Your earlier steps in this run, shortened to fit your context window; the files in /work hold the results]\n" + dig
+        msgs += hist
+        msgs.append({"role": "user", "content": task})
+        pos = first
+        for i, m in [(i, m) for i, m in at if not (first and i <= first)]:
+            msgs += agent_svc.step_messages(st, run, steps[pos:i], lim2)
             msgs.append({"role": "user", "content": "The person sent another message while you were working:\n" + dec(st, sess.org_id, m.content_enc)})
             pos = i
-        msgs += agent_svc.step_messages(st, run, steps[pos:], lim)
+        msgs += agent_svc.step_messages(st, run, steps[pos:], lim2)
         return msgs
 
     # ---- approvals --------------------------------------------------------------------------------------------
@@ -1057,6 +1071,10 @@ class WorkExtension(agent_svc.RunExtension):
         sess = self._sess(s, run)
         if sess is None or sess.active_run_id != run.id:
             return
+        from . import chat_svc
+        m = chat_svc.CTX_ERR.search(message or "")
+        if m and sess.model_id:  # the engine told us its real window: later turns of this model are sized to it
+            chat_svc.learned(st)[sess.model_id] = {"n_ctx": int(m.group(2)), "ratio": 0.4}
         _close_run(st, s, sess, run, outcome, message)
 
 

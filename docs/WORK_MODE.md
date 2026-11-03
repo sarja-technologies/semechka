@@ -168,7 +168,7 @@ Status: implemented on branch `feature/work-mode`. Everything below is what *is*
 ### 9.3 Seams for phase B (engine tools, delegation, skills)
 
 * **Run loop hooks**: `agent_svc.RunExtension` (hooks: `disabled_reason`, `before_turn`, `on_interrupted`, `limits`, `resolve_model`,
-  `messages`, `needs_approval`, `on_model`, `on_tool_requested`, `before_tool`, `on_tool_done`, `on_final`, `on_end`) and
+  `messages`, `needs_approval`, `repair_action`, `on_model`, `on_tool_requested`, `before_tool`, `on_tool_done`, `on_final`, `on_end`) and
   `agent_svc.EXTENSIONS['work']`. Phase B subclasses or edits `work_svc.WorkExtension`; it never edits `_prepare_turn` & co.
 * **Adding a tool**: `@work_tool(name, summary, args_example, mutating=...)` in `work_tools.py` (or a module imported at the bottom
   of `work_svc.py`), then append the name to `work_tools.WORK_TOOLS`. The function gets `(tc, w, a)`: `tc` the `ToolCtx` (DB session
@@ -190,6 +190,21 @@ Status: implemented on branch `feature/work-mode`. Everything below is what *is*
 * **Events**: kinds `message|tool_call|tool_result|job|delegate|artifact|approval|state|error`; the UI contract is
   `GET /api/work/sessions/{id}/events?since=&wait=` -> `{events, last_id, status, container_state}`; each event is
   `{id, kind, run_id, step, summary, detail, at}` with `detail` decrypted for the owner.
+
+### 9.3b What the real-model runs taught us (and what was changed because of it)
+
+Real runs against the Spark engine (staging, `scripts/spark/work_e2e.py`) found three things that mocks could not:
+
+* **Small models slip on JSON syntax**, not on content: a markdown fence around the action, `\'` (an invalid escape), real line breaks in a
+  string, `}]` where `}}` was meant. `RunExtension.repair_action` (implemented by `work_prompt.repair`, used only after the strict parse failed)
+  fixes exactly those and reports `repaired: true` in the step meta; it never edits the content. When a reply still cannot be parsed, the
+  reason names the OUTERMOST problem (the shared parser used to report the last inner object, which was misleading) and tells the model
+  how to write JSON strings.
+* **A long run overflowed the model's context window** (HTTP 400 from the engine ended the run). `work_prompt.fit_steps` now sizes every turn:
+  it uses the window Semechka knows (administrator setting or learned from an engine refusal; otherwise it assumes 16K), shortens old tool
+  results, and finally collapses the oldest steps into a one-line-per-step digest. The session-state block, the history and the workspace
+  carry the rest. An engine refusal still teaches `chat_svc.learned` the real window for the next turn.
+* **Capability, not plumbing, limits tiny models**: see 9.6.
 
 ### 9.4 Seams for phase C (UI)
 
@@ -234,6 +249,12 @@ Status: implemented on branch `feature/work-mode`. Everything below is what *is*
   cancel: those kill every process of the container except init).
 * The pause/cancel granularity is one model turn: a cancel during a long model call is noticed when that call returns.
 * `agent_runs.session_id` has no foreign key (like the other loose references in this schema).
+* **Model capability.** With `qwen3-4b-instruct-2507@Q4_K_M` ("Balanced" on staging) the task "first 20 primes -> artifacts/primes.txt" succeeded in
+  every run (see the verification record in the release report); a harder multi-file pytest-and-git task did not (the model kept editing the wrong
+  file and ended honestly with a failure report). `qwen3.5-0.8b@Q8_0` ("Quick") drives the tool loop but computed the wrong thing (eight primes instead
+  of twenty) in 3 of 3 runs, sometimes returns an empty reply (counted by the loop as an invalid action; three in a row ends the run), and once
+  answered with `{"tool": "final"}` (a tool-not-found message, which it recovers from). Work Mode does not judge a model's answer: it reports what
+  the tools really did.
 
 ### 9.7 Rollback
 
