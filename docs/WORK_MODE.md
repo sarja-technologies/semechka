@@ -262,3 +262,56 @@ Real runs against the Spark engine (staging, `scripts/spark/work_e2e.py`) found 
 `semechka migrate --to 10` removes the Work tables and data. Workspace volumes live in the container runtime, not in Semechka's
 database: list them with `docker ps -a --filter label=semechka.work` and `docker volume ls --filter label=semechka.work`, and remove with
 `docker rm -f <name>; docker volume rm <name>` (only the ones labelled `semechka.work.instance=<your instance>`).
+
+## 10. UI notes (response shapes the web UI is built against)
+
+Section 6 fixes the routes. The Work Mode UI (`web/src/routes/(app)/work/`, `web/src/lib/work/`) was written against the bodies below. The
+authoritative typed copy is `web/src/lib/work/types.ts`; a field marked optional may be absent and the UI then shows nothing for it
+(it never fills in a guess). Errors use the usual `{"detail": {"code", "message"}}` (or a string `detail`); the UI shows `message` as written
+and treats 401/403 as "no permission", 404 as "not found", 0/network failure as offline, 409/413/422/429 as a limit message.
+
+* **Navigation:** the page is offered only when `/api/me` `ui.operations.work.enabled` is true (`reason` is shown if the person opens `/work`
+  anyway). A `work` entry in `ui.pages` is ignored; the UI adds its own entry next to Assistants.
+* `GET /options` as in section 6. Optional `limits.upload_max_mb` (used to refuse an oversized upload before sending it). `skills[]` are the
+  skill summaries below (the UI offers only `enabled` ones). `models[].ready=false` is listed but not selectable.
+* `POST /sessions` body: `network` is the string `"none"|"internet"` (same vocabulary as the session field), `autonomy` is `"contained"|"ask"`.
+  Returns the session. A **session** is `{id, title, objective?, model_id, model_alias?, status, container_state, network, autonomy,
+  skill_ids[], created_at, updated_at?, last_active_at}`. `GET /sessions` returns an array of these (a `{sessions: []}` wrapper is also accepted).
+* `POST /sessions/{id}/messages {content}` returns any 2xx body. The UI never inserts the message locally: it appears when the `message`
+  event arrives, so the order is always the server's. `pause|resume|cancel` return any 2xx body.
+* `GET /sessions/{id}/events?since=<n>&wait=<s>` returns `{events: WorkEvent[], last_id?: number}` (a bare array is also accepted).
+  Events have `id` (monotonic integer, the cursor), `kind`, `run_id?`, `step_n?`, `summary?`, `created_at` (ISO), and `data` (the decrypted
+  payload, shaped per kind). The first request is `since=0&wait=0` (full history); afterwards the UI loops with `wait=25`. It returns at once when
+  anything newer than `since` exists, else after `wait` seconds with `events: []`. The UI dedupes by `id`, so re-sending an event is harmless.
+  `data` per kind (all fields except those in bold are optional):
+  * `message`: `{role: "user"|"assistant"|"system", content}`. Complete messages, no token streaming.
+  * `tool_call`: `{call_id, tool, command?, args?}` and `tool_result`: `{call_id, ok?, exit_code?, duration_ms?, output?, truncated?, error?}`.
+    A result joins its call by `call_id`. A call with no result yet is shown as "Running".
+  * `job`: `{job_id, job_kind?: "image"|"video", model?, status: "queued|running|completed|failed|cancelled", phase?, progress?: 0..1, error?}`.
+    Repeated events with the same `job_id` update one card. **A progress bar is drawn only when `progress` is a number.**
+  * `delegate`: `{delegate_id, model, task, status: "running|done|failed", result?, error?, depth?}`.
+  * `artifact`: `{artifact_id, name, path?, mime?, size?}` (the id is the `wa_…` id used by `/artifacts/{aid}/...`).
+  * `approval`: `{step, tool, status: "pending|approved|denied|expired", command?, reason?}`. The UI answers with `POST /approvals/{step}`.
+    After the answer the backend should append another `approval` event for the same `step` with the new status; the UI folds them per step.
+  * `state`: `{status, note?}` (session status changes). `error`: `{code?, message}`.
+  Unknown kinds are skipped.
+* `GET /sessions/{id}/state` returns `{status, container: {state, note?}, network?, autonomy?, model_id?, active_run?: {id, step_n?, max_steps?}|null,
+  jobs?: EngineJob[], usage?: {steps?, tokens_in?, tokens_out?, workspace_bytes?, workspace_limit_bytes?}}` where
+  `EngineJob = {id, kind?, model?, status, phase?, progress?: 0..1|null, queue_position?, error?, artifact_id?, started_at?, finished_at?}`.
+  The UI polls it every 4 s while the session works or a job is active, otherwise every 20 s, and after each batch of new events.
+* `GET /files?path=` lists **one directory level**: `{path, entries: [{name, path, type: "file"|"dir", size?, modified?, mime?}]}`; `path` is relative
+  to `/work` (empty string is the root) and is sent back verbatim by the other file routes. `GET /files/content` returns raw bytes with a content type
+  (`download=1` adds `Content-Disposition: attachment`). `PUT /files?path=<directory>` is multipart with the file in the field `file` and puts it
+  in that directory. `DELETE /files?path=` removes a file or a directory tree.
+* `GET /artifacts` returns an array of `{id, name, path?, mime, size, created_at, saved_to_library?}`. `GET /artifacts/{aid}/content` serves the bytes
+  (the UI embeds it in `<img>`/`<video>`, so it must be same-origin and cookie-authenticated; `?download=1` for attachment).
+* **Skills** (`GET /skills` returns an array of summaries): `{id, scope: "org"|"user", name, title, description, category, enabled, updated_at?,
+  can_edit?}`. `GET /skills/{id}` adds `body_md` and `files: [{name, content}]` (contents included). `POST /skills` and `PUT /skills/{id}` take
+  `{scope, name, title, description, category, enabled, body_md, files: [{name, content}]}` and return the full skill. `can_edit` tells the UI whether
+  to show Edit or View (without it the UI assumes personal skills are editable and organisation skills need `perms.skills_manage`). `POST /skills/import`
+  is multipart: field `file` (the .md) and field `scope` (`user|org`); it returns the created skill. `POST /skills/{id}/enable|disable` return the skill.
+  Front matter is checked in the browser first (name slug `[a-z0-9-]`, description, category from the section 5 list, body at most 64 KB, supporting files
+  at most 1 MB in total) so most mistakes never reach the server; the server remains the authority.
+
+Development: `web/dev/work-mock/server.mjs` is a throwaway mock of this contract (canned timelines, no auth) used to build and screenshot the UI without a
+backend; `node dev/work-mock/server.mjs --static build` after `pnpm build`. It is not part of the app bundle.

@@ -27,11 +27,12 @@ async function parse(r: Response) {
   return body;
 }
 
-export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+export async function api<T = any>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(path, { method, credentials: 'same-origin', headers: headers(method, body !== undefined ? { 'content-type': 'application/json' } : {}), body: body !== undefined ? JSON.stringify(body) : undefined });
-  } catch {
+    r = await fetch(path, { method, credentials: 'same-origin', signal, headers: headers(method, body !== undefined ? { 'content-type': 'application/json' } : {}), body: body !== undefined ? JSON.stringify(body) : undefined });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw e; // the caller cancelled; that is not an outage
     throw new ApiError(0, { code: 'offline', message: 'Cannot reach the server. Check your connection.' });
   }
   return parse(r);
@@ -50,9 +51,11 @@ export async function upload<T = any>(path: string, file: File | Blob, fields: R
 }
 
 /** POST a FormData body (files plus fields); same CSRF and error handling as every other call. */
-export async function postForm<T = any>(path: string, fd: FormData): Promise<T> {
+export const postForm = <T = any>(path: string, fd: FormData) => sendForm<T>('POST', path, fd);
+/** Send a FormData body with any method (PUT for Work Mode uploads). */
+export async function sendForm<T = any>(method: string, path: string, fd: FormData): Promise<T> {
   let r: Response;
-  try { r = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: headers('POST'), body: fd }); }
+  try { r = await fetch(path, { method, credentials: 'same-origin', headers: headers(method), body: fd }); }
   catch { throw new ApiError(0, { code: 'offline', message: 'Cannot reach the server. Check your connection.' }); }
   return parse(r);
 }
