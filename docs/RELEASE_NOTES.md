@@ -1,5 +1,18 @@
 # Release notes
 
+## 0.5.12 (editing profiles: OpenJutsu and similar)
+
+Backend and UI; no schema change. Needs a Sarness engine that provides `/v1/registry` and `/v1/profiles/{id}/jobs`; on an older engine nothing changes.
+
+- **Profiles appear as video models.** A composite capability the engine publishes (for example "OpenJutsu - MiniMax H3") is offered in Video with the
+  engine's own readiness. One the engine reports not ready cannot be started, and the reason it gives is shown.
+- **A form from the engine's schema.** Choosing a profile replaces the picture/video settings with a form built from the `inputs_schema` the engine publishes:
+  source video, reference pictures, numbers and choices. Send stays off, with a plain reason, until required inputs are present.
+- **`POST /api/media/profile-jobs`** (multipart: `model_id`, `inputs` JSON, `file:<input>` parts). Inputs are validated against the engine's schema and
+  `media.profile_upload_max_mb` (default 512), the files go to the engine, and an ordinary durable job runs; the result is collected and stored (encrypted)
+  like any generation and appears in the Library. The plain `/api/media/jobs` refuses profiles.
+- Model licences travel with the profile (OpenJutsu uses MiniMax H3, whose licence excludes the EU, UK, South Korea and the USA).
+
 ## 0.5.11 (embedding: inputs over the model's token limit)
 
 Backend only; no schema change. A single input longer than the embedding server's per-slot context (for example 6000 characters of digits or
