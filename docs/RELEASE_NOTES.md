@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.5.11 (embedding: inputs over the model's token limit)
+
+Backend only; no schema change. A single input longer than the embedding server's per-slot context (for example 6000 characters of digits or
+CJK) used to make the server refuse the whole batch, so all 16 vectors were lost and search fell back to keyword.
+
+- **Isolation.** Only an HTTP 400/413/422 on a batch triggers recovery; the items are retried one at a time so good inputs keep exactly their
+  vectors. Ordinary batches are unchanged: same requests, bit-identical vectors, no extra round trips.
+- **Splitting.** An input the server still refuses is counted with the server's `/tokenize`, cut into overlapping token windows that fit the
+  limit read from `/props` (per slot), embedded, and combined (mean, re-normalised) into one vector, so `embed()` still returns one vector per
+  input. At most 8 windows; a longer tail is dropped with a warning and a `truncated` report. Failures name the input and are raised only after the
+  others were attempted. `embed_with_report()` and `STATS` expose what happened; logs never contain text.
+
 ## 0.5.10 (model access labels, neutral product naming)
 
 Backend and UI only; the database schema is unchanged.
