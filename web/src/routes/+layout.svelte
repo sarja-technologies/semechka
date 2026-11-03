@@ -29,6 +29,6 @@
 </script>
 <svelte:head><title>{app.brand.tab_title || 'Semechka'}</title></svelte:head>
 <a class="skip" href="#main">Skip to content</a>
-{#if app.offline}<div class="notice warn" role="alert" style="margin:0;border-radius:0">You are offline or the Semechka server is not reachable. Changes will not be saved until it is back.</div>{/if}
+{#if app.offline}<div class="notice warn" role="alert" style="margin:0;border-radius:0">You are offline or the server is not reachable. Changes will not be saved until it is back.</div>{/if}
 {#if app.ready}{@render children()}{:else}<p class="muted" style="padding:24px" role="status">Loading…</p>{/if}
 <Toasts />

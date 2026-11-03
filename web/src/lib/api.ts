@@ -32,7 +32,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   try {
     r = await fetch(path, { method, credentials: 'same-origin', headers: headers(method, body !== undefined ? { 'content-type': 'application/json' } : {}), body: body !== undefined ? JSON.stringify(body) : undefined });
   } catch {
-    throw new ApiError(0, { code: 'offline', message: 'Cannot reach the Semechka server. Check your connection.' });
+    throw new ApiError(0, { code: 'offline', message: 'Cannot reach the server. Check your connection.' });
   }
   return parse(r);
 }
@@ -64,7 +64,7 @@ export function stream(path: string, body: unknown, onEvent: (e: any) => void): 
       r = await fetch(path, { method: 'POST', credentials: 'same-origin', signal: ctrl.signal, headers: headers('POST', { 'content-type': 'application/json' }), body: JSON.stringify(body) });
     } catch (e: any) {
       if (e?.name === 'AbortError') return;
-      throw new ApiError(0, { code: 'offline', message: 'Cannot reach the Semechka server. Check your connection.' });
+      throw new ApiError(0, { code: 'offline', message: 'Cannot reach the server. Check your connection.' });
     }
     if (!r.ok) { await parse(r); return; }
     const reader = r.body!.getReader(); const dec = new TextDecoder(); let buf = '';

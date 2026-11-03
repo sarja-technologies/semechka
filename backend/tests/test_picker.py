@@ -34,6 +34,10 @@ def test_owner_sees_every_usable_model_with_real_names_details_and_live_state(mo
     assert list(m) == ["fake-chat", "fake-big"]  # offered first; fake-big is usable only through models.use_all
     chat, big = m["fake-chat"], m["fake-big"]
     assert chat["restricted"] is False and big["restricted"] is True and big["usable"] is True
+    # the reason is explicit and about access, not a generic badge
+    assert chat["access"] == "offered" and chat["access_label"] == ""
+    assert big["access"] in ("not_enabled", "access_restricted") and big["access_label"] in ("Not enabled", "Access restricted")
+    assert "administrator" in big["access_note"]
     # an alias nobody chose (the one made from the identifier) gives way to the engine's own name
     assert chat["label"] == "Fake chat · Q8_0" and chat["sub"] is None and chat["alias"] == "fake-chat"
     assert chat["real_id"] == "local:fake-chat"
@@ -202,3 +206,22 @@ def test_real_names_never_fall_back_to_an_identifier_for_people_without_tech_mod
     assert by_alias(picker(member))["fake-chat"]["label"] == "fake-chat"
     assert "local:" not in str(picker(member))
     assert by_alias(picker(mo))["fake-chat"]["label"] == "local:fake-chat"  # the owner holds tech.model.id
+
+
+# ---- the badge describes access, never what the model is -------------------------------------------------
+def test_access_label_does_not_depend_on_what_the_model_is(mo, st):
+    """Abliterated, uncensored, fine-tuned and locally hosted models are offered like any other once enabled and granted.
+    Only configuration (not enabled, or no grant for the role) produces a label, and the label names that cause."""
+    from semechka import perms, services
+    owner = perms.Principal("t", "active", [], [], [], "", "t")
+    with st.db.session() as s:
+        m = s.execute(select(Model).where(Model.alias == "fake-chat")).scalar_one()
+        grants = catalog_svc.grants_by_model(s).get(m.id, [])
+        baseline = services.access_state(s, owner, m, "chat", grants)
+        for alias in ("huihui-qwen3.8-27b-abliterated@Q6_K", "qwen3.8-27b-uncensored-hauhaucs@Q6_K_P",
+                      "dolphin3.0-r1-mistral-24b@Q6_K", "my-local-finetune"):
+            m.alias, m.real_id, m.enabled = alias, "local:" + alias, True
+            assert services.access_state(s, owner, m, "chat", grants) == baseline, alias  # the name changes nothing
+            m.enabled = False
+            assert services.access_state(s, owner, m, "chat", grants) == "not_enabled", alias
+        s.rollback()

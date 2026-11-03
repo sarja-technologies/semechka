@@ -1,5 +1,19 @@
 # Release notes
 
+## 0.5.10 (model access labels, neutral product naming)
+
+Backend and UI only; the database schema is unchanged.
+
+- **Model badges describe access, not the model.** The picker's single "Restricted" tag was shown whenever someone reached a model
+  only through `models.use_all`, which includes every newly discovered model (discovery inserts them disabled) and every model
+  without a grant for the viewer's role. It never looked at what the model is, so abliterated, uncensored, fine-tuned and locally hosted
+  models were affected only when an administrator had not enabled or granted them. Catalog rows now carry `access`
+  (`offered`, `not_enabled`, `access_restricted`, `unavailable`), `access_label` and `access_note` that name the real cause. `restricted`
+  stays in the response for older clients with the same meaning. Whether a model is loaded, loading or runnable is unchanged and comes from
+  the engine's `state`. Access rules themselves are untouched.
+- User-facing messages no longer name the framework ("Cannot reach the server."); the product name comes from `brand.*` settings.
+- `scripts/spark/brand_rename.py`: operator-side, audited update of the product name on one instance.
+
 ## 0.5.9 (Schemra integration)
 
 Adds the authenticated `/schemra/` route to Schemra, the separate local AI training lab, and brings the earlier proxy branch onto the

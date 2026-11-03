@@ -148,7 +148,7 @@
                   <span class="txt">
                     <span class="al"><span class="lb">{m.label}</span>
                       {#if m.state && STATE[m.state]}<span class="st" data-state={m.state} title={STATE[m.state]}><span class="sr-only">{STATE[m.state]}</span></span>{/if}
-                      {#if m.restricted && !s.off}<span class="tag" title="Not offered to everyone; you can use it because of your role">Restricted</span>{/if}
+                      {#if m.access_label && !s.off}<span class="tag" title={m.access_note}>{m.access_label}</span>{/if}
                       {#if m.external}<span class="tag warn">External service</span>{/if}
                     </span>
                     {#if m.sub}<span class="ln">{m.sub}</span>{/if}

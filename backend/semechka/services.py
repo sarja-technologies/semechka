@@ -108,10 +108,36 @@ def accessible_models(s, p: perms.Principal, st, mode: str = "chat", *, include_
     return offered + restricted
 
 
+# Why a model is not simply "offered" to someone who can still use it. These are ACCESS facts about the viewer's account and
+# the administrator's configuration. They say nothing about the model's content, origin or safety characteristics (an
+# abliterated, fine-tuned or locally hosted model is offered like any other once an administrator has enabled it), and
+# nothing about whether it is loaded or runnable right now (that is the engine's `state`).
+ACCESS_OFFERED = "offered"
+ACCESS_NOT_ENABLED = "not_enabled"
+ACCESS_NOT_GRANTED = "access_restricted"
+ACCESS_TEXT = {
+    ACCESS_NOT_ENABLED: ("Not enabled",
+                         "An administrator has not turned this model on for users yet. You can see and use it only because of "
+                         "your administrator permissions."),
+    ACCESS_NOT_GRANTED: ("Access restricted",
+                         "Your role has not been granted this model. You can use it only because of your administrator "
+                         "permissions."),
+}
+
+
+def access_state(s, p: perms.Principal, m: Model, mode: str, grants: list[ModelGrant]) -> str:
+    """ACCESS_OFFERED, or the one configured reason the person reaches this model only through models.use_all."""
+    from . import catalog_svc
+    if not m.enabled:
+        return ACCESS_NOT_ENABLED
+    if not catalog_svc.decide(grants, p, GRANT_MODE.get(mode, mode))[0]:
+        return ACCESS_NOT_GRANTED
+    return ACCESS_OFFERED
+
+
 def is_restricted(s, p: perms.Principal, m: Model, mode: str, grants: list[ModelGrant]) -> bool:
     """True when the person can use the model only because of models.use_all (it is not offered to them)."""
-    from . import catalog_svc
-    return not m.enabled or not catalog_svc.decide(grants, p, GRANT_MODE.get(mode, mode))[0]
+    return access_state(s, p, m, mode, grants) != ACCESS_OFFERED
 
 
 # ---- modes ----------------------------------------------------------------------------------------

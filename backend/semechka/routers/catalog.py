@@ -300,7 +300,7 @@ TECH_FIELDS = [  # profile/meta field -> the technical-visibility permission tha
 ]
 
 
-def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, restricted: bool, usable: bool) -> dict:
+def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, access: str, usable: bool) -> dict:
     p, meta = ctx.principal, m.meta or {}
     # the engine's own name; failing that the identifier, which only tech.model.id may see
     real = meta.get("engine_name") or (services.display_id(m.real_id) if p.can("tech.model.id") else m.alias)
@@ -328,7 +328,11 @@ def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, restricted: 
     if meta.get("reasoning"):
         details["reasoning"] = True
     info = meta.get("media") or {}
-    row = {"id": m.id, "label": label, "sub": sub, "alias": m.alias, "pinned": m.pinned, "restricted": restricted,
+    label_a, note_a = services.ACCESS_TEXT.get(access, ("", ""))
+    # `access` is the viewer's account/admin-configuration fact; `restricted` is kept for older clients (same meaning:
+    # not simply offered). It is never derived from what the model is.
+    row = {"id": m.id, "label": label, "sub": sub, "alias": m.alias, "pinned": m.pinned,
+           "access": access, "access_label": label_a, "access_note": note_a, "restricted": access != services.ACCESS_OFFERED,
            "usable": usable, "capabilities": catalog_svc.capabilities(m), "external": services.is_external(m, b),
            "provider": prof.get("provider"), "provider_label": prof.get("provider_label"), "icon": prof.get("icon"),
            "based_on": prof.get("based_on"), "modality": prof.get("modality"), "description": prof.get("description"),
@@ -368,7 +372,7 @@ async def chooser(operation: str = "text", ctx: Ctx = Depends(current)):
     grants = catalog_svc.grants_by_model(ctx.s)
     icons, logos = _provider_icons(ctx), _logos(ctx)
     rows = [_row(ctx, m, b, catalog_svc.profile_of(m, icons, logos), opts, usable=True,
-                 restricted=services.is_restricted(ctx.s, p, m, mode, grants.get(m.id, []))) for m, b in usable]
+                 access=services.access_state(ctx.s, p, m, mode, grants.get(m.id, []))) for m, b in usable]
     others = []
     if p.can("models.view_all"):  # every installed model for this operation, even ones they cannot use
         have = {r["id"] for r in rows}
@@ -379,7 +383,11 @@ async def chooser(operation: str = "text", ctx: Ctx = Depends(current)):
             if m.id in have or m.hidden or not m.available or b is None or need not in catalog_svc.capabilities(m):
                 continue
             ok, why = services.model_access(ctx.s, p, m, b, ctx.st, mode, grants.get(m.id, []))
-            r = _row(ctx, m, b, catalog_svc.profile_of(m, icons, logos), opts, usable=False, restricted=True)
+            r = _row(ctx, m, b, catalog_svc.profile_of(m, icons, logos), opts, usable=False,
+                     access=services.access_state(ctx.s, p, m, mode, grants.get(m.id, [])))
+            if r["access"] == services.ACCESS_OFFERED:  # offered by configuration but refused for another reason
+                r["access"], r["access_label"], r["restricted"] = "unavailable", "Unavailable", True
+                r["access_note"] = why
             r["reason"] = why
             others.append(r)
     status_ok = p.can("models.status.view")
