@@ -79,6 +79,25 @@ test('approvals fold per step and only unanswered ones are pending', () => {
   assert.equal((items[0] as any).data.command, 'git push');
 });
 
+test('the same step number in two runs is two questions', () => {
+  const items = buildItems([
+    ev(1, 'approval', { step: 2, tool: 'work_shell', status: 'pending' }, { run_id: 'r1' }),
+    ev(2, 'approval', { step: 2, tool: 'work_shell', status: 'denied' }, { run_id: 'r1' }),
+    ev(3, 'approval', { step: 2, tool: 'work_write_file', status: 'pending' }, { run_id: 'r2' })
+  ]);
+  assert.equal(items.length, 2);
+  assert.deepEqual(pendingApprovals(items).map((i) => (i as any).data.tool), ['work_write_file']);
+});
+
+test('a delegation that waits for the engine keeps its note while it is running', () => {
+  const items = buildItems([
+    ev(1, 'delegate', { delegate_id: 'd1', model: 'm', task: 't', status: 'running' }),
+    ev(2, 'delegate', { delegate_id: 'd1', model: 'm', task: 't', status: 'running', note: 'Waiting for the engine: not enough memory' })
+  ]);
+  assert.equal(items.length, 1);
+  assert.equal((items[0] as any).data.note, 'Waiting for the engine: not enough memory');
+});
+
 test('unknown event kinds are skipped; error and state events keep their place', () => {
   const items = buildItems([ev(1, 'state', { status: 'running' }), { ...ev(2, 'message'), kind: 'future' as any }, ev(3, 'error', { message: 'boom' })]);
   assert.deepEqual(items.map((i) => i.type), ['state', 'error']);

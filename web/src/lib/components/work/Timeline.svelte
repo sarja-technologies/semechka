@@ -39,6 +39,7 @@
             <span class="spacer"></span>
             <span class="chip {d.status === 'done' ? 'ok' : d.status === 'failed' ? 'bad' : 'info'}">{d.status === 'done' ? 'Done' : d.status === 'failed' ? 'Failed' : 'Working'}</span>
           </button>
+          {#if d.status === 'running' && d.note}<p class="tiny muted wait" role="status">{d.note}</p>{/if}
           {#if openDelegates[it.key]}
             <div class="db"><p class="lbl">Task</p><p class="small">{d.task}</p>
               {#if d.result}<p class="lbl">Answer</p><Markdown text={d.result} />{/if}
@@ -73,5 +74,6 @@
   .dh { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; min-height: 36px; border-radius: var(--radius); }
   .dh:hover { background: var(--hover); } .dh:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .chev { display: inline-flex; transition: transform var(--fast) var(--ease); color: var(--fg-muted); } .chev.open { transform: rotate(90deg); }
+  .wait { margin: 0; padding: 0 12px 8px; }
   .db { padding: 0 12px 12px; } .lbl { margin: 8px 0 2px; font-size: 12px; font-weight: 600; color: var(--fg-muted); }
 </style>

@@ -90,9 +90,10 @@ export function buildItems(events: WorkEvent[]): Item[] {
       }
       case 'approval': {
         const sk = String(d.step ?? e.step_n ?? e.id);
-        put(`p:${sk}`, (prev) => {
+        const pk = `${e.run_id ?? ''}:${sk}`; // a step number repeats from one run to the next; the run keeps the questions apart
+        put(`p:${pk}`, (prev) => {
           const p = prev?.type === 'approval' ? prev : undefined;
-          return { key: `p:${sk}`, type: 'approval', id: p?.id ?? e.id, at: p?.at ?? e.created_at, data: { ...(p?.data ?? {}), ...d, step: d.step ?? e.step_n ?? sk, status: d.status ?? 'pending' }, summary: e.summary ?? p?.summary, stepKey: sk };
+          return { key: `p:${pk}`, type: 'approval', id: p?.id ?? e.id, at: p?.at ?? e.created_at, data: { ...(p?.data ?? {}), ...d, step: d.step ?? e.step_n ?? sk, status: d.status ?? 'pending' }, summary: e.summary ?? p?.summary, stepKey: sk };
         });
         break;
       }
