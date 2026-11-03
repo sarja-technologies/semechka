@@ -476,7 +476,7 @@ def _down_11(conn: Connection, c: Ctx) -> None:
             if gone & set(grants) or gone & set(denies):
                 conn.execute(text(f'update "{table}" set grants=:g, denies=:d where {key}=:i'),
                              {"g": json.dumps([x for x in grants if x not in gone]), "d": json.dumps([x for x in denies if x not in gone]), "i": rid})
-    conn.execute(text("delete from meta where key='m11_roles'"))
+    conn.execute(text("delete from meta where key='m11_roles' or key like 'work_builtin_skills:%'"))  # the built-in skills go with their table
     for pref in _SETTINGS_11:
         conn.execute(text("delete from setting_values where key like :k"), {"k": pref + "%"})
     if c.data_dir:

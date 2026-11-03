@@ -17,6 +17,7 @@ import contextlib
 import json
 import re
 import time
+from collections import Counter
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -234,6 +235,7 @@ def t_resources(tc, w: Wk, a: dict) -> ToolOut:
         mine = {"active": media_svc.count_active(s, w.user_id), "concurrent": val("media.max_concurrent_jobs"),
                 "today": media_svc.generations_today(s, w.user_id), "daily": val("media.daily_generations") or None,
                 "stored": media_svc.count_assets(s, w.user_id), "max_assets": val("media.max_assets")}
+        own_remote = {r for (r,) in s.execute(select(MediaJob.remote_id).where(MediaJob.user_id == w.user_id, MediaJob.status.in_(media_svc.ACTIVE)))}
     for b in backends.values():
         info = engine_info(w.st, b)
         res, reg = info.get("resources"), info.get("registry")
@@ -261,10 +263,15 @@ def t_resources(tc, w: Wk, a: dict) -> ToolOut:
         if jobs is None:
             lines.append("  Engine jobs: not reported.")
         else:
-            lines.append("  Engine jobs (everyone's): " + (", ".join(
-                f"{j.get('id')} {j.get('kind')} {j.get('status')}" + (f" {j['model']}" if j.get("model") else "")
+            mine_j = [j for j in jobs if j.get("id") in own_remote]
+            others = [j for j in jobs if j.get("id") not in own_remote]
+            lines.append("  Your engine jobs: " + (", ".join(
+                f"{j.get('kind')} {j.get('status')}" + (f" {j['model']}" if j.get("model") else "")
                 + (f" {int(j['progress'] * 100)}%" if isinstance(j.get("progress"), (int, float)) else "")
-                + (f" waiting: {j['waiting_reason']}" if j.get("waiting_reason") else "") for j in jobs[:12]) if jobs else "none"))
+                + (f" waiting: {j['waiting_reason']}" if j.get("waiting_reason") else "") for j in mine_j[:12]) if mine_j else "none"))
+            if others:  # other people's jobs are counted, not described
+                lines.append("  Other jobs on the engine: " + ", ".join(
+                    f"{n} {k} {st_}" for (k, st_), n in sorted(Counter((j.get("kind") or "?", j.get("status") or "?") for j in others).items())))
     if not backends:
         lines.append("No engine reports resources for your models.")
     lines.append(f"Your generation limits: {mine['active']} running of {mine['concurrent']} at once; {mine['today']} started in the last 24 h"
@@ -342,12 +349,26 @@ def _alias(st, model_id: str) -> str:
         return m.alias if m else model_id
 
 
+def refresh_job(st, job_id: str) -> None:
+    """Advance one job through the media block. The block reads in one transaction and then writes in it, which SQLite refuses at once (not after
+    waiting) when another writer holds the lock at that moment; that is not a failure of the job, so ask again a few times."""
+    from sqlalchemy.exc import OperationalError
+    for attempt in range(6):
+        try:
+            bridge(media_svc.refresh(st, job_id), 90)
+            return
+        except OperationalError as e:
+            if "locked" not in str(e) or attempt == 5:
+                raise
+            time.sleep(0.2 * (attempt + 1))
+
+
 def wait_for(w: Wk, job_id: str, timeout_s: float, alias: str, extra: dict) -> dict:
     """Advance the job through the media block until it ends or `timeout_s` passes; one `job` event per real change. -> snapshot."""
     deadline = time.monotonic() + max(0.0, timeout_s)
     last_key, last_t = None, 0.0
     while True:
-        bridge(media_svc.refresh(w.st, job_id), 90)
+        refresh_job(w.st, job_id)
         snap = snapshot(w.st, job_id)
         if snap is None:
             raise ToolError("The job record is gone.")
@@ -658,7 +679,7 @@ def _describe(snap: dict, alias: str) -> str:
 def t_job_status(tc, w: Wk, a: dict) -> ToolOut:
     snap, ev = own_job(w, a_str(a, "id", maxlen=80))
     if snap["status"] in media_svc.ACTIVE:
-        bridge(media_svc.refresh(w.st, snap["id"]), 90)
+        refresh_job(w.st, snap["id"])
         snap = snapshot(w.st, snap["id"]) or snap
     alias = ev.get("model") or _alias(w.st, snap["model_id"])
     job_event(w, snap, alias, **({"out": ev["out"]} if ev.get("out") else {}))

@@ -7,7 +7,8 @@ timeline while it is retried, and returned to the agent in the engine's words wh
 
 Bounds, all enforced here: depth (`work.delegation_max_depth`), count per run (`work.delegation_max_count`), one wall-clock limit per call
 (`work.delegate_timeout_s`, waiting for memory included) and a token cap on the answer (`work.delegate_max_tokens`). The helper has no
-tools. At a depth below the limit it may consult one more model by answering with a single JSON object; that is how depth above 1 arises.
+tools, and a reasoning model is asked NOT to think unless the agent passes `think: true` (the real engine's small qwen3.5 spends its whole token
+budget thinking and returns an empty answer otherwise; seen on the Spark). At a depth below the limit it may consult one more model by answering with a single JSON object; that is how depth above 1 arises.
 Files are data: text is quoted into the task, pictures go to models that can read them.
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ from .models import User
 from .agent_svc import ToolError, ToolOut
 from .models_work import WorkEvent
 from .work_engine import bridge, find_model, models_of, scope
-from .work_tools import Wk, a_str, guess_mime, norm_path, scrub, work_tool
+from .work_tools import Wk, a_bool, a_str, guess_mime, norm_path, scrub, work_tool
 
 MAX_FILES = 4
 MAX_TEXT_FILE = 20_000
@@ -130,7 +131,8 @@ async def _ask(w: Wk, turn, deadline: float, on_wait) -> tuple[str, dict]:
             raise ToolError(scrub(str(e))) from None
 
 
-def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, parent_id: str | None, caller_model: str | None) -> str:
+def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, parent_id: str | None, caller_model: str | None,
+                  think: bool = False) -> str:
     max_depth, max_count, timeout_s, max_tokens = _limits(w)
     if max_depth < 1 or max_count < 1:
         raise ToolError("Delegation is switched off on this server.")
@@ -172,7 +174,7 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
         answer = ""
         for turn_no in range(MAX_TURNS):
             turn = agent_svc.Turn("model", messages=msgs, model_pk=m.id, user_id=w.user_id, org_id=w.org_id, person=person,
-                                  max_wait=float(timeout_s), max_tokens=max_tokens)
+                                  max_wait=float(timeout_s), max_tokens=max_tokens, thinking=think)
             left = deadline - time.monotonic()
             if left <= 0:
                 raise ToolError(f"The delegated task did not finish within {timeout_s} seconds.")
@@ -185,7 +187,7 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
                 answer = _clean_answer(reply)
                 break
             try:
-                sub = delegate_once(w, nested["model"], nested["task"], [], depth + 1, did, m.id)
+                sub = delegate_once(w, nested["model"], nested["task"], [], depth + 1, did, m.id, think)
             except ToolError as e:
                 sub = f"The consultation was refused: {e}"
             msgs += [{"role": "assistant", "content": reply}, {"role": "user", "content": "Answer from the consulted model (data, check it):\n" + sub[:6000]}]
@@ -201,7 +203,7 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
     return f"Answer from {m.alias} (depth {depth}, {secs}s, {used['tokens_in']}+{used['tokens_out']} tokens):\n{answer[:ANSWER_CAP]}"
 
 
-@work_tool("delegate", "Ask ANOTHER model for a bounded sub-task (it has no tools). files: /work paths (pictures need a vision model). Check its answer.",
+@work_tool("delegate", "Ask ANOTHER model for a bounded sub-task (no tools). files: /work paths. think: true lets a reasoning model think first. Check its answer.",
            '{"model": "qwen3.5-0.8b@Q8_0", "task": "Translate to French: good morning", "files": []}')
 def t_delegate(tc, w: Wk, a: dict) -> ToolOut:
     task = a_str(a, "task", maxlen=12000).strip()
@@ -209,6 +211,6 @@ def t_delegate(tc, w: Wk, a: dict) -> ToolOut:
     files = a.get("files") if isinstance(a.get("files"), list) else ([a["files"]] if isinstance(a.get("files"), str) else [])
     if len(files) > MAX_FILES:
         raise ToolError(f"files: at most {MAX_FILES} files.")
-    text = delegate_once(w, model, task, files, 1, None, None)
+    text = delegate_once(w, model, task, files, 1, None, None, a_bool(a, "think", False))
     w.done(delegate=True)
     return ToolOut(scrub(text))

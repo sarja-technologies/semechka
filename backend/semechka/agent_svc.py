@@ -782,6 +782,7 @@ class Turn:
     max_wait: float = 3600.0
     person: str = ""
     max_tokens: int = 4096
+    thinking: bool | None = None  # None: the engine's default for the model; True or False asks a reasoning model to think or not
 
 
 def _enc(st, org_id, text):
@@ -963,6 +964,8 @@ async def _call_model_once(st, turn: Turn) -> tuple[str, dict]:
         n_ctx, ratio = chat_svc.window_for(st, m)
         m_copy = m
     params = {"temperature": 0.2, "max_tokens": turn.max_tokens}
+    if turn.thinking is not None:
+        params["thinking"] = turn.thinking
     messages, _ = chat_svc.fit(turn.messages, n_ctx, params["max_tokens"], ratio)
     t0 = _t.monotonic()
     text, usage, timings = [], None, None
