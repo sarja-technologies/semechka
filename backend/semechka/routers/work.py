@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .. import services, work_runtime, work_svc
+from .. import services, work_runtime, work_skills, work_svc
 from ..deps import Ctx, current
 from ..models_work import WorkArtifact, WorkSession
 from ..tenancy_svc import TenancyError
@@ -89,9 +89,13 @@ def options(ctx: Ctx = Depends(current)):
                        "ready": bool(m.available and b.enabled), "loaded": (m.meta or {}).get("loaded"),
                        "external": services.is_external(m, b)})
     ok, why = _image_ready(ctx)
-    ceil = {"memory_mb": c.memory_mb, "cpus": c.cpus, "workspace_mb": c.workspace_mb, "tool_timeout_s": c.tool_timeout_s, "max_steps": c.max_steps,
-            "pids": c.pids, "artifact_mb": c.artifact_mb, "upload_mb": c.upload_mb}
-    return {"models": models, "skills": [], "limits": ceil, "network_allowed": c.network_allowed,
+    d = ctx.st.settings.deployment
+    ceil = {"memory_mb": c.memory_mb, "cpus": c.cpus, "workspace_max_mb": c.workspace_mb, "tool_timeout_s": c.tool_timeout_s, "max_steps": c.max_steps,
+            "pids": c.pids, "artifact_mb": c.artifact_mb, "upload_max_mb": c.upload_mb, "max_sessions_per_user": c.per_user,
+            "max_sessions_stored": c.stored, "delegation_max_depth": int(d(ctx.s, "work.delegation_max_depth")),
+            "delegation_max_count": int(d(ctx.s, "work.delegation_max_count"))}
+    skills = [work_skills.summary(sk, ctx.principal, ctx.user.id) for sk in work_skills.list_for(ctx.st, ctx.s, ctx.user, ctx.principal)]
+    return {"models": models, "skills": skills, "limits": ceil, "network_allowed": c.network_allowed,
             "perms": {"network": ctx.principal.can("work.network"), "skills_manage": ctx.principal.can("work.skills.manage")},
             "autonomy": list(work_svc.AUTONOMY), "image_ready": ok, "image_problem": why, "image": c.image}
 
@@ -246,10 +250,20 @@ def files(sid: str, path: str = "", ctx: Ctx = Depends(current)):
         ents = work_svc.runtime(ctx.st).list(name, rel)
     except work_runtime.RuntimeError_ as e:
         raise _err(e) from None
+    from ..work_tools import guess_mime
     prefix = (rel + "/") if rel else ""
-    return {"path": rel, "container_state": "running", "entries": [
-        {"name": e.name, "type": e.type, "size": e.size, "mtime": e.mtime, "path": prefix + e.name, "link_ok": e.link_ok} for e in ents
-        if not (not rel and e.name == ".home")]}  # the account's home folder (tool caches) is not part of the person's files
+    out = []
+    for e in ents:
+        if not rel and e.name == ".home":
+            continue  # the account's home folder (tool caches) is not part of the person's files
+        item = {"name": e.name, "path": prefix + e.name, "type": "dir" if e.type == "dir" else "file", "size": e.size,
+                "modified": work_svc.iso(e.mtime), "link_ok": e.link_ok}
+        if e.type == "link":
+            item["link"] = True
+        if item["type"] == "file":
+            item["mime"] = guess_mime(e.name)
+        out.append(item)
+    return {"path": rel, "container_state": "running", "entries": out}
 
 
 def _file_response(data: bytes, mime: str, name: str, download: bool) -> Response:
@@ -372,3 +386,70 @@ def artifact_content(aid: str, download: bool = False, ctx: Ctx = Depends(curren
 def save_to_library(aid: str, ctx: Ctx = Depends(current)):
     art, _sess = _own_artifact(ctx, aid)
     return call(work_svc.save_to_library, ctx.st, ctx.s, ctx.user, ctx.principal, art)
+
+
+# ---- skills ---------------------------------------------------------------------------------------------------------------
+class SkillIn(BaseModel):
+    scope: str | None = None
+    name: str | None = None
+    title: str | None = None
+    description: str | None = None
+    category: str | None = None
+    enabled: bool | None = None
+    body_md: str | None = None
+    files: list[dict] | None = None
+
+
+def _skill(ctx: Ctx, sid: str):
+    gate(ctx)
+    return call(work_skills.get_visible, ctx.s, ctx.user, sid)
+
+
+@router.get("/skills")
+def list_skills(ctx: Ctx = Depends(current)):
+    gate(ctx)
+    return [work_skills.summary(sk, ctx.principal, ctx.user.id) for sk in work_skills.list_for(ctx.st, ctx.s, ctx.user, ctx.principal)]
+
+
+@router.post("/skills")
+def create_skill(body: SkillIn, ctx: Ctx = Depends(current)):
+    gate(ctx)
+    sk = call(work_skills.create, ctx.st, ctx.s, ctx.user, ctx.principal, body.model_dump(exclude_unset=True), ctx.ip)
+    return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
+
+
+@router.post("/skills/import")
+def import_skill(file: UploadFile = File(...), scope: str = Form("user"), ctx: Ctx = Depends(current)):
+    gate(ctx)
+    raw = file.file.read(work_skills.BODY_MAX + 8193)
+    sk = call(work_skills.import_markdown, ctx.st, ctx.s, ctx.user, ctx.principal, file.filename or "", raw, scope, ctx.ip)
+    return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
+
+
+@router.get("/skills/{sid}")
+def get_skill(sid: str, ctx: Ctx = Depends(current)):
+    return work_skills.full(ctx.st, _skill(ctx, sid), ctx.principal, ctx.user.id)
+
+
+@router.put("/skills/{sid}")
+def put_skill(sid: str, body: SkillIn, ctx: Ctx = Depends(current)):
+    sk = call(work_skills.update, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), body.model_dump(exclude_unset=True), ctx.ip)
+    return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
+
+
+@router.delete("/skills/{sid}")
+def delete_skill(sid: str, ctx: Ctx = Depends(current)):
+    call(work_skills.delete, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), ctx.ip)
+    return {"ok": True}
+
+
+@router.post("/skills/{sid}/enable")
+def enable_skill(sid: str, ctx: Ctx = Depends(current)):
+    sk = call(work_skills.set_enabled, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), True, ctx.ip)
+    return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
+
+
+@router.post("/skills/{sid}/disable")
+def disable_skill(sid: str, ctx: Ctx = Depends(current)):
+    sk = call(work_skills.set_enabled, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), False, ctx.ip)
+    return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)

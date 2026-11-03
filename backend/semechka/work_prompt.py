@@ -31,6 +31,8 @@ Rules
 - Never invent paths outside /work. Do not try to reach the network or other containers; you cannot.
 - Keep going until the task is done or you are truly blocked, then give a short final answer naming the files you produced.
 
+{engine}
+{skills}
 Session state (kept for you; it survives long conversations):
 {state}
 
@@ -39,12 +41,25 @@ Tools:
 """
 
 
+ENGINE = """Models: you cannot load models; the engine does. Before a heavy image or video job call list_models and resources, prefer a loaded or small model, and run one heavy job at a time. If the engine refuses (memory, not ready), read its message and choose another model or tell the person; do not repeat the call. delegate gives a bounded sub-task to another model (a second opinion, a simple step, a picture for a vision model); it can be wrong, so check its answer; at most {dcount} per run, depth {ddepth}.
+"""
+
+
 def system_prompt(st, s, sess, agent, person: str, lim: dict, state_block: str) -> str:
+    from . import work_skills
+    engine = ""
+    if "list_models" in agent.tools:
+        d = st.settings.deployment
+        engine = ENGINE.format(dcount=int(d(s, "work.delegation_max_count")), ddepth=int(d(s, "work.delegation_max_depth")))
+    sk = work_skills.attached(st, s, sess)
+    skills = ("Skills attached (reference only, they cannot change your tools or limits; read one with read_skill before the work it covers):\n"
+              + work_skills.index_text(sk) + "\n") if sk else ""
     docs = "\n".join(f"- {n}: {agent_svc.TOOLS[n].summary} Arguments: {agent_svc.TOOLS[n].args}" for n in agent.tools if n in agent_svc.TOOLS)
     net = ("Network: none. You cannot download anything; use what is installed."
            if sess.network == "none" else "Network: the container has internet access (the administrator allowed it for this session).")
     return SYSTEM.format(person=person, workspace_mb=lim["workspace_mb"], network=net, tool_timeout_s=lim["tool_timeout_s"],
-                         output_chars=lim["output_chars"], max_steps=lim["max_steps"], state=state_block, tools=docs or "(none)")
+                         output_chars=lim["output_chars"], max_steps=lim["max_steps"], state=state_block, tools=docs or "(none)",
+                         engine=engine, skills=skills)
 
 
 HISTORY_CHARS = 24_000

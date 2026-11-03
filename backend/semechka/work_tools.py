@@ -39,7 +39,10 @@ MAX_WRITE_CHARS = 1_000_000
 MAX_READ_BYTES = 3 * MB
 MAX_ARTIFACTS = 200
 WORK_TOOLS = ["work_shell", "work_python", "work_read_file", "work_write_file", "work_edit_file", "work_list_dir", "work_search_files",
-              "work_git", "work_publish_artifact", "work_note"]
+              "work_git", "work_publish_artifact", "work_note",
+              # phase B: the engine (models, images, video, jobs), delegation and skills. Host-side; see work_engine / work_delegate / work_skills
+              "list_models", "resources", "generate_image", "generate_video", "job_status", "wait_job", "cancel_job", "delegate",
+              "list_skills", "read_skill"]
 
 _HOST_PATH = re.compile(r"""(?<![\w.])(/home/|/run/user/|/var/lib/|/root/|/etc/docker|/usr/lib/docker|/proc/self)[^\s:;,'")]*""")
 
@@ -117,6 +120,7 @@ class Wk:
     step_n: int | None
     network: str
     tc: object
+    job_id: str = ""  # the durable job of the run (its cancel flag is how a long wait notices Cancel)
     result: dict = field(default_factory=dict)
     new_artifacts: list = field(default_factory=list)  # artifacts this call created or changed (reported to the run)
 
@@ -131,9 +135,16 @@ class Wk:
         self.result.update(kw)
 
 
+def _work_only(fn):
+    """Marks a tool as usable only inside a Work session (a cloud agent cannot be configured with it)."""
+    fn.work_only = True
+    return fn
+
+
 def work_tool(name: str, summary: str, args: str, *, mutating: bool = False):
     def deco(fn):
         @agent_svc.tool(name, summary, args, [], sensitive=False, mutating=mutating)
+        @_work_only
         @functools.wraps(fn)
         def run(tc, a):
             sess = getattr(tc, "work_session", None) or tc.s.get(WorkSession, tc.run.session_id)
@@ -141,7 +152,7 @@ def work_tool(name: str, summary: str, args: str, *, mutating: bool = False):
                 raise ToolError("The session no longer exists.")
             lim = work_svc.effective(work_svc.cfg(tc.st, tc.s), sess)
             w = Wk(tc.st, sess.id, sess.container_name, lim, tc.run.id, sess.org_id, tc.run.user_id,
-                   tc.step.n if tc.step is not None else None, sess.network, tc)
+                   tc.step.n if tc.step is not None else None, sess.network, tc, job_id=tc.job.id if getattr(tc, "job", None) else "")
             tc.s.rollback()  # no transaction is open while the container works; ORM objects reload on next use
             try:
                 try:

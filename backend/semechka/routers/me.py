@@ -42,6 +42,7 @@ def operations(ctx_s, st, p, g, modes: dict) -> dict:
         out[k] = {"enabled": bool(st_k["enabled"] and shown),
                   "reason": st_k["reason"] if not st_k["enabled"] else ("" if shown else "Hidden by your administrator.")}
     out["code"] = {"enabled": modes["code"]["enabled"], "reason": modes["code"]["reason"]}
+    out["work"] = {"enabled": modes["work"]["enabled"], "reason": modes["work"]["reason"]}  # the Work navigation entry
     return out
 
 

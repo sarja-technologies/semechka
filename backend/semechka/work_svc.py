@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from . import agent_svc, audit, authz, gateway_svc, jobs_svc, services, work_runtime
+from .models import Model
 from .models_agents import Agent, AgentRun, AgentStep
 from .models_files import Job
 from .models_tenancy import Org, OrgMember, Workspace
@@ -45,6 +46,14 @@ class WorkError(TenancyError):
 
 
 # ---- plumbing ----------------------------------------------------------------------------------------------
+def iso(ts: float | None) -> str | None:
+    """Timestamps in the Work API are ISO 8601 (UTC); the database keeps epoch seconds."""
+    if ts is None:
+        return None
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(float(ts), timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def enc(st, org_id: str, text: str) -> str:
     return st.vault.encrypt(text, f"org:{org_id}:content")
 
@@ -215,9 +224,11 @@ def create_session(st, s, user, principal, *, title: str = "", objective: str = 
             raise WorkError("model", "No chat model is available to you.", 409)
     title = (title or "").strip()[:200]
     objective = (objective or "").strip()[:MAX_MESSAGE_CHARS]
+    from . import work_skills
+    skill_ids = work_skills.check_ids(s, user, skill_ids)
     sess = WorkSession(user_id=user.id, org_id=org_id, title=title or (objective[:60] if objective else "New session"),
                        objective_enc=enc(st, org_id, objective), model_id=model_id, agent_id=agent.id, status="idle",
-                       network=network, autonomy=autonomy, skill_ids=[str(x) for x in (skill_ids or [])][:20],
+                       network=network, autonomy=autonomy, skill_ids=skill_ids,
                        limits=clamp_limits(c, limits))
     s.add(sess)
     s.flush()
@@ -245,7 +256,8 @@ def update_session(st, s, user, principal, sess: WorkSession, body: dict, ip: st
         check_model(st, s, principal, org, s.get(Workspace, s.get(Agent, sess.agent_id).workspace_id), body["model_id"])
         sess.model_id = body["model_id"]
     if "skill_ids" in body and body["skill_ids"] is not None:
-        sess.skill_ids = [str(x) for x in body["skill_ids"]][:20]
+        from . import work_skills
+        sess.skill_ids = work_skills.check_ids(s, user, body["skill_ids"])
     recreate = False
     if "network" in body and body["network"] is not None and body["network"] != sess.network:
         if busy:
@@ -343,12 +355,78 @@ def purge_user(st, s, user_id: str) -> int:
 def emit(st, s, sess: WorkSession, kind: str, summary: str, detail: dict | None = None, *, run_id: str | None = None,
          step_n: int | None = None) -> WorkEvent:
     """Append to the session timeline. `summary` is short and never carries content; `detail` is encrypted."""
+    if kind == "state":  # the timeline shows the status beside the note, so a state event always carries one
+        detail = {**(detail or {})}
+        detail.setdefault("status", sess.status)
+        detail.setdefault("note", summary)
     ev = WorkEvent(session_id=sess.id, kind=kind, run_id=run_id, step_n=step_n, summary=(summary or "")[:300],
                    payload_enc=enc(st, sess.org_id, json.dumps(detail, default=str)) if detail else "")
     s.add(ev)
     s.flush()
     sess.updated_at = ev.created_at
     return ev
+
+
+def call_id(ev: WorkEvent) -> str:
+    """A tool_call and its tool_result share this id (a step number alone repeats from one run to the next)."""
+    return f"{ev.run_id or 'r'}:{ev.step_n if ev.step_n is not None else ev.id}"
+
+
+def command_of(tool: str, args: dict) -> str:
+    """The line a person recognises a call by."""
+    a = args if isinstance(args, dict) else {}
+    if tool == "work_git":
+        g = a.get("args")
+        return "git " + (" ".join(map(str, g)) if isinstance(g, list) else str(g or ""))
+    for k in ("cmd", "code", "path", "pattern", "prompt", "task", "name", "text"):
+        if isinstance(a.get(k), str) and a[k].strip():
+            return a[k] if tool in ("work_shell", "work_python") else a[k][:300]
+    return ""
+
+
+def event_data(ev: WorkEvent, d: dict) -> dict:
+    """The stored detail of an event as the UI contract's `data` (docs/WORK_MODE.md section 10). Older rows are mapped the same way."""
+    k = ev.kind
+    if k == "tool_call":
+        tool = str(d.get("tool") or "")
+        out = {"call_id": call_id(ev), "tool": tool, "args": d.get("args") or {}}
+        cmd = command_of(tool, d.get("args") or {})
+        if cmd:
+            out["command"] = cmd
+        return out
+    if k == "tool_result":
+        text = str(d.get("text") or "")
+        err = str(d.get("error") or "")
+        out = {"call_id": call_id(ev), "tool": d.get("tool") or "", "ok": d.get("status") == "done",
+               "duration_ms": int(round(float(d.get("seconds") or 0) * 1000)), "output": text,
+               "truncated": "bytes in the middle were left out" in text}
+        if isinstance(d.get("exit"), int):
+            out["exit_code"] = d["exit"]
+        if err:
+            out["error"] = err
+        return out
+    if k == "artifact":
+        return {"artifact_id": d.get("artifact_id") or d.get("id"), "name": d.get("name"), "path": d.get("path"), "mime": d.get("mime"),
+                "size": d.get("size")}
+    if k == "approval":
+        status = d.get("status") or ("pending" if "reason" in d and "approved" not in d else ("approved" if d.get("approved") else "denied"))
+        out = {"step": d.get("step", ev.step_n), "tool": d.get("tool"), "status": status}
+        if d.get("reason"):
+            out["reason"] = d["reason"]
+        cmd = d.get("command") or command_of(str(d.get("tool") or ""), d.get("args") or {})
+        if cmd:
+            out["command"] = cmd
+        return out
+    if k == "state":
+        return {"status": d.get("status") or "idle", "note": d.get("note") or ev.summary}
+    if k == "error":
+        out = {"message": str(d.get("message") or ev.summary or "An error occurred.")}
+        if d.get("code"):
+            out["code"] = d["code"]
+        elif d.get("why"):
+            out["code"] = "bad_action"
+        return out
+    return d  # message, job, delegate: stored in the contract's shape already
 
 
 def event_out(st, sess: WorkSession, ev: WorkEvent) -> dict:
@@ -358,8 +436,8 @@ def event_out(st, sess: WorkSession, ev: WorkEvent) -> dict:
             detail = json.loads(dec(st, sess.org_id, ev.payload_enc))
         except ValueError:
             detail = {}
-    return {"id": ev.id, "kind": ev.kind, "run_id": ev.run_id, "step": ev.step_n, "summary": ev.summary, "detail": detail,
-            "at": ev.created_at}
+    return {"id": ev.id, "kind": ev.kind, "run_id": ev.run_id, "step_n": ev.step_n, "summary": ev.summary,
+            "created_at": iso(ev.created_at), "data": event_data(ev, detail)}
 
 
 def events_since(st, s, sess: WorkSession, since: int, limit: int = 200) -> list[dict]:
@@ -527,7 +605,8 @@ def reconcile(st) -> dict:
             sess = s.get(WorkSession, sid)
             if sess and sess.container_state in ("running", "stopped"):
                 sess.container_state = "absent"
-                emit(st, s, sess, "error", "The session's container was removed outside Semechka; a new one is created on next use.")
+                emit(st, s, sess, "error", "The session's container was removed outside Semechka; a new one is created on next use.",
+                         {"message": "The session's container was removed outside Semechka; a new one is created on next use.", "code": "container_removed"})
     return rep
 
 
@@ -559,7 +638,7 @@ def read_artifact(st, art: WorkArtifact, user_id: str) -> bytes:
 
 def artifact_out(a: WorkArtifact) -> dict:
     return {"id": a.id, "session_id": a.session_id, "path": a.path, "name": a.name, "mime": a.mime, "size": a.size, "sha256": a.sha256,
-            "created_at": a.created_at, "updated_at": a.updated_at, "step": a.created_by_step, "saved_to_library": a.saved_to_library,
+            "created_at": iso(a.created_at), "updated_at": iso(a.updated_at), "step": a.created_by_step, "saved_to_library": a.saved_to_library,
             "content_url": f"/api/work/artifacts/{a.id}/content"}
 
 
@@ -611,6 +690,8 @@ def post_message(st, s, user, principal, sess: WorkSession, content: str, ip: st
     if sess.model_id:
         check_model(st, s, principal, org, s.get(Workspace, agent.workspace_id), sess.model_id)  # refuse early, with the reason
     cur = active_run(s, sess)
+    if cur is not None and cur[1].cancel_requested:
+        raise WorkError("cancelling", "The run is being cancelled. Send your message again in a moment.", 409)
     seq = _next_seq(s, sess.id)
     if cur is not None:  # the active run reads it at its next model turn
         run, _job = cur
@@ -669,7 +750,7 @@ def cancel(st, s, user, sess: WorkSession) -> WorkSession:
         _close_run(st, s, sess, run, "cancelled", "Cancelled by you.")
     else:
         job.cancel_requested = True
-        emit(st, s, sess, "state", "Cancelling: running commands are being stopped", {"status": "cancelling"}, run_id=run.id)
+        emit(st, s, sess, "state", "Cancelling: running commands are being stopped", {"status": sess.status}, run_id=run.id)
     audit.record(s, user.id, "work.run.cancel", sess.id, {"run": run.id}, org_id=sess.org_id)
     return sess
 
@@ -696,8 +777,9 @@ def decide_approval(st, s, user, sess: WorkSession, step_n: int, approve: bool) 
     if job.status == "awaiting_approval" and sess.status != "paused":
         job.status, job.lease_until = "queued", 0
     sess.status = "paused" if sess.status == "paused" else "running"
-    emit(st, s, sess, "approval", ("Approved: " if approve else "Declined: ") + stp.tool, {"step": step_n, "approved": approve, "tool": stp.tool},
-         run_id=run.id, step_n=step_n)
+    emit(st, s, sess, "approval", ("Approved: " if approve else "Declined: ") + stp.tool,
+         {"step": step_n, "tool": stp.tool, "status": "approved" if approve else "denied", "approved": approve,
+          "reason": (stp.meta or {}).get("approval_reason", "")}, run_id=run.id, step_n=step_n)
     audit.record(s, user.id, "work.approval", sess.id, {"step": step_n, "approved": approve, "tool": stp.tool}, org_id=sess.org_id)
     return stp
 
@@ -719,6 +801,10 @@ def pending_approvals(st, s, sess: WorkSession) -> list[dict]:
 def _close_run(st, s, sess: WorkSession, run: AgentRun, outcome: str, message: str) -> None:
     """The run is over (any way): the session is free again; messages written while it ended start a follow-up run."""
     sess.active_run_id = None
+    if outcome != "succeeded":  # a question nobody can answer any more is marked, so the screen stops offering Approve and Deny
+        for stp in s.execute(select(AgentStep).where(AgentStep.run_id == run.id, AgentStep.status == "awaiting_approval")).scalars():
+            emit(st, s, sess, "approval", "No longer waiting: " + stp.tool, {"step": stp.n, "tool": stp.tool, "status": "expired"},
+                 run_id=run.id, step_n=stp.n)
     if outcome == "succeeded":
         sess.status = "idle"
     elif outcome == "cancelled":
@@ -729,7 +815,7 @@ def _close_run(st, s, sess: WorkSession, run: AgentRun, outcome: str, message: s
         sess.status = "failed"
         s.add(WorkMessage(session_id=sess.id, seq=_next_seq(s, sess.id), role="system",
                           content_enc=enc(st, sess.org_id, "The run stopped before finishing: " + message), run_id=run.id))
-        emit(st, s, sess, "error", "The run stopped: " + message[:200], {"message": message}, run_id=run.id)
+        emit(st, s, sess, "error", "The run stopped: " + message[:200], {"message": "The run stopped: " + message, "code": "run_failed"}, run_id=run.id)
     sess.last_active_at = time.time()
     if outcome == "succeeded":
         seen = int((run.usage or {}).get("seen_seq", 0))
@@ -786,11 +872,55 @@ async def sweeper(st) -> None:
 def session_out(st, s, sess: WorkSession, c: Cfg | None = None) -> dict:
     c = c or cfg(st, s)
     agent = s.get(Agent, sess.agent_id) if sess.agent_id else None
+    model = s.get(Model, sess.model_id) if sess.model_id else None
     return {"id": sess.id, "title": sess.title, "objective": dec(st, sess.org_id, sess.objective_enc), "model_id": sess.model_id,
+            "model_alias": model.alias if model else None,
             "status": sess.status, "container_state": sess.container_state, "network": sess.network, "autonomy": sess.autonomy,
             "skill_ids": sess.skill_ids or [], "limits": effective(c, sess), "active_run_id": sess.active_run_id,
-            "created_at": sess.created_at, "updated_at": sess.updated_at, "last_active_at": sess.last_active_at,
+            "created_at": iso(sess.created_at), "updated_at": iso(sess.updated_at), "last_active_at": iso(sess.last_active_at),
             "tools": list(agent.tools) if agent else []}
+
+
+def engine_jobs_of(st, s, sess: WorkSession, limit: int = 30) -> list[dict]:
+    """Generation jobs this session started, newest first, with their CURRENT engine state: the job events name them (each repeats
+    the job id), the media block holds the live row."""
+    from .media_models import MediaJob
+    seen: dict[str, dict] = {}
+    for ev in s.execute(select(WorkEvent).where(WorkEvent.session_id == sess.id, WorkEvent.kind == "job")
+                        .order_by(WorkEvent.id.desc()).limit(400)).scalars():
+        try:
+            d = json.loads(dec(st, sess.org_id, ev.payload_enc)) if ev.payload_enc else {}
+        except ValueError:
+            continue
+        jid = d.get("job_id")
+        if jid and jid not in seen and len(seen) < limit:
+            seen[jid] = {**d, "_at": ev.created_at}
+    rows = {j.id: j for j in s.execute(select(MediaJob).where(MediaJob.id.in_(list(seen) or [""]))).scalars()} if seen else {}
+    out = []
+    for jid, d in seen.items():
+        j = rows.get(jid)
+        if j is not None:
+            item = {"id": jid, "kind": j.kind, "model": d.get("model"), "status": j.status, "phase": j.progress_text or d.get("phase"),
+                    "progress": j.progress if j.status in ("queued", "running") else (1.0 if j.status == "completed" else None),
+                    "queue_position": j.queue_position, "error": j.error, "started_at": iso(j.started_at or j.created_at),
+                    "finished_at": iso(j.finished_at)}
+        else:  # the media row is gone (removed from the Library): the last thing the timeline said is all that is left
+            item = {"id": jid, "kind": d.get("job_kind"), "model": d.get("model"), "status": d.get("status", "completed"),
+                    "phase": d.get("phase"), "progress": d.get("progress"), "error": d.get("error"), "finished_at": iso(d["_at"])}
+        if d.get("artifact_id"):
+            item["artifact_id"] = d["artifact_id"]
+        out.append({k: v for k, v in item.items() if v is not None or k == "progress"})
+    return out
+
+
+def usage_of(s, sess: WorkSession) -> dict:
+    steps = tin = tout = 0
+    for (u,) in s.execute(select(AgentRun.usage).where(AgentRun.session_id == sess.id)):
+        u = u or {}
+        steps += int(u.get("model_calls", 0))
+        tin += int(u.get("prompt_tokens", 0))
+        tout += int(u.get("completion_tokens", 0))
+    return {"steps": steps, "tokens_in": tin, "tokens_out": tout}
 
 
 def state_of(st, s, sess: WorkSession, *, live: bool = False) -> dict:
@@ -801,19 +931,19 @@ def state_of(st, s, sess: WorkSession, *, live: bool = False) -> dict:
     if cur is not None:
         run, job = cur
         steps = s.query(AgentStep).filter(AgentStep.run_id == run.id)
-        run_out = {"id": run.id, "job_status": job.status, "model_calls": (run.usage or {}).get("model_calls", 0),
-                   "tool_calls": (run.usage or {}).get("tool_calls", 0), "max_steps": lim["max_steps"],
-                   "steps": steps.count(), "started_at": job.started_at}
+        run_out = {"id": run.id, "step_n": int((run.usage or {}).get("model_calls", 0)) + (1 if job.status == "running" else 0),
+                   "max_steps": lim["max_steps"], "job_status": job.status, "model_calls": (run.usage or {}).get("model_calls", 0),
+                   "tool_calls": (run.usage or {}).get("tool_calls", 0), "steps": steps.count(), "started_at": iso(job.started_at)}
     used = st.__dict__.get("work_usage", {}).get(sess.id)
-    usage = {"workspace_bytes": used[1] if used else None, "workspace_limit_bytes": lim["workspace_mb"] * 1048576,
+    usage = {**usage_of(s, sess), "workspace_bytes": used[1] if used else None, "workspace_limit_bytes": lim["workspace_mb"] * 1048576,
              "memory_limit_mb": lim["memory_mb"], "cpus": lim["cpus"]}
     if live and sess.container_state == "running":
         usage["live"] = runtime(st).live_usage(sess.container_name)
-    return {"session": session_out(st, s, sess), "status": sess.status,
-            "container": {"name": sess.container_name, "state": sess.container_state, "network": sess.network,
-                          "image": c.image},
+    return {"session": session_out(st, s, sess), "status": sess.status, "network": sess.network, "autonomy": sess.autonomy,
+            "model_id": sess.model_id,
+            "container": {"name": sess.container_name, "state": sess.container_state, "network": sess.network, "image": c.image},
             "active_run": run_out, "pending_approvals": pending_approvals(st, s, sess),
-            "engine_jobs": [],  # phase B: generation jobs started by engine tools, with progress
+            "jobs": engine_jobs_of(st, s, sess),
             "artifacts": s.query(WorkArtifact).filter(WorkArtifact.session_id == sess.id).count(),
             "last_event_id": s.execute(select(func.max(WorkEvent.id)).where(WorkEvent.session_id == sess.id)).scalar() or 0,
             "usage": usage}
@@ -999,7 +1129,9 @@ class WorkExtension(agent_svc.RunExtension):
     def on_model(self, st, s, run, n, text, action, parse_error) -> None:
         sess = self._sess(s, run)
         if sess is not None and parse_error:
-            emit(st, s, sess, "error", "The model's reply was not a valid action", {"why": parse_error, "reply": text[:1500]}, run_id=run.id, step_n=n)
+            emit(st, s, sess, "error", "The model's reply was not a valid action",
+                 {"message": f"The model's reply was not a valid action: {parse_error}", "code": "bad_action", "reply": text[:1500]},
+                 run_id=run.id, step_n=n)
 
     def on_tool_requested(self, st, s, run, step) -> None:
         sess = self._sess(s, run)
@@ -1010,15 +1142,15 @@ class WorkExtension(agent_svc.RunExtension):
         except ValueError:
             args = {}
         if step.status == "error":
-            emit(st, s, sess, "error", step.error[:200], {"tool": step.tool}, run_id=run.id, step_n=step.n)
+            emit(st, s, sess, "error", step.error[:200], {"message": step.error[:300], "code": "tool", "tool": step.tool}, run_id=run.id, step_n=step.n)
             return
         label = step.tool + (" " + short(str(args.get("path") or ""), 60) if args.get("path") else "")
         emit(st, s, sess, "tool_call", label.strip(), {"tool": step.tool, "args": args}, run_id=run.id, step_n=step.n)
         if step.status == "awaiting_approval":
             sess.status = "awaiting_approval"
             emit(st, s, sess, "approval", "Waiting for your approval: " + step.tool,
-                 {"step": step.n, "tool": step.tool, "reason": (step.meta or {}).get("approval_reason", ""), "args": args},
-                 run_id=run.id, step_n=step.n)
+                 {"step": step.n, "tool": step.tool, "status": "pending", "reason": (step.meta or {}).get("approval_reason", ""),
+                  "args": args}, run_id=run.id, step_n=step.n)
 
     def before_tool(self, tc, spec, args) -> None:
         sess = self._sess(tc.s, tc.run)
@@ -1093,3 +1225,4 @@ def _max_running(st) -> int:
 
 
 from . import work_tools  # noqa: E402,F401  (registers the tools in agent_svc.TOOLS)
+from . import work_delegate, work_engine, work_skills  # noqa: E402,F401  (phase B tools: engine, delegation, skills)
