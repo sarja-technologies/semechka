@@ -64,6 +64,10 @@ audit events; `trinodal_svc.py` holds the pure decisions (permission class of a 
 The Sarness adapter marks models of endpoints listed in its `local_endpoints` option as not external and forwards the
 `usage.trinodal` run record, which `services.filter_tech` filters by `tech.*` permission. See [TRINODAL.md](TRINODAL.md).
 
+- **Schemra proxy** (`routers/schemra.py`, `schemra_proxy.py`): off by default. `/schemra/…` is an authenticated reverse
+  proxy to a Schemra on loopback with HMAC-signed identity headers and a role mapped from `schemra.*` permissions. A
+  separate program; only HTTP and one secret file connect them. See SCHEMRA_INTEGRATION.md.
+
 ## Extension points
 - Replacement frontend: any static site served by `SEMECHKA_WEB_DIR` on the documented API. See API.md,
   CUSTOM_FRONTEND.md, `sdk/js/semechka.mjs` and `examples/minimal-frontend`.

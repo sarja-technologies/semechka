@@ -80,6 +80,10 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `trinodal.view` — Open Trinodal AI (read only) | yes | yes | – | – | – | – | – | – | – |
 | `trinodal.train` — Use the Trinodal Training Studio | yes | yes | – | – | – | – | – | – | – |
 | `trinodal.admin` — Administer Trinodal AI | yes | – | – | – | – | – | – | – | – |
+| **Schemra** | | | | | | | | | |
+| `schemra.view` — Open Schemra (read-only) | yes | – | – | – | – | – | – | – | – |
+| `schemra.operate` — Operate Schemra | yes | – | – | – | – | – | – | – | – |
+| `schemra.admin` — Administer Schemra | yes | – | – | – | – | – | – | – | – |
 
 ## Technical-visibility presets (editable shortcuts)
 

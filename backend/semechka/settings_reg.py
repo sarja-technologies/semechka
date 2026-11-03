@@ -169,6 +169,12 @@ def _retention_longer(old, new):
 _MFA_RANK = {"off": 0, "optional": 1, "roles": 2, "admins": 2, "everyone": 3}
 
 
+def _schemra():
+    # imported lazily: the proxy module has nothing to do with the registry itself
+    from . import schemra_proxy
+    return schemra_proxy
+
+
 def _theme():
     from . import theme_svc  # imported lazily: theme_svc imports SettingError from here
     return theme_svc
@@ -189,6 +195,7 @@ T = "Technical Visibility"
 SYS = "System"
 E = "Email"
 U = "Chat & Composer"
+SCH = "Schemra"
 
 DEFS: list[Def] = [
     # ---- identity & branding ----
@@ -638,6 +645,44 @@ DEFS: list[Def] = [
         "leave an anchor so the remaining chain still verifies.", "int", -1, min=-1, max=3650, edit_perm="admin.policy.edit"),
     Def("privacy.attachment_max_mb", P, "Largest attachment (MB)", "Images and text files people attach to messages.",
         "int", 10, min=1, max=50, scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.policy.edit"),
+    # ---- Schemra proxy (docs/SCHEMRA_INTEGRATION.md) ----
+    Def("schemra.enabled", SCH, "Schemra lab",
+        "Serves the Schemra training lab under /schemra/ to people who hold a Schemra permission. Semechka signs in the "
+        "person, maps their role and forwards signed identity headers to a Schemra running on this machine; Schemra's own "
+        "port is never exposed. Off until you turn it on. Needs the shared secret file (SEMECHKA_SCHEMRA_SECRET_FILE).",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit", lowers_privacy=_raise_if_bool_false_to_true,
+        effect="Adds /schemra/ for people holding schemra.view, schemra.operate or schemra.admin. Off answers 404."),
+    Def("schemra.upstream", SCH, "Schemra address",
+        "Where Schemra listens on this machine. Only loopback addresses (127.0.0.0/8, ::1, localhost) are accepted, with "
+        "no path.", "string", "http://127.0.0.1:8820", scopes=["deployment"], edit_perm="admin.settings.edit",
+        validator=lambda v: _schemra().validate_upstream(v),
+        effect="Requests for /schemra/ are forwarded here."),
+    Def("schemra.max_upload_mb", SCH, "Largest upload (MB)", "Request bodies are streamed to Schemra; one larger than this "
+        "is refused with 413 (and cut off if it only turns out to be too large while it is being sent).", "int", 200,
+        min=1, max=2048, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("schemra.rate_per_minute", SCH, "Requests per minute (per person)",
+        "Requests to Schemra one person may make per minute, live streams counted once when they open. Over it: 429.",
+        "int", 1200, min=10, max=100000, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("schemra.read_timeout_s", SCH, "Schemra silence timeout (seconds)",
+        "How long Semechka waits for Schemra to send the next byte before giving up with 504. Live streams carry a ping "
+        "every 15 seconds, so keep this above 30.", "int", 120, min=35, max=3600, scopes=["deployment"],
+        edit_perm="admin.settings.edit"),
+    Def("schemra.stream_max_seconds", SCH, "Longest live stream (seconds)",
+        "A live (text/event-stream) connection is closed after this long and the browser reconnects, which checks the "
+        "person's session and role again. 0 means no limit.", "int", 3600, min=0, max=86400, scopes=["deployment"],
+        edit_perm="admin.settings.edit", lowers_privacy=lambda o, n: (n == 0 and o != 0) or (o != 0 and n > o),
+        effect="After a sign-out or a role change, an already open stream ends within this time."),
+    Def("schemra.audit", SCH, "What the audit log records",
+        "writes: every request that changes something, every refusal and every error. api: also every read of Schemra's "
+        "API. all: every request, including pages and files. Bodies and query strings are never recorded.", "enum", "api",
+        choices=["writes", "api", "all"], scopes=["deployment"], edit_perm="admin.policy.edit",
+        lowers_privacy=lambda o, n: ["writes", "api", "all"].index(n) < ["writes", "api", "all"].index(o)),
+    Def("schemra.csrf", SCH, "Cross-site request protection for changes",
+        "token_or_origin: a change is accepted with Semechka's CSRF token, or from a browser page on this same address "
+        "(Origin and Sec-Fetch-Site checked), which is how Schemra's own pages call their API. token: only with the "
+        "token; Schemra's pages cannot save anything unless they send it.", "enum", "token_or_origin",
+        choices=["token_or_origin", "token"], scopes=["deployment"], edit_perm="admin.settings.edit",
+        lowers_privacy=lambda o, n: o == "token" and n == "token_or_origin"),
 ]
 
 BY_ID: dict[str, Def] = {d.id: d for d in DEFS}

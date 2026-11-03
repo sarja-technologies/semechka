@@ -48,6 +48,7 @@ from .routers import (  # sso: OIDC single sign-on
     misc,
     orgs,
     queue,
+    schemra,
     setup,
     sso,
     theme,
@@ -126,7 +127,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router, schemra.router):
         app.include_router(r)
 
     web = cfg.web_dir

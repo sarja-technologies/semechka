@@ -26,6 +26,8 @@ class Config:
     # The name this instance gives itself in the X-Trinodal-Actor header (<name>/<user id>). Default: derived from the
     # instance's own key, so it is stable and unique without being configured.
     instance_name: str = field(default_factory=lambda: os.environ.get("SEMECHKA_INSTANCE_NAME", ""))
+    # Where the shared secret for the signed Schemra proxy headers lives (a file, mode 0600; never in the database).
+    schemra_secret_file: str | None = field(default_factory=lambda: os.environ.get("SEMECHKA_SCHEMRA_SECRET_FILE") or None)
     # Test hooks: disable background sweepers.
     background: bool = True
 
@@ -48,3 +50,7 @@ class Config:
     @property
     def setup_token_path(self) -> Path:
         return self.data_dir / "setup-token"
+
+    @property
+    def schemra_secret_path(self) -> Path:
+        return Path(self.schemra_secret_file).expanduser() if self.schemra_secret_file else self.data_dir / "schemra-proxy.secret"

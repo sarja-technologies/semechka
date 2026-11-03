@@ -23,7 +23,10 @@
       await post('/api/auth/login', { email, password, ...(needMfa ? (useRecovery ? { recovery_code: recovery.trim() } : { totp }) : {}) });
       await loadMe();
       const next = page.url.searchParams.get('next');
-      goto(next && next.startsWith('/') && !next.startsWith('//') ? next : '/', { replaceState: true });
+      const dest = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      // /schemra/ is another application behind Semechka's sign-in, not a page of this one: load it, do not route to it.
+      if (dest === '/schemra' || dest.startsWith('/schemra/') || dest.startsWith('/schemra?')) window.location.assign(dest);
+      else goto(dest, { replaceState: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'mfa_required') { needMfa = true; error = ''; }
       else error = err instanceof ApiError ? err.message : 'Sign-in failed.';

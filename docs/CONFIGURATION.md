@@ -298,3 +298,16 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `privacy.audit_retention_days` | int | `-1` | deployment | specific | `admin.policy.edit` |  |
 | `privacy.attachment_max_mb` | int | `10` | deployment, role, team | min | `admin.policy.edit` |  |
 
+## Schemra
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `schemra.enabled` | bool | `False` | deployment | specific | `admin.settings.edit` | weakening changes need confirmation · Adds /schemra/ for people holding schemra.view, schemra.operate or schemra.admin. Off answers 404. |
+| `schemra.upstream` | string | `http://127.0.0.1:8820` | deployment | specific | `admin.settings.edit` | Requests for /schemra/ are forwarded here. |
+| `schemra.max_upload_mb` | int | `200` | deployment | specific | `admin.quotas.edit` |  |
+| `schemra.rate_per_minute` | int | `1200` | deployment | specific | `admin.quotas.edit` |  |
+| `schemra.read_timeout_s` | int | `120` | deployment | specific | `admin.settings.edit` |  |
+| `schemra.stream_max_seconds` | int | `3600` | deployment | specific | `admin.settings.edit` | weakening changes need confirmation · After a sign-out or a role change, an already open stream ends within this time. |
+| `schemra.audit` | enum | `api` | deployment | specific | `admin.policy.edit` | weakening changes need confirmation |
+| `schemra.csrf` | enum | `token_or_origin` | deployment | specific | `admin.settings.edit` | weakening changes need confirmation |
+
