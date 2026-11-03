@@ -49,6 +49,14 @@ export async function upload<T = any>(path: string, file: File | Blob, fields: R
   return parse(r);
 }
 
+/** POST a FormData body (files plus fields); same CSRF and error handling as every other call. */
+export async function postForm<T = any>(path: string, fd: FormData): Promise<T> {
+  let r: Response;
+  try { r = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: headers('POST'), body: fd }); }
+  catch { throw new ApiError(0, { code: 'offline', message: 'Cannot reach the server. Check your connection.' }); }
+  return parse(r);
+}
+
 export const qs = (o: Record<string, unknown>) => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null && v !== '') p.set(k, String(v));

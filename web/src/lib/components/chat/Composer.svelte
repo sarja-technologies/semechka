@@ -9,6 +9,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import ContextBar from '$lib/components/ContextBar.svelte';
   import ModelChooser from './ModelChooser.svelte';
+  import ProfileForm from './ProfileForm.svelte';
 
   let { thread, workspace, assistantId = $bindable(null), collectionIds = $bindable([]), onsend, onstop, onctx, onprotect }:
     { thread: Thread; workspace: 'chat' | 'code'; assistantId: string | null; collectionIds: string[]; onsend: (t: Turn) => void; onstop: () => void;
@@ -107,6 +108,11 @@
     get(`/api/media/options${qs({ kind: k })}`).then((o) => (mediaOpts[k] = o)).catch((e) => (mediaErr = errText(e)));
   });
   const mopt = $derived(op !== 'text' ? mediaOpts[op]?.models?.find((m: any) => m.id === modelId) : null);
+  // An editing profile (OpenJutsu ...) replaces the ordinary picture/video settings with a form built from the engine's own schema.
+  const prof = $derived(op === 'video' && mopt?.profile ? mopt.profile : null);
+  let pvals = $state<Record<string, any>>({}), pfiles = $state<Record<string, File[]>>({}), pproblem = $state('');
+  const profMaxMb = $derived<number>(mediaOpts.video?.caps?.profile_upload_max_mb ?? 512);
+  $effect(() => { void modelId; pvals = {}; pfiles = {}; pproblem = ''; });
   /** Video models list their resolutions; picture models give a side range and a multiple, so offer common shapes. */
   const sizes = $derived.by<{ v: string; label: string }[]>(() => {
     const lim = mopt?.limits ?? {};
@@ -146,13 +152,15 @@
   // ---- sending -----------------------------------------------------------------------------------------------
   const busy = $derived(thread.busy);
   const tooLong = $derived(text.length > ui.composer.max_chars);
-  const blocked = $derived(!modelId || uploading || tooLong || (op !== 'text' && (!text.trim() || needSource && !hasImage || cannotUseSource || (vmax && seconds > vmax + 1e-9))));
+  const blocked = $derived(!modelId || uploading || tooLong || (op !== 'text' && (!text.trim() || (prof ? !!pproblem : (needSource && !hasImage || cannotUseSource || (vmax && seconds > vmax + 1e-9))))));
   const canSend = $derived(!busy && !blocked && (!!text.trim() || (op === 'text' && ready.length > 0)));
   function send() {
     if (!canSend) return;
     const turn: Turn = { content: text.trim(), attachments: ready.map(({ uploading: _u, error: _e, local: _l, ...a }) => a), operation: op, modelId,
       modelLabel: model?.label ?? model?.alias ?? 'Assistant', media: op !== 'text' ? mediaParams() : undefined,
-      sourceId: op !== 'text' ? ready.find((a) => a.kind === 'image')?.id ?? null : null };
+      sourceId: op !== 'text' ? ready.find((a) => a.kind === 'image')?.id ?? null : null,
+      profile: prof ? { inputs: { ...pvals }, files: Object.fromEntries(Object.entries(pfiles).filter(([, l]) => l.length)) } : undefined };
+    if (prof) { pvals = {}; pfiles = {}; }
     for (const a of atts) if (a.local) URL.revokeObjectURL(a.local);
     if (turn.content) mine = [turn.content, ...mine.filter((x) => x !== turn.content)].slice(0, 50);
     text = ''; atts = []; attNote = ''; autosize();
@@ -259,7 +267,10 @@
     </div>
   </div>
 
-  {#if setOpen && op !== 'text' && mopt}
+  {#if prof}
+    <ProfileForm profile={prof} maxMb={profMaxMb} bind:values={pvals} bind:files={pfiles} bind:problem={pproblem} />
+  {/if}
+  {#if setOpen && op !== 'text' && mopt && !prof}
     <div class="settings" id="media-settings">
       {#if sizes.length}
         <label class="fld"><span>Size</span><select class="input" bind:value={mp.size}>{#each sizes as s}<option value={s.v}>{s.label}</option>{/each}</select></label>

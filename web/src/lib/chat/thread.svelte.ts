@@ -1,6 +1,6 @@
 // One open conversation: the visible branch (loaded in slices, newest first), the reply being written, and every way a
 // turn can be taken (text, image, video, regenerate, edit, switch version). The view components only render this.
-import { get, post, patch, stream, upload, qs, ApiError } from '$lib/api';
+import { get, post, postForm, patch, stream, upload, qs, ApiError } from '$lib/api';
 import { upsert, touch } from './store.svelte';
 
 export type Attachment = { id: string; name: string; kind: 'image' | 'text' | string; mime: string; size: number;
@@ -25,7 +25,9 @@ export type Live = {
   sources?: any[]; skipped?: number; trimmed?: number;
 };
 export type Turn = { content: string; attachments: Attachment[]; operation: 'text' | 'image' | 'video'; modelId: string;
-  modelLabel: string; media?: Record<string, unknown>; sourceId?: string | null };
+  modelLabel: string; media?: Record<string, unknown>; sourceId?: string | null;
+  /** An editing profile (e.g. OpenJutsu): settings and the source files, sent as one multipart request. */
+  profile?: { inputs: Record<string, unknown>; files: Record<string, File[]> } };
 
 const SLICE = 40;
 export const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Something unexpected happened. Try again.');
@@ -237,7 +239,20 @@ export class Thread {
     this.live = { mode, anchor: anchor?.id ?? null, userText: mode === 'regenerate' ? '' : turn.content, userAttachments: turn.attachments,
       text: '', reasoning: '', status: 'sending', error: '', model: turn.modelLabel, queue: null };
     try {
-      if (this.ephemeral) {
+      if (turn.profile) {
+        // An editing profile needs its source files, which the conversation endpoint does not carry: the job is made directly. It is
+        // saved to the person's gallery (Library) and shown here while it runs.
+        const fd = new FormData();
+        fd.append('model_id', turn.modelId); fd.append('save', this.ephemeral ? 'false' : 'true');
+        fd.append('inputs', JSON.stringify({ ...turn.profile.inputs, prompt: turn.content }));
+        for (const [name, list] of Object.entries(turn.profile.files)) for (const f of list) fd.append(`file:${name}`, f, f.name);
+        const job = await postForm('/api/media/profile-jobs', fd);
+        if (mine !== this.epoch) return;
+        const out = [...this.before(mode === 'send' ? null : anchor)];
+        out.push(localMsg('user', turn.content, { kind }));
+        out.push(localMsg('assistant', turn.content, { kind, status: 'pending', model: turn.modelLabel, model_id: turn.modelId, media: job }));
+        this.messages = out;
+      } else if (this.ephemeral) {
         // No-save: the job is not part of any stored conversation; its result is held briefly for viewing and download.
         if (turn.sourceId || turn.attachments.length) throw new ApiError(422, { message: 'Editing or animating a picture needs a saved conversation. Remove the picture or start a saved conversation.' });
         const prompt = mode === 'regenerate' ? anchor!.content : turn.content;

@@ -69,7 +69,7 @@ def options(kind: str, ctx: Ctx = Depends(current)):
     ephemeral = bool(_val(ctx, "privacy.ephemeral_allowed") and ctx.principal.can("chat.ephemeral"))
     return {"kind": kind, "models": models, "ephemeral": ephemeral, "retention_days": _val(ctx, "privacy.chat_retention_days"),
             "prompt_max": media_svc.PROMPT_MAX, "video_max_seconds": vmax if kind == "video" else None,
-            "caps": {"concurrent": _val(ctx, "media.max_concurrent_jobs"), "max_assets": _val(ctx, "media.max_assets"),
+            "caps": {"concurrent": _val(ctx, "media.max_concurrent_jobs"), "profile_upload_max_mb": _val(ctx, "media.profile_upload_max_mb"), "max_assets": _val(ctx, "media.max_assets"),
                      "daily": _val(ctx, "media.daily_generations") or None,
                      "active": media_svc.count_active(ctx.s, ctx.user.id),
                      "stored": media_svc.count_assets(ctx.s, ctx.user.id),
