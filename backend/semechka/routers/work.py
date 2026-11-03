@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .. import audit, services, work_runtime, work_svc
+from .. import services, work_runtime, work_svc
 from ..deps import Ctx, current
 from ..models_work import WorkArtifact, WorkSession
 from ..tenancy_svc import TenancyError
@@ -239,12 +239,12 @@ def files(sid: str, path: str = "", ctx: Ctx = Depends(current)):
     rel = _norm(path)
     if not sess.has_workspace:
         return {"path": rel, "entries": [], "container_state": sess.container_state}
-    sid_, uid = sess.id, ctx.user.id
+    sid_ = sess.id
     ctx.s.commit()
     name = call(work_svc.ensure_running, ctx.st, sid_)
     try:
         ents = work_svc.runtime(ctx.st).list(name, rel)
-    except (work_runtime.RuntimeError_,) as e:
+    except work_runtime.RuntimeError_ as e:
         raise _err(e) from None
     prefix = (rel + "/") if rel else ""
     return {"path": rel, "container_state": "running", "entries": [

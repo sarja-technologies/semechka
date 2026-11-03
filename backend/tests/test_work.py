@@ -2,6 +2,7 @@
 
 The model's replies are scripted (tests/fake_llm.py); everything else is real: authorisation, the durable run loop, the tools,
 the in-container helper (run by the host python in a temp directory), events, approvals, artifacts, recovery."""
+import asyncio
 import json
 import time
 
@@ -15,7 +16,7 @@ from semechka.models_work import WorkArtifact, WorkEvent, WorkSession
 from semechka.work_runtime import LocalDirRuntime
 
 from . import fake_llm as L
-from .conftest import PW, make_user
+from .conftest import make_user
 
 
 def drive(st, n=30):
@@ -784,9 +785,7 @@ def crash_in_tool(monkeypatch, st):
     orig = spec.fn
 
     def die(tc, a):
-        raise asyncio_cancel()
-    import asyncio
-    asyncio_cancel = asyncio.CancelledError
+        raise asyncio.CancelledError()
     monkeypatch.setattr(spec, "fn", die)
     return orig, spec
 
@@ -796,7 +795,7 @@ def test_a_run_interrupted_by_a_restart_resumes_and_says_which_step_was_cut(wk, 
     orig, spec = crash_in_tool(monkeypatch, st)
     L.say(L.tool("work_write_file", path="a.txt", content="x"))
     wk.post(f"/api/work/sessions/{sid}/messages", json={"content": "go"})
-    with pytest.raises(BaseException):   # the "process" dies in the middle of the tool
+    with pytest.raises(asyncio.CancelledError):   # the "process" dies in the middle of the tool
         drive(st)
     assert wk.get(f"/api/work/sessions/{sid}").json()["status"] == "running" and active_job(st, sid).status == "running"
     # --- restart: what the application does at start-up
@@ -821,7 +820,7 @@ def test_a_run_whose_job_cannot_resume_ends_failed_with_a_clear_event_not_stuck(
     orig, spec = crash_in_tool(monkeypatch, st)
     L.say(L.tool("work_write_file", path="a.txt", content="x"))
     wk.post(f"/api/work/sessions/{sid}/messages", json={"content": "go"})
-    with pytest.raises(BaseException):
+    with pytest.raises(asyncio.CancelledError):
         drive(st)
     monkeypatch.setattr(spec, "fn", orig)
     with st.db.session(write=True) as s:

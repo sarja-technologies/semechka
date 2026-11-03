@@ -25,9 +25,8 @@ import shutil
 import subprocess
 import tempfile
 import threading
-import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import sandbox_svc
@@ -599,7 +598,7 @@ class WorkRuntime(ABC):
         names_known = set(known.values())
         seen, removed, absent = [], [], []
         found = {m["name"]: m for m in self.list_managed(instance)}
-        for name, m in found.items():
+        for name in found:
             seen.append(name)
             if name not in names_known and remove_orphans:
                 try:

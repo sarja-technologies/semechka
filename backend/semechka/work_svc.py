@@ -156,7 +156,6 @@ def get_session(s, user_id: str, sid: str) -> WorkSession:
 
 def ensure_agent(st, s, org_id: str) -> Agent:
     """The built-in hidden Work agent of an organisation (and the internal workspace its runs belong to)."""
-    from . import work_tools
     a = s.execute(select(Agent).where(Agent.org_id == org_id, Agent.kind == "work")).scalars().first()
     if a is not None:
         if a.tools != list(work_tools.WORK_TOOLS) or a.archived:

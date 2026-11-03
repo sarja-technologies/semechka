@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import functools
 import hashlib
-import json
 import logging
 import mimetypes
 import re
@@ -192,7 +191,7 @@ def _bump(w: Wk, delta: int) -> None:
 def run_command(w: Wk, name: str, *, cmd: str | None = None, argv: list[str] | None = None, timeout_s: int, cwd: str = "",
                 cleanup_ok: bool = False) -> ToolOut:
     limit = w.lim["workspace_mb"] * MB
-    over = check_quota(w, name, 0, cleanup=cleanup_ok)  # raises unless the command is a cleanup and we are over
+    check_quota(w, name, 0, cleanup=cleanup_ok)  # raises unless the command is a cleanup and we are over
     # both streams plus the report lines must fit in what the model is shown, so each stream gets half (head and tail kept)
     res = w.rt.exec(name, cmd, argv=argv, timeout_s=timeout_s, max_output=max(500, (w.lim["output_chars"] - 700) // 2), cwd=cwd,
                     quota_bytes=int(limit * 1.05) if limit else 0)
