@@ -34,7 +34,9 @@ def reset():
                  worker_loaded=set(), loads=[], unloads=[], fail_load=False, cut_off=0, switches=[], stream_delay=0.0,
                  worker_alive=False, worker_stops=0, completions=[], profiles=None, profile_submissions=[],
                  # Trinodal AI registered in the engine as a remote endpoint (opt-in: STATE["trinodal"] = True)
-                 trinodal=False, trinodal_delay=0.0, trinodal_closed=0, trinodal_finished=0)
+                 trinodal=False, trinodal_delay=0.0, trinodal_closed=0, trinodal_finished=0,
+                 # Work Mode: the engine registry and resources, and scripted chat replies (see /v1/registry, /v1/resources, completions)
+                 registry=False, not_ready={}, free_mb=100000, holders=[], chat_script=[], chat_log=[], chat_fail={}, resource_hits=0)
 
 
 reset()
@@ -239,6 +241,10 @@ async def completions(request: Request):
     body = await request.json()
     ref, params = body.get("model_ref", ""), body.get("params") or {}
     STATE["completions"].append(ref)
+    STATE["chat_log"].append({"ref": ref, "messages": body.get("messages"), "params": params})
+    if STATE["chat_fail"].get(ref):
+        status, message = STATE["chat_fail"][ref].pop(0)
+        raise HTTPException(status, message)
     if ref.startswith("endpoint:trinodal:"):
         return await _trinodal_completion(body)
     local = ref.startswith("local:")
@@ -247,9 +253,13 @@ async def completions(request: Request):
         STATE["llm"]["active_streams"] += 1
     gen_at_start = STATE["llm"].get("gen")
 
+    script = STATE["chat_script"].pop(0) if STATE["chat_script"] else None
+    reply = script(ref, body.get("messages")) if callable(script) else script
+    words = ("ready", " and", " done") if reply is None else tuple(reply[i:i + 12] for i in range(0, len(reply), 12)) or ("",)
+
     async def gen():
         try:
-            for word in ("ready", " and", " done"):
+            for word in words:
                 if local and STATE["llm"].get("gen") != gen_at_start:  # the model was switched under this reply
                     STATE["cut_off"] += 1
                     yield "data: " + json.dumps({"type": "error", "message": "llama-server stopped"}) + "\n\n"
@@ -324,9 +334,37 @@ def _advance(j):
 
 @app.get("/v1/registry", dependencies=[Depends(auth)])
 def registry():
-    if STATE["profiles"] is None:
+    if STATE["profiles"] is None and not STATE["registry"]:
         raise HTTPException(404, "not found")                       # an engine that predates the registry
-    return {"models": [], "profiles": STATE["profiles"], "external": []}
+    models = []
+    if STATE["registry"]:
+        for m in MODELS:
+            if m["category"] not in ("image", "video", "llm") or not m.get("supported", True):
+                continue
+            llm = m["category"] == "llm"
+            loaded = (m["id"] == STATE["llm"]["model_id"]) if llm else m["id"] in STATE["worker_loaded"]
+            why = STATE["not_ready"].get(m["id"])
+            models.append({"id": m["id"], "name": m["name"], "category": m["category"], "installed": True,
+                           "residency": {"state": "loaded" if loaded else "unloaded", "where": None, "error": None},
+                           "readiness": {"state": "not_ready" if why else "ready", "ready": not why, "reason": why},
+                           "workload": {"state": "idle", "active_jobs": []},
+                           "memory": {"estimate_mb": m.get("vram_mb"), "actual_mb": None, "reserved_mb": None},
+                           "capabilities": {"modes": (m.get("capabilities") or {}).get("modes") or [], "vision": bool((m.get("capabilities") or {}).get("vision"))}})
+    return {"schema": "sarness.registry/1", "models": models, "profiles": STATE["profiles"] or [], "external": []}
+
+
+@app.get("/v1/resources", dependencies=[Depends(auth)])
+def resources():
+    if not STATE["registry"]:
+        raise HTTPException(404, "not found")
+    llm = STATE["llm"]
+    STATE["resource_hits"] += 1
+    return {"enabled": True, "engine_id": "engine-fake", "error": None,
+            "ledger": {"memory": {"total_mb": 120000, "available_mb": 110000, "usable_mb": 112000, "headroom_mb": 6000, "system_reserve_mb": 8000},
+                       "unconsumed_mb": 0, "free_mb": STATE["free_mb"], "holders": STATE["holders"], "ts": 1.0},
+            "this_engine": {"llm": {"state": llm["state"], "model_id": llm["model_id"], "busy": bool(llm["active_streams"])},
+                            "gpu_worker": {"alive": STATE["worker_alive"] or bool(STATE["worker_loaded"]), "busy": False,
+                                           "loaded": sorted(STATE["worker_loaded"])}}}
 
 
 @app.post("/v1/profiles/{pid}/jobs", dependencies=[Depends(auth)])

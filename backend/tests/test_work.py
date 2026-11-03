@@ -65,8 +65,8 @@ def test_session_lifecycle_and_timeline(wk, st):
     ids = [e["id"] for e in ev]
     assert ids == sorted(ids) and len(set(ids)) == len(ids)
     res = [e for e in ev if e["kind"] == "tool_result"]
-    assert "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]" in res[1]["detail"]["text"] and res[1]["detail"]["exit"] == 0
-    assert ev[-1]["kind"] == "message" and ev[-1]["detail"]["role"] == "assistant"
+    assert "[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]" in res[1]["data"]["output"] and res[1]["data"]["exit_code"] == 0
+    assert ev[-1]["kind"] == "message" and ev[-1]["data"]["role"] == "assistant"
     s = wk.get(f"/api/work/sessions/{sid}").json()
     assert s["status"] == "idle" and s["container_state"] == "running" and s["active_run_id"] is None
     assert wk.get(f"/api/work/sessions/{sid}/state").json()["usage"]["workspace_bytes"] > 0
@@ -78,8 +78,15 @@ def setting(c, key, value):
     assert r.status_code == 200, r.text
 
 
+def old(e):
+    """A tool_result event in the shape the tool-behaviour tests below were written against (status, text, error, exit)."""
+    d = e["data"]
+    return {"status": "done" if d.get("ok") else "error", "text": d.get("output", ""), "error": d.get("error", ""), "exit": d.get("exit_code"),
+            "timed_out": "TIMED OUT" in d.get("output", "")}
+
+
 def result_of(c, sid, n=-1):
-    return [e for e in events(c, sid) if e["kind"] == "tool_result"][n]["detail"]
+    return old([e for e in events(c, sid) if e["kind"] == "tool_result"][n])
 
 
 def rt_of(st):
@@ -105,8 +112,9 @@ def one_shot(st, c, sid, *calls, final="ok"):
 def test_options_lists_only_models_the_person_may_use_and_the_permissions(wk, app):
     o = wk.get("/api/work/options").json()
     assert [m["alias"] for m in o["models"]] == ["script-model"] and o["models"][0]["tools"] is True
-    assert o["perms"] == {"network": True, "skills_manage": True} and o["network_allowed"] is False and o["skills"] == []
-    assert o["limits"]["memory_mb"] == 4096 and o["limits"]["workspace_mb"] == 2048 and o["image_ready"] is True
+    assert o["perms"] == {"network": True, "skills_manage": True} and o["network_allowed"] is False
+    assert [k["name"] for k in o["skills"]] == ["coding", "data-analysis", "document-creation", "image-generation", "media-editing", "research", "video-production"]
+    assert o["limits"]["memory_mb"] == 4096 and o["limits"]["workspace_max_mb"] == 2048 and o["limits"]["upload_max_mb"] == 100 and o["image_ready"] is True
     mem = make_user(wk, app, "mem@acme.test", role="member")
     assert mem.get("/api/work/options").status_code == 403  # a member holds no mode.work
 
@@ -228,7 +236,7 @@ def test_tool_semantics_files_python_search_and_lists(wk, st):
              L.tool("work_list_dir", path=""), L.tool("work_list_dir", path="notes"),
              L.tool("work_python", code="import sys\nprint(sum(range(10)))\nprint('err', file=sys.stderr)\nsys.exit(3)"),
              L.tool("work_shell", cmd="echo $HOME; pwd | wc -l; exit 0"))
-    res = [e["detail"] for e in events(wk, sid) if e["kind"] == "tool_result"]
+    res = [old(e) for e in events(wk, sid) if e["kind"] == "tool_result"]
     assert [r["status"] for r in res] == ["done", "done", "done", "error", "error", "done", "done", "done", "done", "done", "done"]
     assert "    10\tline 10" in res[1]["text"] and "[lines 10-12 of 50]" in res[1]["text"]
     assert "occurs" in res[3]["error"] and "not found" in res[4]["error"]
@@ -255,7 +263,7 @@ def test_git_tool_whitelist_hooks_and_a_real_commit(wk, st):
              L.tool("work_git", args=["config", "core.hooksPath", "/tmp/h"]),
              L.tool("work_git", args=["diff", "--no-index", "/etc/passwd", "a.txt"]),
              L.tool("work_git", args="status"))
-    res = [e["detail"] for e in events(wk, sid) if e["kind"] == "tool_result"]
+    res = [old(e) for e in events(wk, sid) if e["kind"] == "tool_result"]
     assert [r["exit"] for r in res[:3]] == [0, 0, 0] and res[5]["exit"] == 0 and res[5]["status"] == "done", res[5]
     assert "first" in res[6]["text"]
     assert "needs network access" in res[7]["error"] and "needs network access" in res[8]["error"]
@@ -271,7 +279,7 @@ def test_a_failing_command_is_reported_with_its_real_exit_code_and_a_timeout_kil
     one_shot(st, wk, sid, L.tool("work_shell", cmd="ls /definitely-missing"), L.tool("work_shell", cmd="(sleep 31.7 &) ; sleep 31.7", timeout_s=1),
              L.tool("work_shell", cmd="pgrep -fc '[s]leep 31.7' || true"))
     assert time.time() - t0 < 20
-    res = [e["detail"] for e in events(wk, sid) if e["kind"] == "tool_result"]
+    res = [old(e) for e in events(wk, sid) if e["kind"] == "tool_result"]
     assert res[0]["exit"] == 2 and "No such file" in res[0]["text"]
     assert res[1]["timed_out"] is True and "TIMED OUT after 1s" in res[1]["text"] and "everything it started" in res[1]["text"]
     assert res[2]["text"].rstrip().endswith("0"), res[2]  # the backgrounded sleep did not outlive the command
@@ -294,7 +302,7 @@ def test_binary_files_and_missing_files_are_reported_not_dumped(wk, st):
              L.tool("work_write_file", path="x.txt"), L.tool("work_shell", cmd=123), L.tool("work_list_dir", path="missing"),
              L.tool("no_such_tool"))
     res = [e for e in events(wk, sid) if e["kind"] in ("tool_result", "error")]
-    d = [e["detail"] for e in res if e["kind"] == "tool_result"]
+    d = [old(e) for e in res if e["kind"] == "tool_result"]
     assert "binary file" in d[1]["error"] and "no such file" in d[2]["error"].lower() and "'path' is required" in d[3]["error"]
     assert "'content' is required" in d[4]["error"] and "'cmd' must be a string" in d[5]["error"] and d[6]["status"] == "error"
     assert any("not one of your tools" in e["summary"] for e in res if e["kind"] == "error")
@@ -315,7 +323,7 @@ def test_paths_leaving_work_and_symlink_escapes_are_refused_everywhere(wk, st, t
              L.tool("work_search_files", pattern="SECRET", path="link_dir"), L.tool("work_edit_file", path="link_file", old="TOP", new="X"),
              L.tool("work_read_file", path="inside/real.txt"),                       # a link that stays inside is fine
              L.tool("work_publish_artifact", path="link_file"), L.tool("work_list_dir", path="a/../../.."))
-    res = [e["detail"] for e in events(wk, sid) if e["kind"] == "tool_result"]
+    res = [old(e) for e in events(wk, sid) if e["kind"] == "tool_result"]
     for i in (0, 1, 2, 3):
         assert res[i]["status"] == "error", (i, res[i])
     assert "leaves /work" in res[0]["error"] or "inside /work" in res[0]["error"]
@@ -363,7 +371,7 @@ def test_the_workspace_quota_refuses_writes_and_commands_with_the_exact_usage_bu
              L.tool("work_shell", cmd="echo hi"),                              # refused: over quota
              L.tool("work_shell", cmd="rm big.bin"),                           # cleanup is allowed
              L.tool("work_write_file", path="x.txt", content="hello"))
-    res = [e["detail"] for e in events(wk, sid) if e["kind"] == "tool_result"]
+    res = [old(e) for e in events(wk, sid) if e["kind"] == "tool_result"]
     assert res[0]["status"] == "done" and "WARNING: the workspace is over its limit" in res[0]["text"]
     assert res[1]["status"] == "error" and "workspace is full: 66." in res[1]["error"] and "of 64 MB" in res[1]["error"]
     assert res[2]["status"] == "error" and "workspace is full" in res[2]["error"]
@@ -406,7 +414,7 @@ def test_artifacts_are_listed_automatically_survive_the_container_and_follow_cha
                                                               ("artifacts/report.md", "report.md", "text/markdown"),
                                                               ("elsewhere/data.csv", "The data", "text/csv")]
     ev = [e for e in events(wk, sid) if e["kind"] == "artifact"]
-    assert len(ev) == 3 and ev[0]["detail"]["content_url"].endswith("/content")
+    assert len(ev) == 3 and ev[0]["data"]["artifact_id"].startswith("wa_") and ev[0]["data"]["path"] == "artifacts/primes.txt"
     run = wk.get(f"/api/work/sessions/{sid}/state").json()
     assert run["artifacts"] == 3
     pid = arts[0]["id"]
@@ -543,7 +551,7 @@ def test_cancel_before_the_run_starts_and_cancel_of_a_running_command(wk, st):
     s = wk.get(f"/api/work/sessions/{sid}").json()
     assert s["status"] == "cancelled" and s["active_run_id"] is None
     ev = events(wk, sid)
-    tr = [e for e in ev if e["kind"] == "tool_result"][-1]["detail"]
+    tr = old([e for e in ev if e["kind"] == "tool_result"][-1])
     assert "INTERRUPTED" in tr["text"] or tr["status"] == "error"
     assert any("Cancelling" in e["summary"] for e in ev) and ev[-1]["kind"] == "state" and ev[-1]["summary"].startswith("Cancelled")
 
@@ -613,7 +621,7 @@ def test_ask_autonomy_asks_before_every_mutating_call_and_a_decline_reaches_the_
     assert wk.get(f"/api/work/sessions/{sid}").json()["status"] == "idle"
     ev = events(wk, sid)
     assert [e["summary"] for e in ev if e["kind"] == "approval" and e["summary"].startswith(("Approved", "Declined"))] == ["Approved: work_shell", "Declined: work_write_file"]
-    assert ev[-1]["detail"]["content"].startswith("declined: Tool work_write_file did not run")
+    assert ev[-1]["data"]["content"].startswith("declined: Tool work_write_file did not run")
     assert rt_of(st)._dir(sess_row(st, sid).container_name).joinpath("a.txt").read_text() == "hello\n"
     assert not rt_of(st)._dir(sess_row(st, sid).container_name).joinpath("b.txt").exists()
     assert wk.post(f"/api/work/sessions/{sid}/approvals/1", json={"approve": True}).status_code == 404
@@ -809,7 +817,7 @@ def test_a_run_interrupted_by_a_restart_resumes_and_says_which_step_was_cut(wk, 
     assert s["status"] == "idle"
     ev = events(wk, sid)
     assert any("interrupted by a restart" in e["summary"] for e in ev)
-    assert ev[-1]["detail"]["content"].startswith("recovered; saw: The tool call work_write_file was interrupted by a restart")
+    assert ev[-1]["data"]["content"].startswith("recovered; saw: The tool call work_write_file was interrupted by a restart")
     with st.db.session() as s2:
         steps = s2.execute(select(AgentStep).where(AgentStep.tool == "work_write_file")).scalars().all()
         assert [x.status for x in steps] == ["interrupted"]   # never replayed
@@ -830,7 +838,7 @@ def test_a_run_whose_job_cannot_resume_ends_failed_with_a_clear_event_not_stuck(
     s = wk.get(f"/api/work/sessions/{sid}").json()
     assert s["status"] == "failed" and s["active_run_id"] is None
     last = events(wk, sid)[-1]
-    assert last["kind"] == "error" and "stopped repeatedly" in last["detail"]["message"]
+    assert last["kind"] == "error" and "stopped repeatedly" in last["data"]["message"]
     # and the session is usable again
     say_and_run(st, wk, sid, "again", L.final("fine"))
     assert wk.get(f"/api/work/sessions/{sid}").json()["status"] == "idle"
@@ -843,7 +851,7 @@ def test_a_failed_run_is_reported_and_the_model_failing_does_not_wedge_the_sessi
     s = wk.get(f"/api/work/sessions/{sid}").json()
     assert s["status"] == "failed"
     ev = events(wk, sid)
-    assert [e["kind"] for e in ev].count("error") >= 4 and "three times in a row" in ev[-1]["detail"]["message"]
+    assert [e["kind"] for e in ev].count("error") >= 4 and "three times in a row" in ev[-1]["data"]["message"]
     L.reset()
     say_and_run(st, wk, sid, "retry", L.final("ok now"))
     assert wk.get(f"/api/work/sessions/{sid}").json()["status"] == "idle"
@@ -999,7 +1007,9 @@ def test_migration_11_applies_to_the_previous_schema_and_rolls_back_cleanly(wk, 
     one_shot(st, wk, sid, L.tool("work_shell", cmd="echo 1"))
     aid = wk.post("/api/work/sessions", json={}).json()["id"]
     assert migrations.SCHEMA_VERSION == 11
+    assert len(wk.get("/api/work/skills").json()) == 7                                          # the built-in skills are seeded on first use
     with st.db.engine.connect() as c:
+        assert c.execute(text("select count(*) from meta where key like 'work_builtin_skills:%'")).scalar() == 1
         roles_now = dict(c.execute(text("select id, grants from roles")).fetchall())
     # a cloud agent that must survive both directions
     with st.db.engine.begin() as c:
@@ -1024,6 +1034,7 @@ def test_migration_11_applies_to_the_previous_schema_and_rolls_back_cleanly(wk, 
         assert c.execute(text("select count(*) from workspaces where policy like '%system%'")).scalar() == 0
         assert c.execute(text("select count(*) from setting_values where key like 'work.%' or key like 'modes.work.%'")).scalar() == 0
         assert migrations.current_version(c) == 10
+        assert c.execute(text("select count(*) from meta where key like 'work_builtin_skills:%'")).scalar() == 0   # seeded data leaves with its table
         old_roles = dict(c.execute(text("select id, grants from roles")).fetchall())
     assert "work.network" not in old_roles["platform_admin"] and "mode.work" not in old_roles["platform_admin"]
     assert "work.network" not in old_roles["owner"]
@@ -1043,6 +1054,9 @@ def test_migration_11_applies_to_the_previous_schema_and_rolls_back_cleanly(wk, 
     assert "work.network" in new_roles["owner"] and "mode.work" not in new_roles["member"]
     assert sid and aid and roles_now
     assert migrations.apply(st.db, cfg.data_dir) == []                                         # idempotent
+    for k in ("work.enabled", "modes.work.enabled"):                                            # (the downgrade removed the settings too)
+        assert wk.put(f"/api/admin/settings/{k}", json={"value": True}).status_code == 200
+    assert len(wk.get("/api/work/skills").json()) == 7                                          # and seeded again after a new upgrade
 
 
 # ---- small models' JSON slips ---------------------------------------------------------------------------------------------
