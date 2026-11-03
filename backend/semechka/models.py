@@ -303,6 +303,7 @@ from . import models_knowledge  # noqa: E402,F401
 from . import models_tenancy  # noqa: F401  (organisations, workspaces, access rules)
 from . import models_files  # noqa: F401  (workspace files, jobs, contexts)
 from . import models_agents  # noqa: F401  (cloud agents, runs, memory)
+from . import models_work  # noqa: F401  (Work Mode sessions, events, artifacts, skills)
 
 
 class EmailToken(Base):

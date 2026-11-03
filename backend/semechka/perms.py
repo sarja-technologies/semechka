@@ -36,6 +36,7 @@ REGISTRY: list[Perm] = [
     _p("mode.audio", "Use audio (speech)", "Modes"),
     _p("mode.knowledge", "Use knowledge search", "Modes"),
     _p("mode.agents", "Use assistants (no tool execution)", "Modes"),
+    _p("mode.work", "Use Work Mode (sessions with an isolated container and tools)", "Modes"),
     _p("chat.ephemeral", "Start no-save conversations", "Chat"),
     _p("chat.attach", "Attach files to chat", "Chat"),
     _p("chat.export", "Export own conversations", "Chat"),
@@ -105,6 +106,13 @@ REGISTRY: list[Perm] = [
     _p("admin.content.read", "Read other people's conversations", "Administration",
        "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
        "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),
+    # --- Work Mode -----------------------------------------------------------------------------------
+    _p("work.network", "Give Work Mode sessions internet access", "Work Mode",
+       "Lets a session's container reach the network (when the administrator allows it at all). A rootless container "
+       "runtime cannot keep an internet-enabled container away from the local network. Never included in any wildcard.",
+       sensitive=True),
+    _p("work.skills.manage", "Manage organisation skills for Work Mode", "Work Mode",
+       "Create, edit and remove skills every person in the organisation can attach to a Work Mode session."),
     # --- Trinodal AI (the modular AI system managed through the same-origin /trinodal/ proxy) ----------------
     # Sensitive: it opens an operational surface (node execution paths, training data and jobs, service
     # configuration), so no wildcard grant covers it. Each one must be granted by name.
@@ -162,11 +170,11 @@ TECH_PRESET_DEFAULTS: dict[str, list[str]] = {
 ROLE_TEMPLATES: list[dict] = [
     dict(id="owner", label="Owner", rank=0, system=True,
          description="Full administration. Does not include content access; that must be granted by name.",
-         grants=["*", "trinodal.view", "trinodal.train", "trinodal.admin"], denies=[]),
+         grants=["*", "trinodal.view", "trinodal.train", "trinodal.admin", "work.network", "work.skills.manage"], denies=[]),
     dict(id="platform_admin", label="Platform Admin", rank=10,
          description="Runs the platform; no access to user content.",
          grants=["mode.chat", "mode.code", "mode.knowledge", "mode.agents", "mode.image", "mode.video", "chat.ephemeral", "chat.attach", "chat.export", "admin.*", "tech.*", "ops.*", "models.*",
-                 "trinodal.view", "trinodal.train"],
+                 "trinodal.view", "trinodal.train", "mode.work", "work.network", "work.skills.manage"],
          denies=[]),
     dict(id="org_admin", label="Organisation Admin", rank=20,
          description="People, branding and policy for the organisation.",

@@ -416,6 +416,73 @@ def _down_10(conn: Connection, _c: Ctx) -> None:
         drop_table_if_present(conn, tbl)
 
 
+# ---- 11: Work Mode ----------------------------------------------------------------------------------
+_TABLES_11 = ["work_skills", "work_artifacts", "work_events", "work_messages", "work_sessions"]  # drop order: children first
+_ROLE_GRANTS_11 = {"owner": ["work.network", "work.skills.manage"],
+                   "platform_admin": ["mode.work", "work.network", "work.skills.manage"]}
+_SETTINGS_11 = ["work.", "modes.work."]
+_PERMS_11 = ["mode.work", "work.network", "work.skills.manage"]
+
+
+def _up_11(conn: Connection, _c: Ctx) -> None:
+    from . import models_work  # noqa: F401
+    from .db import Base
+    Base.metadata.create_all(conn, tables=[Base.metadata.tables[n] for n in reversed(_TABLES_11)])
+    add_column_if_missing(conn, "agents", "kind", "VARCHAR(12) NOT NULL DEFAULT 'cloud'")
+    add_column_if_missing(conn, "agent_runs", "session_id", "VARCHAR(32)")
+    conn.execute(text('CREATE INDEX IF NOT EXISTS "ix_agent_runs_session_id" ON "agent_runs" ("session_id")'))
+    # Only administrators gain anything: the network grant is named (no wildcard covers it) and the mode itself stays off
+    # until an administrator switches work.enabled and modes.work.enabled on. Recorded so `down` removes exactly this.
+    added: dict[str, list[str]] = {}
+    for rid, grants, _d in _rows(conn, "roles"):
+        want = [p for p in _ROLE_GRANTS_11.get(rid, []) if p not in grants]
+        if want:
+            conn.execute(text("update roles set grants=:g where id=:i"), {"g": json.dumps(grants + want), "i": rid})
+            added[rid] = want
+    conn.execute(text("delete from meta where key='m11_roles'"))
+    conn.execute(text("insert into meta(key, value) values ('m11_roles', :v)"), {"v": json.dumps(added)})
+
+
+def _down_11(conn: Connection, c: Ctx) -> None:
+    # Work sessions, their timeline, artifacts and skills exist only in this release. The workspace VOLUMES live in the
+    # container runtime, not here: remove them with `docker ps -a --filter label=semechka.work` and `docker volume ls`
+    # (docs/WORK_MODE.md, Rollback) before or after this step.
+    insp = inspect(conn)
+    if "agent_runs" in insp.get_table_names() and "session_id" in {x["name"] for x in insp.get_columns("agent_runs")}:
+        ids = [r[0] for r in conn.execute(text("select id from agent_runs where session_id is not null")).fetchall()]
+        for i in ids:
+            conn.execute(text("delete from agent_steps where run_id=:i"), {"i": i})
+            conn.execute(text("delete from agent_runs where id=:i"), {"i": i})
+    conn.execute(text("delete from jobs where kind='work'"))
+    if "agents" in insp.get_table_names() and "kind" in {x["name"] for x in insp.get_columns("agents")}:
+        wa = [r for r in conn.execute(text("select id, workspace_id from agents where kind='work'")).fetchall()]
+        for aid, wsid in wa:
+            conn.execute(text("delete from agent_versions where agent_id=:i"), {"i": aid})
+            conn.execute(text("delete from agent_runs where agent_id=:i"), {"i": aid})
+            conn.execute(text("delete from agents where id=:i"), {"i": aid})
+            conn.execute(text("delete from workspaces where id=:i and policy like '%\"system\": \"work\"%'"), {"i": wsid})
+    drop_column_if_present(conn, "agents", "kind")
+    drop_column_if_present(conn, "agent_runs", "session_id")
+    for tbl in _TABLES_11:
+        drop_table_if_present(conn, tbl)
+    # The older release does not know these permissions, so they leave every role, team and personal override that holds them
+    # (not only the ones this release's upgrade added; a fresh 0.6.0 install seeded them from the role templates).
+    gone = set(_PERMS_11)
+    for table in ("roles", "teams", "user_overrides"):
+        if table not in insp.get_table_names():
+            continue
+        key = "user_id" if table == "user_overrides" else "id"
+        for rid, grants, denies in _rows(conn, table):
+            if gone & set(grants) or gone & set(denies):
+                conn.execute(text(f'update "{table}" set grants=:g, denies=:d where {key}=:i'),
+                             {"g": json.dumps([x for x in grants if x not in gone]), "d": json.dumps([x for x in denies if x not in gone]), "i": rid})
+    conn.execute(text("delete from meta where key='m11_roles'"))
+    for pref in _SETTINGS_11:
+        conn.execute(text("delete from setting_values where key like :k"), {"k": pref + "%"})
+    if c.data_dir:
+        shutil.rmtree(c.data_dir / "work_artifacts", ignore_errors=True)
+
+
 # version -> step. Version 1 is the 0.1.0/0.2.0 schema and needs no step.
 MIGRATIONS: dict[int, Step] = {
     2: Step("0.3.0: pinned conversations, folders, message kinds, attachments, media in conversations", _up_2, _down_2),
@@ -430,6 +497,7 @@ MIGRATIONS: dict[int, Step] = {
             _up_8, _down_8),
     9: Step("0.4.3: workspace files and versions, durable jobs, contexts and the retrieval index", _up_9, _down_9),
     10: Step("0.5.0: cloud agents, durable run steps and agent memory", _up_10, _down_10),
+    11: Step("0.6.0: Work Mode (sessions, timeline, artifacts, skills; Work agent kind, run-to-session link)", _up_11, _down_11),
 }
 
 SCHEMA_VERSION = max([1, *MIGRATIONS])

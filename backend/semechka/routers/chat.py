@@ -55,6 +55,8 @@ PARAM_KEYS = ("temperature", "top_p", "top_k", "min_p", "max_tokens", "seed", "r
 
 def _need_mode(ctx: Ctx, mode: str = "chat"):
     """Mode gate used by every chat route: UI hiding is never the boundary."""
+    if mode == "work":
+        raise HTTPException(422, {"code": "invalid", "message": "Work Mode sessions are under /api/work, not chat."})
     st = services.mode_state(ctx.s, ctx.principal, ctx.st, mode)
     if st["enabled"]:
         return
@@ -112,7 +114,7 @@ def _own_conv(ctx: Ctx, cid: str) -> Conversation:
 
 @router.get("/models")
 def list_models(ctx: Ctx = Depends(current), mode: str = "chat"):
-    if mode not in services.MODES:
+    if mode not in services.MODES or mode == "work":
         raise HTTPException(422, {"code": "invalid", "message": "Unknown mode."})
     _need_mode(ctx, mode)
     out = []

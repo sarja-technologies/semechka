@@ -372,6 +372,8 @@ class Authz:
         list_all = self.check_org("org.workspaces.list_all", org_id).allowed
         out = []
         for w in self.s.execute(select(Workspace).where(Workspace.org_id == org_id).order_by(Workspace.name)).scalars():
+            if (w.policy or {}).get("system"):
+                continue  # internal workspaces (the Work Mode agent's home) are never listed
             if list_all or self.check("ws.view", w).allowed:
                 out.append(w)
         return out

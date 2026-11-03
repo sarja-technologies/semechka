@@ -10,12 +10,12 @@ from . import perms
 from .models import (Backend, Meta, Model, ModelGrant, Role, Team, UsageEvent, User, UserOverride)
 from .settings_reg import BY_ID as SETTING_DEFS
 
-MODES = ["chat", "code", "image", "video", "audio", "knowledge", "agents"]
+MODES = ["chat", "code", "image", "video", "audio", "knowledge", "agents", "work"]
 # Modes whose backends are implemented in this release. Others report a truthful unsupported state.
 # code / knowledge / agents(assistants) run on the chat engine; image, video and audio need their own backends.
-IMPLEMENTED_MODES = {"chat", "code", "knowledge", "agents"}
+IMPLEMENTED_MODES = {"chat", "code", "knowledge", "agents", "work"}
 MODE_CAPABILITY = {"chat": "chat", "code": "chat", "image": "image", "video": "video", "audio": "audio",
-                   "knowledge": "chat", "agents": "chat"}
+                   "knowledge": "chat", "agents": "chat", "work": "chat"}
 
 
 def seed(s) -> None:
@@ -53,7 +53,7 @@ def subject_keys(p: perms.Principal) -> set[tuple[str, str]]:
 
 
 # Which grant mode governs each product mode. Knowledge and assistants run on chat models.
-GRANT_MODE = {"chat": "chat", "knowledge": "chat", "agents": "chat", "code": "code", "image": "image", "video": "video",
+GRANT_MODE = {"chat": "chat", "knowledge": "chat", "agents": "chat", "work": "chat", "code": "code", "image": "image", "video": "video",
               "audio": "audio", "vision": "vision"}
 
 
@@ -149,6 +149,9 @@ def mode_state(s, p: perms.Principal, st, mode: str) -> dict:
         return {"enabled": False, "reason": "Turned off by your administrator.", "code": "disabled"}
     if not p.can(f"mode.{mode}"):
         return {"enabled": False, "reason": "Your group has no access.", "code": "forbidden"}
+    if mode == "work":  # the Work Mode feature switch is separate from the mode switch: both must be on
+        if not st.settings.deployment(s, "work.enabled"):
+            return {"enabled": False, "reason": "Work Mode is not switched on for this server.", "code": "disabled"}
     if mode in ("image", "video"):  # media block: implemented exactly when a media-capable backend is connected
         from . import media_svc
         why = media_svc.unavailable_reason(s, mode)

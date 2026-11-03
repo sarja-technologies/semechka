@@ -10,9 +10,12 @@ from semechka.state import AppState
 from .test_upgrade_020 import old_data  # noqa: F401  (fixture)
 
 
+WORK_PERMS = {"mode.work", "work.network", "work.skills.manage"}  # migration 11's business (Work Mode), not these tests'
+
+
 def roles(db):
     c = sqlite3.connect(db)
-    out = {rid: (set(json.loads(g)), set(json.loads(d))) for rid, g, d in c.execute("select id, grants, denies from roles")}
+    out = {rid: (set(json.loads(g)) - WORK_PERMS, set(json.loads(d)) - WORK_PERMS) for rid, g, d in c.execute("select id, grants, denies from roles")}
     c.close()
     return out
 

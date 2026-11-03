@@ -40,6 +40,7 @@ class Agent(Base):
     network: Mapped[dict] = mapped_column(JSON, default=dict)  # {"allow": [hostnames]}; empty = no network
     version: Mapped[int] = mapped_column(Integer, default=1)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    kind: Mapped[str] = mapped_column(String(12), default="cloud")  # cloud | work (the hidden per-org Work Mode agent)
     created_by: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[float] = mapped_column(Float, default=now)
     updated_at: Mapped[float] = mapped_column(Float, default=now)
@@ -69,6 +70,7 @@ class AgentRun(Base):
     artifacts: Mapped[list] = mapped_column(JSON, default=list)  # [{"file_id", "name", "version"}]
     sources: Mapped[list] = mapped_column(JSON, default=list)  # citations gathered from retrieval and file reads
     usage: Mapped[dict] = mapped_column(JSON, default=dict)
+    session_id: Mapped[str | None] = mapped_column(String(32), index=True)  # Work Mode: the session this run belongs to
     created_at: Mapped[float] = mapped_column(Float, default=now)
 
 

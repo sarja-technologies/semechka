@@ -196,6 +196,7 @@ SYS = "System"
 E = "Email"
 U = "Chat & Composer"
 SCH = "Schemra"
+WK = "Work Mode"
 
 DEFS: list[Def] = [
     # ---- identity & branding ----
@@ -304,7 +305,8 @@ DEFS: list[Def] = [
           merge="false_wins", edit_perm="admin.settings.edit", aliases=[f"disable {m}"])
       for m, lbl in [("chat", "chat"), ("code", "code workspace"), ("image", "image generation"),
                      ("video", "video generation"), ("audio", "audio"), ("knowledge", "knowledge search"),
-                     ("agents", "assistants (saved prompts; no tools)")]],
+                     ("agents", "assistants (saved prompts; no tools)"),
+                     ("work", "Work Mode (isolated container sessions)")]],
     # ---- composer ----
     Def("chat.attachments", U, "Allow attachments", "Images (for models that can see) and text files. Stored encrypted "
         "with the conversation and removed with it.", "bool", True,
@@ -516,6 +518,62 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.quotas.edit"),
     Def("sandbox.max_concurrent", Q, "Sandbox calls at once (whole server)", "Others wait their turn.", "int", 2, min=1, max=16,
         scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    # ---- Work Mode (docs/WORK_MODE.md section 7) ----
+    Def("work.enabled", WK, "Work Mode",
+        "Lets people with the Work Mode permission open sessions: each session is one isolated container with its own "
+        "persistent workspace in which a language model runs commands and writes files. Needs the Work image (see "
+        "scripts/spark/work_image.sh) and the sandbox runtime. Off until you turn it on; also turn on 'Enable Work Mode' under Modes.",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Language-model-written commands run on this machine, inside per-session containers with no network by default."),
+    Def("work.image", WK, "Work image", "The container image every session starts from (never pulled at run time).", "string",
+        "semechka-work:1", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("work.max_sessions_per_user", WK, "Sessions working at once (per person)",
+        "How many of one person's sessions may have a run in progress at the same time.", "int", 2, min=1, max=20,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.max_running_total", WK, "Sessions working at once (whole server)",
+        "Runs beyond this wait in the queue.", "int", 4, min=1, max=64, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.max_sessions_stored", WK, "Sessions kept per person",
+        "Sessions (with their workspace volumes) one person may have before they must delete one.", "int", 20, min=1, max=500,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.memory_mb", WK, "Container memory ceiling (MB)", "Hard limit per session container; sessions may ask for less.", "int", 4096,
+        min=256, max=65536, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.cpus", WK, "Container CPU ceiling", "Hard limit per session container.", "float", 2, min=0.25, max=32,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.pids", WK, "Container process limit", "Maximum processes per session container.", "int", 256, min=32, max=4096,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.workspace_max_mb", WK, "Workspace size ceiling (MB)",
+        "Size of one session's /work volume. Checked before every write and command; a command that grows it past the limit "
+        "is stopped.", "int", 2048, min=64, max=102400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.tool_timeout_s", WK, "Longest single command (seconds)", "A command still running after this is killed.", "int", 300,
+        min=5, max=3600, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.output_max_chars", WK, "Longest tool output shown to the model (characters)",
+        "Longer output is cut and the cut is reported.", "int", 12000, min=1000, max=100000, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("work.idle_stop_minutes", WK, "Stop idle containers after (minutes)",
+        "A session's container is stopped after this long without activity; its workspace is kept and it starts again on demand.",
+        "int", 30, min=1, max=10080, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.max_steps", WK, "Steps per run (ceiling)", "Model turns one run may take before it stops.", "int", 40, min=1, max=200,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.run_timeout_s", WK, "Longest run (seconds)", "Total model and tool time of one run.", "int", 7200, min=60, max=86400,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.artifact_max_mb", WK, "Largest artifact (MB)", "Published artifacts are copied outside the container; larger files are refused.",
+        "int", 64, min=1, max=1024, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.upload_max_mb", WK, "Largest upload into a workspace (MB)", "", "int", 100, min=1, max=2048, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("work.network_allowed", WK, "Allow internet access for sessions",
+        "When on, people holding the Work network permission may start sessions whose container can reach the network. "
+        "A rootless container runtime cannot keep such a container away from the local network. Off by default.",
+        "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
+        lowers_privacy=lambda o, n: bool(n) and not o,
+        effect="Code run in a session can reach the network the server is on (including local addresses)."),
+    Def("work.network_name", WK, "Container network used for internet sessions",
+        "The Docker network a session joins when it has internet access. The unprivileged runtime installed for the sandbox has "
+        "no such network; internet sessions then fail with the runtime's own message.", "string", "bridge", scopes=["deployment"],
+        edit_perm="admin.settings.edit"),
+    Def("work.delegation_max_depth", WK, "Delegation depth", "How many levels of helper models one session may chain.", "int", 2, min=0, max=5,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.delegation_max_count", WK, "Delegations per run", "", "int", 8, min=0, max=50, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----
     Def("embeddings.url", SYS, "Embedding service address",
         "Base address of an OpenAI-compatible embeddings endpoint (for example http://127.0.0.1:8760). Empty turns "
