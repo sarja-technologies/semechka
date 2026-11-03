@@ -32,7 +32,8 @@ Off by default. With `schemra.enabled` off every `/schemra/…` address answers 
    re-read when it changes, so rotating it needs no restart: change both files, then expect a few seconds of 503/401.
    The secret is never stored in the database, never logged and never sent to a browser.
 
-2. **Tell Schemra to trust the proxy**: `auth_mode: "proxy"` in Schemra, bound to `127.0.0.1` only.
+2. **Tell Schemra to accept the proxy**: `auth_mode: "hybrid"` in Schemra (signed identities are verified and role-limited; the
+   standalone dashboard keeps working), or `"proxy"` to bind `127.0.0.1` only and make Semechka the only way in.
 
 3. **Switch it on** (Admin → Settings → Schemra, or the API; the change is audited and, because it widens what is
    reachable, asks for confirmation):
@@ -55,6 +56,9 @@ Off by default. With `schemra.enabled` off every `/schemra/…` address answers 
 
    It prints no cookie or token. Exit status 0 means the role arrived as expected, a signed-out request is refused, a
    cross-site POST is refused and nothing from the lab's own port leaks.
+
+   Operator shortcut on the host (no sign-in; audited; refuses to run without a pre-update snapshot): `scripts/spark/schemra_enable.py`
+   copies nothing but sets `schemra.upstream`/`schemra.enabled` and adds the permissions to the roles you name.
 
 ## Settings
 
