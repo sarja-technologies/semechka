@@ -448,6 +448,9 @@ DEFS: list[Def] = [
     Def("media.video_max_seconds", Q, "Longest video clip (seconds)",
         "Requests whose frames divided by frame rate exceed this are refused.", "int", 8, min=1, max=60,
         scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    Def("media.profile_upload_max_mb", Q, "Largest source file for video editing (MB)",
+        "Source videos and reference pictures sent to an editing profile (for example OpenJutsu) may not exceed this.", "int", 512,
+        min=1, max=2048, scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
     # ---- cloud workspaces ----
     Def("cloud.rollout", SYS, "Who may use the cloud features",
         "Everyone: anyone the cloud switches and their organisation roles allow. Administrators only: workspaces, files, "

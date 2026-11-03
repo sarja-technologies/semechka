@@ -32,7 +32,7 @@ def reset():
     STATE.update(jobs={}, by_key={}, files={}, discards=[], submissions=[], n=0, reject_files=False, uploads={},
                  legacy=False, llm={"state": "stopped", "model_id": None, "active_streams": 0, "error": None},
                  worker_loaded=set(), loads=[], unloads=[], fail_load=False, cut_off=0, switches=[], stream_delay=0.0,
-                 worker_alive=False, worker_stops=0, completions=[],
+                 worker_alive=False, worker_stops=0, completions=[], profiles=None, profile_submissions=[],
                  # Trinodal AI registered in the engine as a remote endpoint (opt-in: STATE["trinodal"] = True)
                  trinodal=False, trinodal_delay=0.0, trinodal_closed=0, trinodal_finished=0)
 
@@ -320,6 +320,36 @@ def _advance(j):
                              "duration": (s["frames"] / s["fps"]) if j["kind"] == "video" else None,
                              "fps": s.get("fps"), "frames": s.get("frames")}]
         j.update(status="completed", progress=1.0, progress_text="Completed")
+
+
+@app.get("/v1/registry", dependencies=[Depends(auth)])
+def registry():
+    if STATE["profiles"] is None:
+        raise HTTPException(404, "not found")                       # an engine that predates the registry
+    return {"models": [], "profiles": STATE["profiles"], "external": []}
+
+
+@app.post("/v1/profiles/{pid}/jobs", dependencies=[Depends(auth)])
+async def submit_profile(pid: str, request: Request):
+    body = await request.json()
+    prof = next((p for p in STATE["profiles"] or [] if p["id"] == pid), None)
+    if not prof:
+        raise HTTPException(422, f"profile '{pid}' does not exist")
+    if not prof["readiness"]["ready"]:
+        raise HTTPException(409, f"{prof['name']} is not ready: {prof['readiness']['reason']}")
+    key = body.get("client_key")
+    if key and key in STATE["by_key"]:
+        return STATE["jobs"][STATE["by_key"][key]]
+    STATE["n"] += 1
+    jid = f"j_{STATE['n']:04d}"
+    inputs = body.get("inputs") or {}
+    STATE["jobs"][jid] = {"id": jid, "kind": "video", "status": "queued", "progress": 0.0, "progress_text": "Queued", "polls": 0,
+                          "error": None, "generations": [], "simple": {"prompt": inputs.get("prompt", ""), "width": 832, "height": 480,
+                                                                       "frames": 33, "fps": 16}}
+    STATE["profile_submissions"].append({"profile": pid, "inputs": inputs, "client_key": key})
+    if key:
+        STATE["by_key"][key] = jid
+    return STATE["jobs"][jid]
 
 
 @app.get("/v1/jobs", dependencies=[Depends(auth)])

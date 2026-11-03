@@ -60,7 +60,13 @@ class SarnessMediaMixin:
                                                       "title": f"semechka {kind}"})
         return r.json()["id"]
 
-    async def media_upload(self, data: bytes, mime: str, name: str) -> str:
+    async def media_submit_profile(self, profile_id: str, inputs: dict, client_key: str) -> str:
+        """Queue a composite-profile job (e.g. OpenJutsu). ``inputs`` holds plain values and engine file ids."""
+        r = await self._call("POST", f"/v1/profiles/{profile_id}/jobs", json={"inputs": inputs, "client_key": client_key,
+                                                                              "title": f"semechka {profile_id}"})
+        return r.json()["id"]
+
+    async def media_upload(self, data, mime: str, name: str) -> str:
         """Hand a source image to the engine (image editing, image-to-video). Returns the engine's file id.
         The engine keeps uploaded files in its own storage; it has no endpoint to delete them."""
         try:
@@ -70,7 +76,7 @@ class SarnessMediaMixin:
         except httpx.HTTPError as e:
             raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
         if r.status_code >= 400:
-            raise AdapterError(f"Sarness refused the source image (HTTP {r.status_code}).", status=422, kind="rejected")
+            raise AdapterError(f"Sarness refused the source file (HTTP {r.status_code}).", status=422, kind="rejected")
         return r.json()["id"]
 
     async def media_status(self, remote_id: str) -> dict:

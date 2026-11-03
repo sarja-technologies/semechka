@@ -1,10 +1,12 @@
 """Image and video generation API. Every route enforces the mode gate, ownership and quotas itself."""
 from __future__ import annotations
 
+import json
 import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from starlette.datastructures import UploadFile as StarUploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -62,7 +64,8 @@ def options(kind: str, ctx: Ctx = Depends(current)):
                        "modes": info.get("modes") or [], "audio": bool(info.get("audio")),
                        "schedulers": info.get("schedulers") or [], "limits": info.get("limits") or {},
                        "defaults": media_svc.option_defaults(kind, m, size, vmax),
-                       "loaded": (m.meta or {}).get("loaded")})
+                       "loaded": (m.meta or {}).get("loaded"),
+                       "profile": media_svc.profile_info(m)})
     ephemeral = bool(_val(ctx, "privacy.ephemeral_allowed") and ctx.principal.can("chat.ephemeral"))
     return {"kind": kind, "models": models, "ephemeral": ephemeral, "retention_days": _val(ctx, "privacy.chat_retention_days"),
             "prompt_max": media_svc.PROMPT_MAX, "video_max_seconds": vmax if kind == "video" else None,
@@ -121,6 +124,56 @@ def backend_error(e: AdapterError) -> HTTPException:
     return _backend_error(e)
 
 
+@router.post("/profile-jobs")
+async def create_profile_job(request: Request, ctx: Ctx = Depends(current)):
+    """Edit or transform a video with a composite profile (OpenJutsu ...). multipart/form-data: model_id, save, inputs (JSON of plain
+    settings incl. the prompt) and file parts named ``file:<input>`` (repeat the name for several files). The engine runs it as a durable
+    job; the result is collected and stored exactly like any other generation."""
+    _gate(ctx, "video")
+    s, st, p = ctx.s, ctx.st, ctx.principal
+    form = await request.form()
+    m = s.get(Model, str(form.get("model_id") or ""))
+    b = s.get(Backend, m.backend_id) if m else None
+    if m is None or b is None or not media_svc.profile_info(m):
+        raise HTTPException(404, {"code": "not_found", "message": "That editing profile was not found."})
+    ok, why = services.model_access(s, p, m, b, st, "video")
+    if not ok:
+        raise HTTPException(403, {"code": "model_forbidden", "message": why})
+    try:
+        inputs = json.loads(str(form.get("inputs") or "{}"))
+        if not isinstance(inputs, dict):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(422, {"code": "invalid", "message": "inputs must be a JSON object."}) from None
+    uploads: dict[str, list[tuple]] = {}
+    for key, val in form.multi_items():
+        if key.startswith("file:") and isinstance(val, StarUploadFile):
+            uploads.setdefault(key[5:], []).append((val.file, val.content_type or "", val.filename or "upload"))
+    sizes = {n: [((mime or ""), _size(fo)) for fo, mime, _ in items] for n, items in uploads.items()}
+    days = _val(ctx, "privacy.chat_retention_days")
+    save = admit_job(ctx, str(form.get("save", "true")).lower() != "false", "video")
+    try:
+        clean = media_svc.validate_profile_inputs(m, inputs, sizes, int(_val(ctx, "media.profile_upload_max_mb")) * 2**20)
+    except media_svc.ParamError as e:
+        raise HTTPException(422, {"code": "invalid", "message": str(e)}) from e
+    s.commit()
+    try:
+        jid = await media_svc.submit_profile(st, ctx.user, m, b, clean, uploads, save, time.time() + days * 86400 if days and days > 0 else None)
+    except AdapterError as e:
+        raise _backend_error(e) from e
+    await media_svc.refresh(st, jid)
+    s.expire_all()
+    return {**media_svc.job_out(st, s, p, s.get(MediaJob, jid)), "forced_unsaved": days == 0 and str(form.get("save", "true")).lower() != "false"}
+
+
+def _size(fo) -> int:
+    pos = fo.tell()
+    fo.seek(0, 2)
+    n = fo.tell()
+    fo.seek(pos)
+    return n
+
+
 @router.post("/jobs")
 async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
     _gate(ctx, body.kind)
@@ -132,6 +185,8 @@ async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
     ok, why = services.model_access(s, p, m, b, st, body.kind)
     if not ok:
         raise HTTPException(403, {"code": "model_forbidden", "message": why})
+    if media_svc.profile_info(m):
+        raise HTTPException(422, {"code": "invalid", "message": "This is an editing profile; send it with its source files (profile-jobs)."})
     days = _val(ctx, "privacy.chat_retention_days")
     save = admit_job(ctx, body.save, body.kind)
     params = check_params(ctx, body.kind, m, body.model_dump())

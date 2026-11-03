@@ -167,6 +167,21 @@ def media_meta(cm: dict, im: dict, repo: str | None) -> dict:
     })
 
 
+def profile_meta(p: dict) -> dict:
+    """A composite capability (e.g. OpenJutsu) as a video model. Readiness and the input form come from the ENGINE; nothing here decides
+    whether it works."""
+    r = p.get("readiness") or {}
+    return _clean({
+        "engine_name": p.get("name"), "architecture": p.get("family"), "description": p.get("notes"),
+        "media": {"kind": p.get("category") or "video", "modes": ["video-edit"], "negative_prompt": False, "schedulers": [],
+                  "audio": True, "defaults": {}, "limits": {},
+                  "profile": {"id": p["id"], "ready": bool(r.get("ready")), "state": r.get("state"), "reason": r.get("reason"),
+                              "official": p.get("official", True), "inputs_schema": p.get("inputs_schema") or {},
+                              "operations": (p.get("capabilities") or {}).get("operations") or [],
+                              "estimate_mb": (p.get("memory") or {}).get("estimate_mb")}},
+    })
+
+
 class SarnessAdapter(SarnessMediaMixin, Adapter):
     manifest = Manifest(
         id="sarness", name="Sarness Engine", model_load=False, model_unload=True, system_telemetry=True, media=True,
@@ -254,6 +269,17 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
             out.append(DiscoveredModel(f"{kind}:{mid}", [kind],
                                        media_meta(cm, im, repos.get(mid) or repos.get(im.get("catalog_id"))),
                                        loaded=mid in worker_loaded if by_cap else bool(im.get("loaded"))))
+        # Composite profiles (OpenJutsu ...) from the engine's canonical registry; absent on engines that predate it
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                reg = await self._json(c, "/v1/registry") or {}
+        except httpx.HTTPError:
+            reg = {}
+        for pr in reg.get("profiles") or []:
+            if isinstance(pr, dict) and pr.get("id"):
+                kind = pr.get("category") or "video"
+                out.append(DiscoveredModel(f"{kind}:{pr['id']}", [kind], profile_meta(pr),
+                                           loaded=(pr.get("residency") or {}).get("state") == "loaded"))
         return out
 
     async def status(self) -> dict | None:

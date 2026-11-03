@@ -167,6 +167,89 @@ def validate_params(kind: str, m: Model, body: dict, video_max_s: int) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
+# ---- composite profiles (e.g. OpenJutsu) --------------------------------------------------------------------
+FILE_MIMES = ("video/", "image/")
+
+
+def profile_info(m: Model) -> dict | None:
+    return media_info(m).get("profile")
+
+
+def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[str, int]]], max_bytes: int) -> dict:
+    """Check a profile request against the schema THE ENGINE published for it (the engine validates again): returns the plain inputs.
+    ``files`` maps an input name to [(mime, size)]. A profile that is not ready is refused with the engine's own reason."""
+    prof = profile_info(m)
+    if not prof:
+        raise ParamError("This model is not an editing profile.")
+    if not prof.get("ready"):
+        raise ParamError(f"This is not ready on the server yet: {prof.get('reason') or 'unknown reason'}")
+    schema = prof.get("inputs_schema") or {}
+    out: dict[str, Any] = {}
+    for name, spec in schema.items():
+        t = spec.get("type", "string")
+        if t == "file":
+            got = files.get(name) or []
+            if spec.get("required") and not got:
+                raise ParamError(f"'{name}' is required: add the file.")
+            if len(got) > (int(spec.get("max_files", 9)) if spec.get("multi") else 1):
+                raise ParamError(f"'{name}' takes " + (f"at most {spec.get('max_files', 9)} files." if spec.get("multi") else "one file."))
+            for mime, size in got:
+                if not mime.startswith(FILE_MIMES):
+                    raise ParamError(f"'{name}' must be a video or a picture (got {mime or 'unknown type'}).")
+                if spec.get("kind") and not mime.startswith(spec["kind"] + "/"):
+                    raise ParamError(f"'{name}' must be a {spec['kind']}.")
+                if size > max_bytes:
+                    raise ParamError(f"'{name}' is larger than the {max_bytes // 2**20} MB this server accepts.")
+                if size == 0:
+                    raise ParamError(f"'{name}' is empty.")
+            continue
+        v = inputs.get(name, spec.get("default"))
+        if v in (None, ""):
+            if spec.get("required"):
+                raise ParamError(f"'{name}' is required.")
+            continue
+        if t == "string":
+            v = str(v).strip()
+            if len(v) > min(int(spec.get("max_length", PROMPT_MAX)), PROMPT_MAX):
+                raise ParamError(f"'{name}' is too long.")
+        elif t in ("int", "float"):
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ParamError(f"'{name}' must be a number.")
+            if t == "int" and int(v) != v:
+                raise ParamError(f"'{name}' must be a whole number.")
+            if ("min" in spec and v < spec["min"]) or ("max" in spec and v > spec["max"]):
+                raise ParamError(f"'{name}' must be between {spec.get('min')} and {spec.get('max')}.")
+            v = int(v) if t == "int" else float(v)
+        elif t == "enum" and v not in spec.get("values", []):
+            raise ParamError(f"'{name}' must be one of: {', '.join(map(str, spec.get('values', [])))}.")
+        out[name] = v
+    unknown = set(inputs) - set(schema)
+    if unknown:
+        raise ParamError(f"Unknown setting: {', '.join(sorted(unknown))}.")
+    return out
+
+
+async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, uploads: dict[str, list[tuple[Any, str, str]]], save: bool,
+                         expires_at: float | None, *, job_id: str | None = None) -> str:
+    """Hand source files and settings to the engine, which runs the profile as an ordinary durable job. Raises AdapterError and leaves
+    nothing behind. ``uploads`` maps an input name to [(file object or bytes, mime, filename)]."""
+    job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
+    ad = adapter_for(b, st)
+    spec = (profile_info(m) or {}).get("inputs_schema") or {}
+    sent = dict(inputs)
+    for name, items in uploads.items():
+        ids = [await ad.media_upload(fo, mime, fname) for fo, mime, fname in items]
+        sent[name] = ids if (spec.get(name) or {}).get("multi") else ids[0]
+    remote = await ad.media_submit_profile(m.real_id.split(":", 1)[1], sent, job_id)
+    prompt = str(inputs.get("prompt") or "")
+    with st.db.session() as s:
+        s.add(MediaJob(id=job_id, user_id=user.id, kind="video", model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
+                       prompt_enc=st.vault.encrypt(prompt, "media") if save else None,
+                       params_enc=st.vault.encrypt(json.dumps({k: v for k, v in inputs.items() if k != "prompt"}), "media") if save else None,
+                       status="queued", progress_text="Queued", started_at=None, expires_at=expires_at if save else None))
+    return job_id
+
+
 # ---- storage ---------------------------------------------------------------------------------------
 def assets_dir(cfg) -> Path:
     return cfg.data_dir / "assets"
