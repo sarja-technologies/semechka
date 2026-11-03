@@ -574,6 +574,14 @@ DEFS: list[Def] = [
         scopes=["deployment"], edit_perm="admin.quotas.edit"),
     Def("work.delegation_max_count", WK, "Delegations per run", "", "int", 8, min=0, max=50, scopes=["deployment"],
         edit_perm="admin.quotas.edit"),
+    Def("work.delegate_timeout_s", WK, "Longest delegated task (seconds)",
+        "One delegation (including waiting for the engine to free memory for the other model) is given up after this long.", "int", 300,
+        min=20, max=3600, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.delegate_max_tokens", WK, "Longest delegated answer (tokens)", "The helper model stops after this many tokens.", "int", 1024,
+        min=64, max=8192, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.engine_wait_s", WK, "Longest wait for one image or video job (seconds)",
+        "generate_image and generate_video wait this long for the engine to finish; after that the job keeps running and the agent can "
+        "collect it with wait_job.", "int", 1800, min=30, max=14400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----
     Def("embeddings.url", SYS, "Embedding service address",
         "Base address of an OpenAI-compatible embeddings endpoint (for example http://127.0.0.1:8760). Empty turns "

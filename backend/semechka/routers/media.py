@@ -94,23 +94,10 @@ class JobIn(BaseModel):
 
 def admit_job(ctx: Ctx, save: bool, kind: str) -> bool:
     """Server-side limits for one new generation. Returns whether the result will be saved."""
-    s, p = ctx.s, ctx.principal
-    if not _val(ctx, f"ui.{kind}_gen"):
-        raise HTTPException(403, {"code": "disabled", "message": f"{kind.capitalize()} generation is turned off for you by your administrator."})
-    days = _val(ctx, "privacy.chat_retention_days")
-    if not save and not (_val(ctx, "privacy.ephemeral_allowed") and p.can("chat.ephemeral")):
-        raise HTTPException(403, {"code": "ephemeral_forbidden", "message": "No-save generation is not available to you."})
-    if days == 0:
-        save = False  # the organisation stores nothing; the result is only held briefly for download
-    if media_svc.count_active(s, ctx.user.id) >= _val(ctx, "media.max_concurrent_jobs"):
-        raise HTTPException(429, {"code": "busy", "message": "You already have the maximum number of generations running. Wait for one to finish or cancel it."})
-    daily = _val(ctx, "media.daily_generations")
-    if daily and media_svc.generations_today(s, ctx.user.id) + media_svc.count_active(s, ctx.user.id) >= daily:
-        raise HTTPException(429, {"code": "daily_limit", "message": f"Daily limit of {daily} generations reached."})
-    cap = _val(ctx, "media.max_assets")
-    if save and cap and media_svc.count_assets(s, ctx.user.id) >= cap:
-        raise HTTPException(409, {"code": "gallery_full", "message": f"Your gallery holds {cap} items, the maximum. Delete some to continue."})
-    return save
+    try:
+        return media_svc.admit(ctx.st, ctx.s, ctx.principal, ctx.user.id, save, kind)
+    except media_svc.AdmitError as e:
+        raise HTTPException(e.status, {"code": e.code, "message": e.message}) from None
 
 
 def check_params(ctx: Ctx, kind: str, m: Model, body: dict) -> dict:

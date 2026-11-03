@@ -95,6 +95,15 @@ class Adapter:
         read now. None: not reported."""
         return None
 
+    async def registry(self) -> dict | None:
+        """The engine's canonical model registry, normalised to {"models": {id: entry}, "profiles": {id: entry}, "external": {id: entry}}
+        with each entry's residency, readiness, workload, memory and capabilities. None: not reported."""
+        return None
+
+    async def resources(self) -> dict | None:
+        """A light summary of the engine's shared memory ledger and what holds it. None: not reported."""
+        return None
+
     async def stop_worker(self) -> None:
         raise Unsupported("stopping the picture and video worker")
 

@@ -102,6 +102,21 @@ def _h(key):
     return {"Authorization": f"Bearer {key}"} if key else {}
 
 
+def _plain(v, depth: int = 0):
+    """JSON data with strings cleaned of server paths and bounded in size; nothing else survives."""
+    if isinstance(v, str):
+        return clean_error(v)
+    if isinstance(v, (int, float, bool)) or v is None:
+        return v
+    if depth > 4:
+        return None
+    if isinstance(v, list):
+        return [_plain(x, depth + 1) for x in v[:60]]
+    if isinstance(v, dict):
+        return {str(k)[:60]: _plain(x, depth + 1) for k, x in list(v.items())[:60]}
+    return None
+
+
 def _clean(d: dict) -> dict:
     return {k: v for k, v in d.items() if v not in (None, "", [], {})}
 
@@ -330,6 +345,42 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
                                        "waiting_reason": clean_error(j["waiting_reason"]) if j.get("waiting_reason") else None,
                                        "created_at": j.get("created_at"), "started_at": j.get("started_at")}))
         return out
+
+    async def registry(self) -> dict | None:
+        """GET /v1/registry, reduced to the fields an agent needs; absent on engines that predate it. No server paths."""
+        async with httpx.AsyncClient(timeout=10) as c:
+            reg = await self._json(c, "/v1/registry")
+        if not isinstance(reg, dict):
+            return None
+
+        def entry(m: dict) -> dict:
+            keep = {k: _plain(m.get(k)) for k in ("name", "category", "family", "kinds", "installed", "managed", "official", "notes",
+                                                  "residency", "readiness", "workload", "memory", "capabilities", "inputs_schema")
+                    if m.get(k) not in (None, "", [], {})}
+            return keep
+        out: dict = {"models": {}, "profiles": {}, "external": {}}
+        for key in out:
+            for m in reg.get(key) or []:
+                if isinstance(m, dict) and isinstance(m.get("id"), str):
+                    out[key][m["id"]] = entry(m)
+        return out
+
+    async def resources(self) -> dict | None:
+        """GET /v1/resources: the shared memory ledger. Light (no hardware audit)."""
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await self._json(c, "/v1/resources")
+        if not isinstance(r, dict):
+            return None
+        led = r.get("ledger") or {}
+        mem = led.get("memory") or {}
+        eng = r.get("this_engine") or {}
+        return {"enabled": bool(r.get("enabled")), "error": _plain(r.get("error")),
+                "memory_mb": {k: mem.get(k) for k in ("total_mb", "available_mb", "usable_mb", "headroom_mb", "system_reserve_mb")
+                              if isinstance(mem.get(k), (int, float))},
+                "free_mb": led.get("free_mb") if isinstance(led.get("free_mb"), (int, float)) else None,
+                "unconsumed_mb": led.get("unconsumed_mb") if isinstance(led.get("unconsumed_mb"), (int, float)) else None,
+                "holders": _plain(led.get("holders") or [])[:30],
+                "llm": _plain(eng.get("llm") or {}), "gpu_worker": _plain(eng.get("gpu_worker") or {})}
 
     async def chat_stream(self, model, messages, params):
         allowed = ("temperature", "top_p", "top_k", "min_p", "repeat_penalty", "presence_penalty",

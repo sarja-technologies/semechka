@@ -583,6 +583,37 @@ def sweep(st) -> dict:
     return {"expired_assets": removed, "orphan_files": orphans}
 
 
+class AdmitError(Exception):
+    """A generation was refused before it started: a limit, a setting or a permission. `code` and `status` are the HTTP form."""
+
+    def __init__(self, status: int, code: str, message: str):
+        super().__init__(message)
+        self.status, self.code, self.message = status, code, message
+
+
+def admit(st, s, principal, user_id: str, save: bool, kind: str) -> bool:
+    """Server-side limits for one new generation (the Video/Image routes and Work Mode's engine tools share this one gate).
+    Returns whether the result will be saved; raises AdmitError."""
+    def val(key):
+        return st.settings.value_for(s, key, principal)
+    if not val(f"ui.{kind}_gen"):
+        raise AdmitError(403, "disabled", f"{kind.capitalize()} generation is turned off for you by your administrator.")
+    days = val("privacy.chat_retention_days")
+    if not save and not (val("privacy.ephemeral_allowed") and principal.can("chat.ephemeral")):
+        raise AdmitError(403, "ephemeral_forbidden", "No-save generation is not available to you.")
+    if days == 0:
+        save = False  # the organisation stores nothing; the result is only held briefly for download
+    if count_active(s, user_id) >= val("media.max_concurrent_jobs"):
+        raise AdmitError(429, "busy", "You already have the maximum number of generations running. Wait for one to finish or cancel it.")
+    daily = val("media.daily_generations")
+    if daily and generations_today(s, user_id) + count_active(s, user_id) >= daily:
+        raise AdmitError(429, "daily_limit", f"Daily limit of {daily} generations reached.")
+    cap = val("media.max_assets")
+    if save and cap and count_assets(s, user_id) >= cap:
+        raise AdmitError(409, "gallery_full", f"Your gallery holds {cap} items, the maximum. Delete some to continue.")
+    return save
+
+
 def count_active(s, user_id: str) -> int:
     return s.execute(select(func.count()).select_from(MediaJob).where(MediaJob.user_id == user_id,
                                                                      MediaJob.status.in_(ACTIVE))).scalar() or 0

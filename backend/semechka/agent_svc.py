@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import contextvars
 import json
 import logging
 import operator
@@ -190,6 +191,9 @@ def normalize(body: dict, *, partial: bool = False) -> dict:
         bad = [t for t in body["tools"] if t not in TOOLS]
         if bad:
             raise TenancyError("invalid", f"Unknown tool: {bad[0]}. Available: {', '.join(sorted(TOOLS))}.")
+        only = [t for t in body["tools"] if getattr(TOOLS[t].fn, "work_only", False)]
+        if only:
+            raise TenancyError("invalid", f"{only[0]} works only inside a Work Mode session; it cannot be given to an assistant.")
         out["tools"] = list(dict.fromkeys(body["tools"]))
     if "approval" in body:
         if body["approval"] not in ("never", "sensitive", "always"):
@@ -777,6 +781,7 @@ class Turn:
     result: dict = field(default_factory=dict)
     max_wait: float = 3600.0
     person: str = ""
+    max_tokens: int = 4096
 
 
 def _enc(st, org_id, text):
@@ -957,7 +962,7 @@ async def _call_model_once(st, turn: Turn) -> tuple[str, dict]:
         alias, real, bid, mid = m.alias, m.real_id, b.id, m.id
         n_ctx, ratio = chat_svc.window_for(st, m)
         m_copy = m
-    params = {"temperature": 0.2, "max_tokens": 4096}
+    params = {"temperature": 0.2, "max_tokens": turn.max_tokens}
     messages, _ = chat_svc.fit(turn.messages, n_ctx, params["max_tokens"], ratio)
     t0 = _t.monotonic()
     text, usage, timings = [], None, None
@@ -1173,7 +1178,14 @@ async def handle_agent(st, job_id: str) -> dict:
     return done
 
 
+# The event loop a run's coroutine is running on. Tools run in worker threads (asyncio.to_thread copies this context), and the ones
+# that talk to the engine (Work Mode) must hand their coroutines back to THIS loop: the scheduler and the media block's locks are
+# shared with it and are not safe to wake from another loop.
+RUN_LOOP: contextvars.ContextVar = contextvars.ContextVar("agent_run_loop", default=None)
+
+
 async def _handle_agent(st, job_id: str) -> dict:
+    RUN_LOOP.set(asyncio.get_running_loop())
     hb = asyncio.create_task(_heartbeat(st, job_id))
     try:
         while True:
