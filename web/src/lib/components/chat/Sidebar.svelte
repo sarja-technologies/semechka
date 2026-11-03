@@ -9,7 +9,7 @@
   import { toast } from '$lib/toast.svelte';
   import { list, loadList, loadFolders, dateGroups, drop, upsert, type ConvRow } from '$lib/chat/store.svelte';
   import { errText } from '$lib/chat/thread.svelte';
-  import { navHref, trinodalLinks } from '$lib/nav';
+  import { navHref, navPages, trinodalLinks } from '$lib/nav';
   import Icon from '$lib/components/Icon.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
@@ -22,7 +22,7 @@
   const path = $derived(page.url.pathname);
   const tnl = $derived(trinodalLinks(app.trinodal));
   let tnlOpen = $state(false);
-  const pages = $derived<any[]>((ui.pages ?? []).filter((p: any) => p.available && !(list.workspace === 'code' && p.id === 'code')));
+  const pages = $derived<any[]>(navPages(ui).filter((p: any) => p.available && !(list.workspace === 'code' && p.id === 'code')));
 
   // ---- list --------------------------------------------------------------------------------------------------
   let timer: ReturnType<typeof setTimeout>;

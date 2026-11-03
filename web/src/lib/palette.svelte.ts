@@ -4,7 +4,7 @@
 import { goto } from '$app/navigation';
 import { app, can, loadMe, logout } from './session.svelte';
 import { patch, qs } from './api';
-import { navHref, trinodalLinks } from './nav';
+import { navHref, navPages, trinodalLinks } from './nav';
 import { ADMIN_PAGES } from './components/admin/util';
 import { toast } from './toast.svelte';
 
@@ -34,7 +34,7 @@ registerSource({
   commands: () => {
     if (!app.me) return [];
     const out: Command[] = [];
-    for (const n of app.me.ui.nav as any[]) {
+    for (const n of navPages(app.me.ui) as any[]) {
       if (!n.available) continue; // unavailable modes are explained on their own page; they are not offered as actions
       out.push({ id: `go:${n.id}`, group: 'Go to', label: n.label, run: () => goto(navHref(n)) });
     }
@@ -59,6 +59,7 @@ registerSource({
     }
     if (app.me.ui.theme?.user_choice) for (const [v, label] of THEMES) if (v === 'system' || app.me.ui.theme.choices.includes(v)) out.push({ id: `theme:${v}`, group: 'Appearance', label: `Theme: ${label}`, keywords: 'dark light appearance', run: () => setPref({ theme: v }) });
     for (const v of ['comfortable', 'compact']) out.push({ id: `dens:${v}`, group: 'Appearance', label: `Density: ${v}`, run: () => setPref({ density: v }) });
+    if (app.me.ui.operations?.work?.enabled) out.push({ id: 'act:new-work', group: 'Actions', label: 'New work session', keywords: 'work container agent task', run: () => goto('/work?new=1') });
     if (app.me.ui.tech?.drawer) out.push({ id: 'act:tech', group: 'Actions', label: app.me.user.prefs.show_tech ? 'Hide technical details' : 'Show technical details', run: () => setPref({ show_tech: !app.me.user.prefs.show_tech }) });
     return out;
   }
