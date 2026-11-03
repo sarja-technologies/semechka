@@ -87,10 +87,13 @@ def main() -> int:
         for rid in sorted(have):
             p = services.principal_for_role(s, rid)
             can = any(mm.id == mid for mm, _ in services.accessible_models(s, p, st, "video"))
-            want = rid in roles
-            flag = "OK" if can == want else "UNEXPECTED"
+            via_all = p.can("models.use_all")          # a built-in permission: such a role may use ANY enabled model, granted or not
+            want = rid in roles or via_all
+            flag = "OK" + (" (granted)" if rid in roles else " (built-in models.use_all, not a grant made here)" if via_all else "")
+            if can != want:
+                flag = "UNEXPECTED"
             ok &= can == want
-            print(f"  view-as {rid:20} can use in Video: {str(can):5}  expected: {str(want):5}  {flag}")
+            print(f"  view-as {rid:20} can use in Video: {str(can):5}  {flag}")
         print("audit chain verifies:", audit.verify_chain(s).get("ok"))
     after = fingerprint(data / "semechka.db", a.model)
     same = all(after[k] == before[k] for k in before)
