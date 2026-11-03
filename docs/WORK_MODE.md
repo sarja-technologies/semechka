@@ -135,6 +135,7 @@ Status: implemented on branch `feature/work-mode`. Everything below is what *is*
 | `backend/semechka/routers/work.py` | The REST API of section 6 (without skills). |
 | `work-image/Dockerfile`, `scripts/spark/work_image.sh` | The `semechka-work:1` image and the operator script (build / info / smoke). |
 | `scripts/spark/work_integration.py` | Real integration run against the rootless daemon (63 checks). |
+| `scripts/spark/work_e2e.py` | A real agent session through the staging HTTP API with a small engine model (timeline, artifact check, other-account probes, cleanup, model unload). |
 | `backend/tests/test_work.py`, `test_work_runtime.py` | Tests with the test double (no container runtime needed). |
 
 ### 9.2 Deviations from the design text, and why
