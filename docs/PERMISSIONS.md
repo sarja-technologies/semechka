@@ -14,6 +14,7 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `mode.audio` — Use audio (speech) | yes | – | – | – | – | – | – | – | – |
 | `mode.knowledge` — Use knowledge search | yes | yes | yes | – | – | – | yes | yes | – |
 | `mode.agents` — Use assistants (no tool execution) | yes | yes | yes | – | – | – | yes | yes | – |
+| `mode.work` — Use Work Mode (sessions with an isolated container and tools) | yes | yes | – | – | – | – | – | – | – |
 | **Chat** | | | | | | | | | |
 | `chat.ephemeral` — Start no-save conversations | yes | yes | yes | – | – | – | yes | – | – |
 | `chat.attach` — Attach files to chat | yes | yes | yes | – | – | – | yes | yes | – |
@@ -76,6 +77,9 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.sso.manage` — Configure single sign-on providers | yes | yes | – | – | – | – | – | – | – |
 | `admin.orgs.manage` — Create and suspend organisations | yes | yes | – | – | – | – | – | – | – |
 | `admin.content.read` — Read other people's conversations | – | – | – | – | – | – | – | – | – |
+| **Work Mode** | | | | | | | | | |
+| `work.network` — Give Work Mode sessions internet access | yes | yes | – | – | – | – | – | – | – |
+| `work.skills.manage` — Manage organisation skills for Work Mode | yes | yes | – | – | – | – | – | – | – |
 | **Trinodal AI** | | | | | | | | | |
 | `trinodal.view` — Open Trinodal AI (read only) | yes | yes | – | – | – | – | – | – | – |
 | `trinodal.train` — Use the Trinodal Training Studio | yes | yes | – | – | – | – | – | – | – |

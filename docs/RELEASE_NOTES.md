@@ -1,5 +1,39 @@
 # Release notes
 
+## 0.7.0 (Work Mode: engine tools, delegation, skills; UI integrated)
+
+Merges the Work Mode backend (0.6.0) with its web UI and adds the second phase. Schema unchanged (11). Off until an administrator switches on
+`work.enabled` and `modes.work.enabled`. Design, contract and implementation notes: `docs/WORK_MODE.md` (sections 9.8 to 9.10).
+
+- **Engine tools for the agent.** `list_models` (only models the person may use, with the engine registry's readiness, loaded state, memory and
+  capabilities; profiles such as OpenJutsu with their inputs), `resources` (free unified memory, loaded models, ledger holders, the person's own jobs and
+  limits; cached for at most 5 s, no hardware audit), `generate_image`, `generate_video` (plain models and profiles; profile file inputs are workspace
+  paths), `job_status`, `wait_job`, `cancel_job`. They use the same machinery and limits as the Image and Video modes: one admission gate
+  (concurrency, daily limit, Library size, retention), the same jobs and encrypted assets, so results also appear in the Library. A generation tool
+  reports success only after the engine job completed and the file is in the workspace and listed as an artifact; the engine's refusals and
+  failures reach the agent in its own words. The timeline shows the engine's real progress and phase.
+- **Delegation.** `delegate(model, task, files?)` gives a bounded sub-task to another model the person may use, through the same chat path as
+  everything else (the engine decides which chat model is loaded). Depth (`work.delegation_max_depth`, 2), count per run
+  (`work.delegation_max_count`, 8), a time limit (`work.delegate_timeout_s`) and a token cap (`work.delegate_max_tokens`); waiting-for-memory and
+  refusal texts are shown. Reasoning models are asked not to think unless the agent says so.
+- **Markdown skills.** `/api/work/skills` (list, create, read, update, delete, import, enable, disable), personal and organisation scope (organisation
+  skills need `work.skills.manage`), name unique per scope, body up to 64 KB, text files up to 1 MB, encrypted. Front matter is read for four keys
+  only; a skill can never change tools, network, approvals or limits. Sessions carry `skill_ids`; the prompt holds only each skill's name and
+  description; `list_skills` and `read_skill` (which also copies the skill's files to `/work/.skills/<name>/`).
+- **Seeded data (disclosed).** The first time an organisation lists skills after this upgrade, seven organisation skills are created: `coding`,
+  `research`, `image-generation`, `video-production` (including how to call OpenJutsu and the MiniMax H3 territory note), `media-editing`,
+  `document-creation`, `data-analysis`. Administrators can edit, switch off or delete them; deleted ones are not recreated. `semechka migrate --to 10`
+  removes them with the skills table.
+- **API now matches the UI.** Events are `{id, kind, run_id, step_n, summary, created_at, data}` with per-kind `data`; tool calls and results join by
+  `call_id`; an answered approval appends a new approval event for the same step; `/state` has `jobs`, `active_run`, `usage`; `/files` is one level; times
+  are ISO 8601; `/api/me` has `ui.operations.work`. A cancelled session accepts new messages. Full list of changes: `docs/WORK_MODE.md` 9.9.
+- **UI.** Work screens (sessions, live timeline, files, artifacts, jobs, skills editor). Two fixes: approvals of different runs no longer merge, and a
+  delegation shows why it is waiting.
+- **Settings.** `work.delegate_timeout_s`, `work.delegate_max_tokens`, `work.engine_wait_s`. Work-only tools cannot be given to an assistant.
+
+What is verified and what is not is stated in `docs/WORK_MODE.md` 9.10 (backend tests, and real runs on the Spark staging instance with real engine
+models). The Work UI itself was exercised against a mock and in the mock screenshots; it has not been used by a person on staging.
+
 ## 0.6.0 (Work Mode: backend core)
 
 Backend only (no UI yet); schema 10 -> 11, additive. Off until an administrator switches on `work.enabled` and `modes.work.enabled`.

@@ -77,6 +77,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `modes.audio.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.knowledge.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 | `modes.agents.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
+| `modes.work.enabled` | bool | `False` | deployment, role, team, user | false_wins | `admin.settings.edit` |  |
 
 ## Chat & Composer
 
@@ -163,6 +164,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `media.max_assets` | int | `200` | deployment, role, team, user | min_nonzero | `admin.quotas.edit` |  |
 | `media.default_image_size` | int | `0` | deployment, role, team | specific | `admin.settings.edit` |  |
 | `media.video_max_seconds` | int | `8` | deployment, role, team | min | `admin.quotas.edit` |  |
+| `media.profile_upload_max_mb` | int | `512` | deployment, role, team | min | `admin.quotas.edit` |  |
 
 ## System
 
@@ -204,6 +206,34 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `sandbox.timeout_s` | int | `120` | deployment | specific | `admin.quotas.edit` |  |
 | `sandbox.reserve_mb` | int | `8192` | deployment | specific | `admin.quotas.edit` |  |
 | `sandbox.max_concurrent` | int | `2` | deployment | specific | `admin.quotas.edit` |  |
+
+## Work Mode
+
+| ID | Type | Default | Scopes | Merge | Edit permission | Notes |
+|---|---|---|---|---|---|---|
+| `work.enabled` | bool | `False` | deployment | specific | `admin.settings.edit` | Language-model-written commands run on this machine, inside per-session containers with no network by default. |
+| `work.image` | string | `semechka-work:1` | deployment | specific | `admin.settings.edit` |  |
+| `work.max_sessions_per_user` | int | `2` | deployment | specific | `admin.quotas.edit` |  |
+| `work.max_running_total` | int | `4` | deployment | specific | `admin.quotas.edit` |  |
+| `work.max_sessions_stored` | int | `20` | deployment | specific | `admin.quotas.edit` |  |
+| `work.memory_mb` | int | `4096` | deployment | specific | `admin.quotas.edit` |  |
+| `work.cpus` | float | `2` | deployment | specific | `admin.quotas.edit` |  |
+| `work.pids` | int | `256` | deployment | specific | `admin.quotas.edit` |  |
+| `work.workspace_max_mb` | int | `2048` | deployment | specific | `admin.quotas.edit` |  |
+| `work.tool_timeout_s` | int | `300` | deployment | specific | `admin.quotas.edit` |  |
+| `work.output_max_chars` | int | `12000` | deployment | specific | `admin.quotas.edit` |  |
+| `work.idle_stop_minutes` | int | `30` | deployment | specific | `admin.quotas.edit` |  |
+| `work.max_steps` | int | `40` | deployment | specific | `admin.quotas.edit` |  |
+| `work.run_timeout_s` | int | `7200` | deployment | specific | `admin.quotas.edit` |  |
+| `work.artifact_max_mb` | int | `64` | deployment | specific | `admin.quotas.edit` |  |
+| `work.upload_max_mb` | int | `100` | deployment | specific | `admin.quotas.edit` |  |
+| `work.network_allowed` | bool | `False` | deployment | specific | `admin.settings.edit` | weakening changes need confirmation · Code run in a session can reach the network the server is on (including local addresses). |
+| `work.network_name` | string | `bridge` | deployment | specific | `admin.settings.edit` |  |
+| `work.delegation_max_depth` | int | `2` | deployment | specific | `admin.quotas.edit` |  |
+| `work.delegation_max_count` | int | `8` | deployment | specific | `admin.quotas.edit` |  |
+| `work.delegate_timeout_s` | int | `300` | deployment | specific | `admin.quotas.edit` |  |
+| `work.delegate_max_tokens` | int | `1024` | deployment | specific | `admin.quotas.edit` |  |
+| `work.engine_wait_s` | int | `1800` | deployment | specific | `admin.quotas.edit` |  |
 
 ## System
 
