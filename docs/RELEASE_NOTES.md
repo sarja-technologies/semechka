@@ -1,5 +1,20 @@
 # Release notes
 
+## 0.5.9 (Schemra integration)
+
+Adds the authenticated `/schemra/` route to Schemra, the separate local AI training lab, and brings the earlier proxy branch onto the
+0.5.8 line. **Off by default**: `schemra.enabled` is false (every `/schemra/...` answers 404), and no existing role gains a permission
+on upgrade. The database schema is unchanged. Guide: [SCHEMRA_INTEGRATION.md](SCHEMRA_INTEGRATION.md).
+
+- **Same-origin reverse proxy at `/schemra/`** to a Schemra on this machine (loopback only), streaming bodies and event streams, with
+  HMAC-signed identity headers (user, role, time, nonce) that Schemra verifies; Semechka's session, CSRF/same-origin rule, rate limit
+  and hash-chained audit apply; cookies and browser-supplied identity headers never reach Schemra.
+- **Permissions** `schemra.view` (read-only), `schemra.operate` (chat, boards, agents, training), `schemra.admin`; the strongest one
+  held decides the role sent. Schemra enforces the role per route on its side, including direct API routes.
+- Settings `schemra.enabled`, `schemra.upstream`, upload/rate/timeout/audit/CSRF options; the shared secret is a file
+  (`SEMECHKA_SCHEMRA_SECRET_FILE`, default `<data dir>/schemra-proxy.secret`, mode 0600), never a setting.
+- Sign-in with `?next=/schemra/...` loads the lab after login instead of routing to it inside the app.
+
 ## 0.5.8 (Trinodal AI integration)
 
 Adds the Semechka side of Trinodal AI, a separate modular AI system. Everything is inert until an administrator configures it:
