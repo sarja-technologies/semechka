@@ -61,17 +61,25 @@ class Api:
 
 
 def show(ev: dict) -> str:
-    d = ev.get("detail") or {}
+    """One line per event, from the documented event shape (docs/WORK_MODE.md section 10): {id, kind, run_id, step_n, summary, created_at, data}."""
+    d = ev.get("data") or {}
     k = ev["kind"]
-    t = time.strftime("%H:%M:%S", time.localtime(ev["at"]))
+    t = (ev.get("created_at") or "")[11:19]
     if k == "tool_call":
         args = json.dumps(d.get("args", {}))
         return f"{t} #{ev['id']:<4} tool_call    {d.get('tool')} {args[:260]}"
     if k == "tool_result":
-        txt = (d.get("text") or d.get("error") or "").strip().replace("\n", " | ")
-        return f"{t} #{ev['id']:<4} tool_result  {ev['summary']}  {d.get('seconds', '')}s  {txt[:300]}"
+        txt = (d.get("output") or d.get("error") or "").strip().replace("\n", " | ")
+        return f"{t} #{ev['id']:<4} tool_result  {ev['summary']}  {d.get('duration_ms', '')}ms  {txt[:300]}"
     if k == "message":
         return f"{t} #{ev['id']:<4} message      [{d.get('role')}] {str(d.get('content'))[:400]}"
+    if k == "job":
+        p = d.get("progress")
+        return f"{t} #{ev['id']:<4} job          {d.get('job_id')} {d.get('job_kind')} {d.get('model')} {d.get('status')}" + (f" {int(p * 100)}%" if isinstance(p, (int, float)) else "") + f" {d.get('phase') or ''} {d.get('error') or ''}".rstrip()
+    if k == "delegate":
+        return f"{t} #{ev['id']:<4} delegate     {d.get('delegate_id')} depth={d.get('depth')} {d.get('model')} {d.get('status')} {str(d.get('result') or d.get('error') or d.get('note') or '')[:200]}"
+    if k == "approval":
+        return f"{t} #{ev['id']:<4} approval     step {d.get('step')} {d.get('tool')} {d.get('status')}"
     if k == "error":
         return f"{t} #{ev['id']:<4} ERROR        {ev['summary']}  {json.dumps(d)[:300]}"
     return f"{t} #{ev['id']:<4} {k:<12} {ev['summary']}"
@@ -174,8 +182,8 @@ def main() -> int:
     tool_calls = [e for e in events if e["kind"] == "tool_call"]
     results = [e for e in events if e["kind"] == "tool_result"]
     errors = [e for e in events if e["kind"] == "error"]
-    print(f"tool calls={len(tool_calls)} results ok={sum(1 for e in results if e['detail'].get('status') == 'done')} "
-          f"tool errors={sum(1 for e in results if e['detail'].get('status') != 'done')} invalid-model-replies={sum(1 for e in errors if 'not a valid action' in e['summary'])}")
+    print(f"tool calls={len(tool_calls)} results ok={sum(1 for e in results if e['data'].get('ok'))} "
+          f"tool errors={sum(1 for e in results if not e['data'].get('ok'))} invalid-model-replies={sum(1 for e in errors if 'not a valid action' in e['summary'])}")
     ok = False
     for x in arts:
         if x["path"].endswith("primes.txt"):
@@ -184,8 +192,8 @@ def main() -> int:
             nums = [int(t) for t in text.replace(",", " ").replace("[", " ").replace("]", " ").split() if t.isdigit()]
             ok = nums == PRIMES
             print(f"artifact {x['path']} ({x['size']} bytes): {text.strip()[:200]!r} -> {'CORRECT first 20 primes' if ok else 'WRONG'}")
-    final = [e for e in events if e["kind"] == "message" and e["detail"].get("role") == "assistant"]
-    print("final answer:", (final[-1]["detail"]["content"][:500] if final else "(none)"))
+    final = [e for e in events if e["kind"] == "message" and e["data"].get("role") == "assistant"]
+    print("final answer:", (final[-1]["data"]["content"][:500] if final else "(none)"))
     if a.cleanup:
         code, _ = api.req("DELETE", f"/api/work/sessions/{sid}")
         print("session deleted ->", code)
