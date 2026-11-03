@@ -111,6 +111,7 @@ def main() -> int:
     ap.add_argument("--delete", action="store_true", help="with --session: delete that session (container and volume are removed)")
     ap.add_argument("--cleanup", action="store_true", help="delete the session afterwards (removes its container and volume)")
     ap.add_argument("--unload", action="store_true", help="unload the model afterwards (through Semechka's admin lifecycle)")
+    ap.add_argument("--probe-others", default="", help="comma-separated synthetic accounts that must NOT reach the new session (404/403 expected)")
     ap.add_argument("--enable", action="store_true", help="switch Work Mode on (work.enabled, modes.work.enabled) first")
     a = ap.parse_args()
     api = Api(a.base)
@@ -151,6 +152,17 @@ def main() -> int:
     assert code == 200, sess
     sid = sess["id"]
     print(f"session {sid} model={a.model} autonomy={a.autonomy}")
+    for other in [x for x in a.probe_others.split(",") if x]:
+        o = Api(a.base)
+        o.login(other)
+        codes = {}
+        for label, method, path, body in [("get session", "GET", f"/api/work/sessions/{sid}", None), ("events", "GET", f"/api/work/sessions/{sid}/events", None),
+                                          ("state", "GET", f"/api/work/sessions/{sid}/state", None), ("files", "GET", f"/api/work/sessions/{sid}/files", None),
+                                          ("send message", "POST", f"/api/work/sessions/{sid}/messages", {"content": "hijack"}),
+                                          ("delete", "DELETE", f"/api/work/sessions/{sid}", None), ("list", "GET", "/api/work/sessions", None)]:
+            c, b = o.req(method, path, body)
+            codes[label] = c if label != "list" else f"{c} ({len(b) if isinstance(b, list) else '-'} sessions)"
+        print(f"probe as {other}: {codes}")
     t0 = time.time()
     code, r = api.req("POST", f"/api/work/sessions/{sid}/messages", {"content": a.task})
     assert code == 200, r
