@@ -1,5 +1,26 @@
 # Release notes
 
+## 0.6.0 (Work Mode: backend core)
+
+Backend only (no UI yet); schema 10 -> 11, additive. Off until an administrator switches on `work.enabled` and `modes.work.enabled`.
+Design and contract: `docs/WORK_MODE.md` (implementation notes in section 9).
+
+- **Sessions with their own container.** Each Work session owns one locked-down container (no network, read-only root, `/tmp` tmpfs, user 65534,
+  no capabilities, pids/memory/CPU limits) and a persistent named volume at `/work`. Created lazily, stopped when idle, adopted at start-up,
+  removed with the session. Image `semechka-work:1` (`work-image/`, built by `scripts/spark/work_image.sh`).
+- **Real tools, host-side.** `work_shell`, `work_python`, `work_read_file`, `work_write_file`, `work_edit_file`, `work_list_dir`,
+  `work_search_files`, `work_git`, `work_publish_artifact`, `work_note`. Every path is resolved inside the container and must stay under `/work`
+  (symlink escapes are refused); output is capped with head and tail kept; the workspace has a size quota that is checked before writes and
+  commands and enforced while a command runs.
+- **Runs on the existing loop.** A message becomes an agent run (job kind `work`), with the conversation so far and a bounded durable state
+  block. Pause, resume, cancel, approvals (`contained` or `ask` autonomy), a timeline of events with long-poll, and recovery after a restart.
+- **API.** `/api/work/...` (options, sessions, messages, pause/resume/cancel, events, state, approvals, files, artifacts, save-to-library).
+  Owner-only, mode-gated, CSRF-protected.
+- **Permissions and settings.** `mode.work`, `work.network` (by name, administrators), `work.skills.manage`; mode `work`; `work.*` settings.
+  Upgrading grants the new permissions to administrators only; nobody else gains anything.
+- **Schema.** `work_sessions`, `work_messages`, `work_events`, `work_artifacts`, `work_skills`; `agents.kind`; `agent_runs.session_id`.
+  `semechka migrate --to 10` removes them (workspace volumes must be removed from the container runtime, see `docs/WORK_MODE.md`, 9.7).
+
 ## 0.5.12 (editing profiles: OpenJutsu and similar)
 
 Backend and UI; no schema change. Needs a Sarness engine that provides `/v1/registry` and `/v1/profiles/{id}/jobs`; on an older engine nothing changes.

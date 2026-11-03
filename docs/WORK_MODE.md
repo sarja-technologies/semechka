@@ -117,3 +117,126 @@ started, delegations.
 Backend tests with a runtime test double; a real integration run on the Spark against rootless Docker (persistence across container stop/
 start, no network, limits, path escape attempts, git commit, ffmpeg/PIL, quota) and a real agent run with a small engine model that
 creates, runs and fixes code and produces a real image through the engine. UI verified in a real browser by someone holding a session.
+
+## 9. Implementation notes (phase A: backend core)
+
+Status: implemented on branch `feature/work-mode`. Everything below is what *is*, not the plan.
+
+### 9.1 Files
+
+| File | What it holds |
+|---|---|
+| `backend/semechka/models_work.py` | `WorkSession`, `WorkMessage`, `WorkEvent`, `WorkArtifact`, `WorkSkill` (table only). |
+| `backend/semechka/migrations.py` | Step 11: creates the tables, adds `agents.kind` (`cloud` \| `work`) and `agent_runs.session_id`, grants `mode.work` / `work.network` / `work.skills.manage` to `platform_admin` (and `work.network`, `work.skills.manage` to `owner`). `down` removes the tables, the Work agents/runs/jobs, the hidden workspaces, the `work.*` settings and the three permissions from every role/team/override. It cannot remove containers or volumes: see "Rollback" below. |
+| `backend/semechka/work_runtime.py` | `WorkRuntime` interface, `DockerRuntime` (production), `LocalDirRuntime` (TEST DOUBLE), and `FS_HELPER`, the program that runs *inside* the container for every file operation and command. |
+| `backend/semechka/work_svc.py` | Sessions, messages -> runs, pause/resume/cancel, approvals, container lifecycle (`ensure_running`, idle stop, `reconcile`, `startup`, `sweeper`), events, the durable session-state block, artifacts, save-to-library, and `WorkExtension` (the hook object for the run loop). |
+| `backend/semechka/work_prompt.py` | The Work system prompt and the history of earlier turns. |
+| `backend/semechka/work_tools.py` | The tools (registered in `agent_svc.TOOLS`), argument validation, quota, command-result formatting, artifact registration. |
+| `backend/semechka/routers/work.py` | The REST API of section 6 (without skills). |
+| `work-image/Dockerfile`, `scripts/spark/work_image.sh` | The `semechka-work:1` image and the operator script (build / info / smoke). |
+| `scripts/spark/work_integration.py` | Real integration run against the rootless daemon (63 checks). |
+| `backend/tests/test_work.py`, `test_work_runtime.py` | Tests with the test double (no container runtime needed). |
+
+### 9.2 Deviations from the design text, and why
+
+* **Tool names carry a `work_` prefix** (`work_shell`, `work_python`, `work_read_file`, `work_write_file`, `work_edit_file`,
+  `work_list_dir`, `work_search_files`, `work_git`, `work_publish_artifact`, plus `work_note`). `shell`, `python` and `read_file`
+  already exist in `TOOLS` as cloud-agent tools with different meaning; the registry is one flat namespace.
+* **`work_note(text)`** is an addition: the model can pin a short note into the durable session-state block.
+* **Jobs use kind `"work"`**, not `"agent"`, with the same handler (`agent_svc.handle_agent`). That gives Work its own
+  concurrency limit (`work.max_running_total`, read at claim time through a callable in `jobs_svc.CONCURRENCY`) without starving
+  cloud agents. The loop itself is shared, not forked.
+* **`sensitive` vs approvals.** All phase-A container tools have `sensitive=False`; instead `ToolSpec.mutating` marks the tools
+  `autonomy=ask` asks about (shell, python, write, edit, git). `sensitive=True` on any Work tool means "always ask, in every mode".
+  Contained mode additionally asks for: network-looking commands in an internet session (heuristic regex, *not* a boundary),
+  `git clone/fetch/pull/push/remote` in an internet session, and commands that look like deleting the workspace or most of it
+  (`rm -rf /work/*`, `find . -delete`, ...; also a heuristic). In a no-network session git network subcommands are refused outright.
+* **Session `limits`** can only lower the platform ceilings (`memory_mb`, `cpus`, `workspace_mb`, `tool_timeout_s`, `max_steps`),
+  and are re-clamped on every read, so lowering a ceiling applies to existing sessions at once.
+* **`work_sessions.state_enc`** (not in the original column list) holds the bounded session-state block; `has_workspace` records
+  that a container/volume was created at least once (so a file listing never creates one by itself).
+* **Where the Work agent lives.** `Agent` needs a workspace, and a run's authority check needs `ws.view`. Each organisation gets one
+  internal workspace (`policy = {"system": "work"}`, visibility `shared`, never listed by `Authz.visible_workspaces`) and one
+  `Agent(kind='work', approval='never')`. Work tools declare no workspace permissions: the gates are the person's CURRENT `mode.work`
+  + `modes.work.enabled` + `work.enabled` (re-checked before every model turn and every tool call) and session ownership.
+* **Artifacts are one row per path** (`UNIQUE(session_id, path)`); a changed file updates the same artifact (new `sha256`, new stored
+  copy). The encrypted copy lives in `data/work_artifacts/<user_id>/<artifact_id>.bin` and outlives the container.
+* **Save to library** works for PNG/JPEG/WebP and MP4/WebM (it creates a completed `MediaJob` + `MediaAsset`, so the gallery shows
+  it) and needs the image/video mode to be available to the person. Other file types have no library yet: they stay downloadable.
+* **Skills API is not implemented**; `GET /api/work/options` returns `skills: []`.
+
+### 9.3 Seams for phase B (engine tools, delegation, skills)
+
+* **Run loop hooks**: `agent_svc.RunExtension` (hooks: `disabled_reason`, `before_turn`, `on_interrupted`, `limits`, `resolve_model`,
+  `messages`, `needs_approval`, `on_model`, `on_tool_requested`, `before_tool`, `on_tool_done`, `on_final`, `on_end`) and
+  `agent_svc.EXTENSIONS['work']`. Phase B subclasses or edits `work_svc.WorkExtension`; it never edits `_prepare_turn` & co.
+* **Adding a tool**: `@work_tool(name, summary, args_example, mutating=...)` in `work_tools.py` (or a module imported at the bottom
+  of `work_svc.py`), then append the name to `work_tools.WORK_TOOLS`. The function gets `(tc, w, a)`: `tc` the `ToolCtx` (DB session
+  `tc.s`, `tc.run`, `tc.step`), `w` a `Wk` (`w.sid`, `w.name`, `w.lim`, `w.run_id`, `w.step_n`, `w.rt`, `w.container()`), `a` the
+  arguments. Helpers: `a_str/a_int/a_bool`, `norm_path`, `put(w, name, rel, data)` (quota-checked write into the workspace),
+  `register_artifact(w, name, rel)`, `sync_artifacts`, `run_command`. The decorator releases the DB transaction before the tool
+  runs, maps `TenancyError`/`RuntimeError_` to a `ToolError` with host paths scrubbed, and publishes `w.done(...)` into the
+  `tool_result` event. Report created artifacts through `ToolOut(artifacts=[{"file_id": id, "name": n, "version": 1}])`.
+* **Engine tools** must call Semechka's engine adapters from the host (`adapter_for(backend, st)`; see `agent_svc._call_model_once`
+  for the scheduler slot, `media_svc.submit` for generation jobs), check access with `gateway_svc.check(st, s, principal, org, ws,
+  model_id, mode)`, and write results into the workspace with `put(...)`. Long engine jobs should emit `job` events with
+  `work_svc.emit(st, s, sess, "job", summary, detail, run_id=..., step_n=...)` and appear in `work_svc.state_of(...)["engine_jobs"]`
+  (currently `[]`).
+* **Delegation** (`delegate`): the depth/count ceilings are already settings (`work.delegation_max_depth`, `work.delegation_max_count`);
+  record parent/child through `AgentRun.usage` or a new column; emit `delegate` events.
+* **Skills**: the `work_skills` table and the permission `work.skills.manage` exist. `work_prompt.system_prompt` has no skills section
+  yet: add the index there (`sess.skill_ids` holds the ids), add `list_skills` / `read_skill` tools, and `routers/work.py` routes.
+  `read_skill` should copy supporting files with `put(...)` into `/work/.skills/<name>/`.
+* **Events**: kinds `message|tool_call|tool_result|job|delegate|artifact|approval|state|error`; the UI contract is
+  `GET /api/work/sessions/{id}/events?since=&wait=` -> `{events, last_id, status, container_state}`; each event is
+  `{id, kind, run_id, step, summary, detail, at}` with `detail` decrypted for the owner.
+
+### 9.4 Seams for phase C (UI)
+
+* `GET /api/me` -> `ui.modes.work` = `{enabled, reason, code}` (from `services.mode_state`; includes the `work.enabled` switch).
+* `GET /api/work/options` -> models, limits (ceilings), `network_allowed`, `perms`, `image_ready`/`image_problem`.
+* Session screen = events timeline (poll with `wait=25`) + `GET .../state` (status, container, pending approvals with their `args`, usage)
+  + `GET .../files` tree + `GET .../artifacts`. Approvals: `POST .../approvals/{step} {approve}` using `pending_approvals[].step`.
+* Statuses: `idle|running|awaiting_approval|paused|failed|cancelled`; `container_state`: `absent|stopped|running|error`.
+* Error shape everywhere: `{detail: {code, message}}`; `429 busy` (concurrency), `429 quota` (stored sessions), `413` (uploads, workspace full),
+  `422 path` (path refused), `409 busy` (change network while working), `503 image` (Work image missing).
+
+### 9.5 Behaviour worth knowing
+
+* **Concurrency**: one active run per session; a message sent while a run is active is appended to it and read at its next model turn
+  (placed where it happened). A message that arrives as the run finishes starts a follow-up run. Per-person (`work.max_sessions_per_user`),
+  server-wide (`work.max_running_total`, applied when jobs are claimed) and stored-session (`work.max_sessions_stored`) limits.
+* **Restart recovery**: the shared loop resumes a requeued run; a tool that was mid-flight is marked `interrupted` (never replayed), the
+  timeline says so, and the model is told. `work_svc.startup(st)` (called from the app lifespan) settles sessions whose job already
+  ended (`failed`/`cancelled`, for example after too many attempts) and adopts or cleans containers. `work_svc.sweeper` stops idle
+  containers every minute and reconciles every five.
+* **Pause** takes effect between steps (the current step finishes); a paused job is parked as `awaiting_approval` with
+  `progress_text = "Paused"`. **Cancel** sets `cancel_requested` and kills what the container is running.
+* **Reconcile only touches this install's containers**: they carry `semechka.work.instance=<hmac of the master key>` as well as
+  `semechka.work=<session id>`; several installs (roasted, salted, staging) share one daemon on the Spark.
+* **Quota**: size is measured with `du` before every write/command (3 s cache), a command is refused when the workspace is full unless it
+  looks like cleanup (`rm`, `find`, `du`, `ls`, `df`, `git gc|clean`), and a watchdog inside the container kills a command whose
+  workspace growth passes 105 % of the limit. A single file is capped by `RLIMIT_FSIZE`.
+* **Output**: head and tail of each stream are kept; the result says how many bytes in the middle were left out.
+* **Secrets**: the command environment is built from scratch (PATH, HOME, LANG, a few fixed variables); nothing from the Semechka process
+  is inherited. Tool errors have host paths replaced by `[host path]`.
+
+### 9.6 Known gaps and caveats (honest list)
+
+* **Rootless Docker cannot isolate an internet-enabled container from the LAN**, and the unprivileged daemon installed for the sandbox
+  has no bridge network at all, so `network: internet` fails with the runtime's own message on the Spark (`work.network_name`, default
+  `bridge`). The default and tested configuration is `--network none`.
+* **A volume's source path is readable inside the container** (`/proc/self/mountinfo` shows `/home/semsbx/.local/share/docker/volumes/.../_data`
+  for `/work`). It reveals the daemon account's directory layout, nothing readable (the container cannot open it).
+* The approval heuristics for network use and destructive commands are regexes over the command text, not a boundary. The boundary is
+  the network flag, the container, and quotas.
+* A command that starts a process which escapes its process group with `setsid` survives the end of the command (not a timeout or
+  cancel: those kill every process of the container except init).
+* The pause/cancel granularity is one model turn: a cancel during a long model call is noticed when that call returns.
+* `agent_runs.session_id` has no foreign key (like the other loose references in this schema).
+
+### 9.7 Rollback
+
+`semechka migrate --to 10` removes the Work tables and data. Workspace volumes live in the container runtime, not in Semechka's
+database: list them with `docker ps -a --filter label=semechka.work` and `docker volume ls --filter label=semechka.work`, and remove with
+`docker rm -f <name>; docker volume rm <name>` (only the ones labelled `semechka.work.instance=<your instance>`).
