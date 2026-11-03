@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextlib
+import hashlib
 import json
 import re
 import time
@@ -405,7 +406,7 @@ def result_file(st, job_id: str, user_id: str) -> tuple[bytes, str, dict, str | 
     return None
 
 
-def deliver(w: Wk, snap: dict, alias: str, out: str | None) -> ToolOut:
+def deliver(w: Wk, snap: dict, alias: str, out: str | None, req: str | None = None) -> ToolOut:
     """The job completed: put its file in the workspace, verify it, list it as an artifact. Success is reported only if all of that held."""
     got = result_file(w.st, snap["id"], w.user_id)
     if got is None:
@@ -434,7 +435,7 @@ def deliver(w: Wk, snap: dict, alias: str, out: str | None) -> ToolOut:
             if row is not None:
                 row.saved_to_library, row.library_asset_id = True, asset_id
     facts = ", ".join(f"{k} {meta[k]}" for k in ("width", "height", "duration", "seed") if meta.get(k) is not None)
-    job_event(w, snap, alias, artifact_id=art["id"], out=rel)
+    job_event(w, snap, alias, artifact_id=art["id"], out=rel, **({"req": req} if req else {}))
     elapsed = round((snap["finished_at"] or time.time()) - (snap["started_at"] or snap["created_at"]), 1)
     return ToolOut(f"Done: {snap['kind']} job {snap['id']} completed in {elapsed}s with {alias}. Wrote /work/{rel} "
                    f"({len(data):,} bytes, {mime}, sha256 {head['sha256'][:12]}{', ' + facts if facts else ''}) and listed it as artifact {art['id']}."
@@ -442,10 +443,10 @@ def deliver(w: Wk, snap: dict, alias: str, out: str | None) -> ToolOut:
                    artifacts=[{"file_id": art["id"], "name": art["name"], "version": 1}])
 
 
-def outcome(w: Wk, snap: dict, alias: str, out: str | None) -> ToolOut:
+def outcome(w: Wk, snap: dict, alias: str, out: str | None, req: str | None = None) -> ToolOut:
     st_ = snap["status"]
     if st_ == "completed":
-        return deliver(w, snap, alias, out)
+        return deliver(w, snap, alias, out, req)
     if st_ == "failed":
         raise ToolError(f"The engine job {snap['id']} failed: {snap['error'] or 'the engine gave no reason'}")
     if st_ == "cancelled":
@@ -526,20 +527,58 @@ def wait_cap(w: Wk) -> float:
         return float(w.st.settings.deployment(s, "work.engine_wait_s"))
 
 
-def _finish_tool(w: Wk, jid: str, alias: str, kind: str, out: str | None, prompt: str) -> ToolOut:
+def request_key(kind: str, model_id: str, params: dict, files: dict | None = None) -> str:
+    """Names one generation request: the same model, the same settings and the same input files (by content)."""
+    blob = json.dumps([kind, model_id, params, files or {}], sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def same_request(w: Wk, key: str) -> ToolOut | None:
+    """A small model that does not know it is done calls the same generation again and again, each time spending a job, the person's daily
+    quota and a Library slot. Within ONE run an identical request is not started a second time: the agent is pointed at what it already has
+    (or at the job that is still running). A failed or cancelled earlier job, a deleted file, or a new run (a new message) all allow a fresh try."""
+    with w.st.db.session() as s:
+        sess = s.get(WorkSession, w.sid)
+        rows = s.execute(select(WorkEvent).where(WorkEvent.session_id == w.sid, WorkEvent.kind == "job", WorkEvent.run_id == w.run_id)
+                         .order_by(WorkEvent.id.desc()).limit(300)).scalars().all()
+        seen: dict[str, dict] = {}
+        for ev in rows:
+            try:
+                d = json.loads(work_svc.dec(w.st, sess.org_id, ev.payload_enc)) if ev.payload_enc else {}
+            except ValueError:
+                continue
+            if d.get("req") == key and d.get("job_id") not in seen:
+                seen[d["job_id"]] = d
+    for jid, d in seen.items():
+        if d.get("status") in ("queued", "running"):
+            snap = snapshot(w.st, jid)
+            if snap and snap["status"] in media_svc.ACTIVE:
+                return ToolOut(f"Not started again: this exact request is already running as job {jid}. Collect it with wait_job {{\"id\": \"{jid}\"}}.")
+        if d.get("status") == "completed" and d.get("out") and d.get("artifact_id"):
+            info = w.rt.stat(w.container(), d["out"])
+            if info.get("exists"):
+                w.done(path=d["out"], files=[d["out"]], job=jid)
+                return ToolOut(f"Not started again: this run already made exactly this (job {jid}) and /work/{d['out']} is in your workspace "
+                               f"({info['size']:,} bytes). Use that file. For a different result change the prompt, the seed or the model.")
+    return None
+
+
+def _finish_tool(w: Wk, jid: str, alias: str, kind: str, out: str | None, prompt: str, req: str | None = None) -> ToolOut:
     cap = wait_cap(w)
     snap = snapshot(w.st, jid)
-    job_event(w, snap, alias, out=out or None, prompt=prompt[:120])
+    extra = {"out": out, "req": req}
+    extra = {k: v for k, v in extra.items() if v}
+    job_event(w, snap, alias, prompt=prompt[:120], **extra)
     t0 = time.monotonic()
-    snap = wait_for(w, jid, cap, alias, {"out": out} if out else {})
-    res = outcome(w, snap, alias, out)
+    snap = wait_for(w, jid, cap, alias, extra)
+    res = outcome(w, snap, alias, out, req)
     if snap["status"] in media_svc.ACTIVE:
         return ToolOut(_still_running(snap, time.monotonic() - t0))
     return res
 
 
 @work_tool("generate_image", "Make a picture and wait; returns once the PNG is in /work/artifacts/. size 512 or 768x512; source_file edits a picture.",
-           '{"prompt": "a lighthouse at dusk", "model": "sdxl-turbo", "size": "512", "steps": 4, "out": "artifacts/a.png"}')
+           '{"prompt": "<what to draw>", "model": "<image model>", "size": "512", "out": "artifacts/<name>.png"}')
 def t_generate_image(tc, w: Wk, a: dict) -> ToolOut:
     prompt = a_str(a, "prompt", maxlen=media_svc.PROMPT_MAX).strip()
     model_ref = a_str(a, "model", required=False, maxlen=200).strip()
@@ -574,19 +613,24 @@ def t_generate_image(tc, w: Wk, a: dict) -> ToolOut:
     except media_svc.ParamError as e:
         raise ToolError(str(e)) from None
     name = w.container()
+    data = mime = None
     if src:
         if not (set(mi.get("modes") or []) & {"img2img", "edit", "inpaint"}):
             raise ToolError(f"{m.alias} cannot edit a picture (modes: {', '.join(mi.get('modes') or []) or 'none'}). Pick a model with img2img or edit.")
         data, mime = _read_source(w, name, src, "source_file", kinds=("image/",))
-        if data and len(data) > MAX_SOURCE_BYTES:
+        if len(data) > MAX_SOURCE_BYTES:
             raise ToolError("source_file is larger than 40 MB.")
-        eid = bridge(_upload(w, b, data, mime, src.rsplit("/", 1)[-1]), 180)
-        params["reference_image"] = eid
         if isinstance(a.get("denoise"), (int, float)):
             params["denoise"] = float(a["denoise"])
+    key = request_key("image", m.id, {**params, "out": out}, {"source": hashlib.sha256(data).hexdigest()} if data else None)
+    again = same_request(w, key)
+    if again is not None:
+        return again
+    if data is not None:
+        params["reference_image"] = bridge(_upload(w, b, data, mime, src.rsplit("/", 1)[-1]), 180)
     with scope(w) as (s, p, org, ws, sess):
         jid, alias = _launch(w, "image", m, b, p, params, None, prompt)
-    return _finish_tool(w, jid, alias, "image", out, prompt)
+    return _finish_tool(w, jid, alias, "image", out, prompt, key)
 
 
 async def _upload(w: Wk, b: Backend, data: bytes, mime: str, fname: str) -> str:
@@ -597,7 +641,7 @@ VIDEO_PLAIN_KEYS = ("width", "height", "frames", "fps", "steps", "guidance", "se
 
 
 @work_tool("generate_video", "Make or edit video and wait; returns once the MP4 is in /work/artifacts/. Profiles (OpenJutsu): inputs as in list_models, files are /work paths.",
-           '{"model": "openjutsu-minimax-h3", "inputs": {"prompt": "the singer", "video": "a.mp4", "refs": "p.png", "resolution": "480p"}}')
+           '{"model": "<video model or profile>", "inputs": {"prompt": "<who is replaced>", "video": "<path>", "refs": "<path>"}, "out": "artifacts/<name>.mp4"}')
 def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
     prompt = a_str(a, "prompt", required=False, maxlen=media_svc.PROMPT_MAX).strip()
     model_ref = (a_str(a, "model", required=False, maxlen=200) or a_str(a, "profile", required=False, maxlen=200)).strip()
@@ -642,9 +686,13 @@ def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
             clean = media_svc.validate_profile_inputs(m, plain, files, profile_mb)
         except media_svc.ParamError as e:
             raise ToolError(str(e)) from None
+        key = request_key("video", m.id, {**clean, "out": out}, {k: [hashlib.sha256(x[0]).hexdigest() for x in v] for k, v in uploads.items()})
+        again = same_request(w, key)
+        if again is not None:
+            return again
         with scope(w) as (s, p, org, ws, sess):
             jid, alias = _launch(w, "video", m, b, p, None, (clean, uploads), str(clean.get("prompt", "")))
-        return _finish_tool(w, jid, alias, "video", out, str(clean.get("prompt", "")))
+        return _finish_tool(w, jid, alias, "video", out, str(clean.get("prompt", "")), key)
     # a plain video model
     if not prompt:
         prompt = str(inputs.get("prompt") or "").strip()
@@ -658,13 +706,19 @@ def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
         params = media_svc.validate_params("video", m, body, vmax)
     except media_svc.ParamError as e:
         raise ToolError(str(e)) from None
+    start = None
     if inputs.get("start_image"):
         name = name or w.container()
-        data, mime = _read_source(w, name, norm_path(str(inputs["start_image"]), allow_empty=False), "inputs.start_image", kinds=("image/",))
-        params["start_image"] = bridge(_upload(w, b, data, mime, str(inputs["start_image"]).rsplit("/", 1)[-1]), 180)
+        start = _read_source(w, name, norm_path(str(inputs["start_image"]), allow_empty=False), "inputs.start_image", kinds=("image/",))
+    key = request_key("video", m.id, {**params, "out": out}, {"start": hashlib.sha256(start[0]).hexdigest()} if start else None)
+    again = same_request(w, key)
+    if again is not None:
+        return again
+    if start:
+        params["start_image"] = bridge(_upload(w, b, start[0], start[1], str(inputs["start_image"]).rsplit("/", 1)[-1]), 180)
     with scope(w) as (s, p, org, ws, sess):
         jid, alias = _launch(w, "video", m, b, p, params, None, prompt)
-    return _finish_tool(w, jid, alias, "video", out, prompt)
+    return _finish_tool(w, jid, alias, "video", out, prompt, key)
 
 
 # ---- job tools ----------------------------------------------------------------------------------------------------------
@@ -682,7 +736,7 @@ def t_job_status(tc, w: Wk, a: dict) -> ToolOut:
         refresh_job(w.st, snap["id"])
         snap = snapshot(w.st, snap["id"]) or snap
     alias = ev.get("model") or _alias(w.st, snap["model_id"])
-    job_event(w, snap, alias, **({"out": ev["out"]} if ev.get("out") else {}))
+    job_event(w, snap, alias, **{k: ev[k] for k in ("out", "req") if ev.get(k)})
     return ToolOut(scrub(_describe(snap, alias)))
 
 
@@ -692,11 +746,11 @@ def t_wait_job(tc, w: Wk, a: dict) -> ToolOut:
     t = a_int(a, "timeout_s", 60, 1, 600)
     alias = ev.get("model") or _alias(w.st, snap["model_id"])
     t0 = time.monotonic()
-    extra = {"out": ev["out"]} if ev.get("out") else {}
+    extra = {k: ev[k] for k in ("out", "req") if ev.get(k)}
     snap = wait_for(w, snap["id"], t, alias, extra) if snap["status"] in media_svc.ACTIVE else snap
     if snap["status"] in media_svc.ACTIVE:
         return ToolOut(scrub(_still_running(snap, time.monotonic() - t0)))
-    return outcome(w, snap, alias, ev.get("out"))
+    return outcome(w, snap, alias, ev.get("out"), ev.get("req"))
 
 
 @work_tool("cancel_job", "Cancel a job you started.", '{"id": "mj_..."}')

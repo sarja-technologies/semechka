@@ -204,7 +204,7 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
 
 
 @work_tool("delegate", "Ask ANOTHER model for a bounded sub-task (no tools). files: /work paths. think: true lets a reasoning model think first. Check its answer.",
-           '{"model": "qwen3.5-0.8b@Q8_0", "task": "Translate to French: good morning", "files": []}')
+           '{"model": "<model from list_models>", "task": "<what to do>", "files": []}')
 def t_delegate(tc, w: Wk, a: dict) -> ToolOut:
     task = a_str(a, "task", maxlen=12000).strip()
     model = a_str(a, "model", maxlen=200).strip()

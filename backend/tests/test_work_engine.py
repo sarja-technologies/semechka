@@ -425,3 +425,44 @@ def test_cancelling_the_run_cancels_the_engine_job_it_is_waiting_for(we, st):
     assert res["ok"] is False and "Cancelled" in res["error"]
     assert jobs_events(we, sid)[-1]["status"] == "cancelled"
     assert we.get(f"/api/work/sessions/{sid}").json()["status"] == "cancelled"
+
+
+# ---- a model that does not know it is done ---------------------------------------------------------------------------------------
+def test_an_identical_request_in_the_same_run_is_not_started_again(we, st):
+    sid = new_session(we)
+    same = L.tool("generate_image", prompt="a cat", model="fake-turbo", seed=5, out="artifacts/cat.png")
+    run(st, we, sid, same, same, same, L.tool("generate_image", prompt="a cat", model="fake-turbo", seed=6, out="artifacts/cat.png"),
+        L.tool("generate_image", prompt="a cat", model="fake-turbo", seed=5, out="artifacts/cat2.png"))
+    first, second, third, other_seed, other_out = results(we, sid)
+    assert first["ok"] and "Wrote /work/artifacts/cat.png" in first["output"]
+    for r in (second, third):
+        assert r["ok"] and r["output"].startswith("Not started again: this run already made exactly this") and "/work/artifacts/cat.png" in r["output"]
+    assert "Wrote /work/artifacts/cat.png" in other_seed["output"] and "Wrote /work/artifacts/cat2.png" in other_out["output"]   # different seed or path: new work
+    assert len(FS.STATE["submissions"]) == 3                                                  # the engine saw three jobs, not five
+    with st.db.session() as s:
+        assert s.query(MediaJob).count() == 3                                                 # and the person's daily quota was spent three times
+    # a new message is a new run: the same request may be made again
+    L.reset()
+    run(st, we, sid, same)
+    assert "Wrote /work/artifacts/cat.png" in last_result(we, sid)["output"] and len(FS.STATE["submissions"]) == 4
+    # a deleted result is made again within the run
+    L.reset()
+    again = L.tool("generate_image", prompt="a dog", model="fake-turbo", seed=1, out="artifacts/dog.png")
+    run(st, we, sid, again, L.tool("work_shell", cmd="rm artifacts/dog.png"), again)
+    assert "Wrote /work/artifacts/dog.png" in results(we, sid)[-1]["output"] and len(FS.STATE["submissions"]) == 6
+
+
+def test_a_request_still_running_is_pointed_to_wait_job_and_a_failed_one_may_be_retried(we, st, monkeypatch):
+    monkeypatch.setattr(work_engine, "wait_cap", lambda w: 0.0)
+    sid = new_session(we)
+    slow = L.tool("generate_image", prompt="slow and steady", model="fake-turbo", seed=1)
+    run(st, we, sid, slow, slow)
+    first, second = results(we, sid)
+    assert "still" in first["output"] and "Not started again: this exact request is already running as job mj_" in second["output"] and "wait_job" in second["output"]
+    assert len(FS.STATE["submissions"]) == 1
+    monkeypatch.setattr(work_engine, "wait_cap", lambda w: 30.0)
+    L.reset()
+    boom = L.tool("generate_image", prompt="boom", model="fake-turbo", seed=1)
+    run(st, we, sid, boom, boom)
+    a, b = results(we, sid)[-2:]
+    assert not a["ok"] and not b["ok"] and "CUDA out of memory" in b["error"] and len(FS.STATE["submissions"]) == 3   # a failure is retried, not remembered
