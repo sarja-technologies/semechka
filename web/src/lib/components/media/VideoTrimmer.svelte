@@ -11,7 +11,7 @@
   const frame = $derived(fps ? 1 / fps : 0.01);
   const MIN = 0.1;
   let track: HTMLDivElement | undefined = $state(), dragging = $state<'start' | 'end' | 'head' | null>(null);
-  let stripFailed = $state(false);
+  let stripFailed = $state(false), stripLoaded = $state(false);
   const n = $derived(Math.max(8, Math.min(24, Math.round((track?.clientWidth ?? 600) / 56))));
   const snap = (t: number) => (fps ? Math.round(t * fps) / fps : t);
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -60,7 +60,8 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="track" bind:this={track} onpointerdown={trackDown} onpointermove={move} onpointerup={up} onpointercancel={up}>
     {#if !stripFailed}
-      <img class="strip" src={stripUrl(asset, n, 56)} alt="" draggable="false" onerror={() => (stripFailed = true)} />
+      {#if !stripLoaded}<span class="sk" aria-hidden="true"></span>{/if}
+      <img class="strip" class:in={stripLoaded} src={stripUrl(asset, n, 56)} alt="" draggable="false" onload={() => (stripLoaded = true)} onerror={() => (stripFailed = true)} />
     {/if}
     <span class="dim l" style:width={pct(start)}></span>
     <span class="dim r" style:left={pct(end)} style:right="0"></span>
@@ -83,7 +84,9 @@
 <style>
   .tr { display: grid; gap: 8px; }
   .track { position: relative; height: 56px; border-radius: 8px; background: #17181a; overflow: visible; cursor: pointer; touch-action: none; user-select: none; }
-  .strip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 8px; opacity: 0.9; pointer-events: none; }
+  .strip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 8px; opacity: 0; transition: opacity var(--medium) var(--ease); pointer-events: none; } .strip.in { opacity: 0.92; }
+  .sk { position: absolute; inset: 0; border-radius: 8px; background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.07) 50%, transparent 80%); background-size: 200% 100%; pointer-events: none; }
+  @media (prefers-reduced-motion: no-preference) { .sk { animation: shim 1.3s linear infinite; } @keyframes shim { from { background-position: 200% 0; } to { background-position: -200% 0; } } }
   .dim { position: absolute; top: 0; bottom: 0; background: rgba(8, 9, 10, 0.72); pointer-events: none; }
   .dim.l { left: 0; border-radius: 8px 0 0 8px; } .dim.r { border-radius: 0 8px 8px 0; }
   .sel { position: absolute; top: -2px; bottom: -2px; border-top: 2px solid #fff; border-bottom: 2px solid #fff; pointer-events: none; box-sizing: border-box; }

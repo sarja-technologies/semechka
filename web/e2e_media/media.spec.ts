@@ -126,6 +126,12 @@ test('7 trim a real video: exact times, new file, original untouched', async ({ 
   await dlg.getByLabel('End', { exact: true }).fill('4.5'); await page.keyboard.press('Enter');
   await expect(dlg.getByText(/0:03\.00 of 0:06\.00/)).toBeVisible();
   await shot(page, '07a-trim');
+  // playback is limited to the part that will be kept: it starts at the start handle and stops at the end handle
+  const vid = dlg.locator('video');
+  await vid.evaluate((x: HTMLVideoElement) => { x.currentTime = 1.5; });
+  await page.keyboard.press('k');
+  await expect.poll(() => vid.evaluate((x: HTMLVideoElement) => x.paused), { timeout: 10_000 }).toBe(true);
+  expect(await vid.evaluate((x: HTMLVideoElement) => x.currentTime)).toBeLessThan(1.6);            // rewound to the start of the selection
   const before = (await editedAssets(page)).length;
   await dlg.getByRole('button', { name: 'Save copy' }).click();
   await expect.poll(async () => (await editedAssets(page)).length, { timeout: 60_000 }).toBe(before + 1);
@@ -460,4 +466,60 @@ test('23 a video the browser cannot play (HEVC) is kept as is, gets a playable c
   const v = cards(page).first().locator('video');
   await expect.poll(() => v.evaluate((x: HTMLVideoElement) => x.currentTime), { timeout: 20_000 }).toBeGreaterThan(0.2);
   expect(sha256(await content(page, id))).toBe(sha(F.hevc));   // the original (what an operation receives) is untouched
+});
+
+test('24 pasting a picture and the ordinary attach button both add real attachments', async ({ page }) => {
+  await openOpenJutsu(page);
+  const b64 = (await import('node:fs')).readFileSync(F.c).toString('base64');
+  await page.evaluate((data) => {
+    const bin = atob(data); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    const dt = new DataTransfer(); dt.items.add(new File([u], 'image.png', { type: 'image/png' }));
+    window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, b64);
+  await waitReady(page, 1);
+  await expect(cards(page).first()).toHaveAttribute('aria-label', /Pasted picture/);
+  await expect(cards(page).first().getByRole('combobox')).toHaveValue('refs');
+  await page.getByRole('button', { name: 'Add pictures, videos or files' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('menuitem', { name: /Upload from this device/ }).click();
+  await (await chooser).setFiles([F.clip, F.b]);
+  await waitReady(page, 3);
+  await expect(cards(page).nth(1).getByRole('combobox')).toHaveValue('video');
+  // drag one card in front of another (the pointer way)
+  const from = await cards(page).nth(2).elementHandle();
+  await page.evaluate(([src, dst]) => {
+    const dt = new DataTransfer();
+    const fire = (el: Element, t: string) => el.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    fire(src as Element, 'dragstart'); fire(dst as Element, 'dragover'); fire(dst as Element, 'drop'); fire(src as Element, 'dragend');
+  }, [from, await cards(page).nth(0).elementHandle()]);
+  await expect(cards(page).nth(0)).toHaveAttribute('aria-label', /portrait-b/);
+});
+
+test('25 pictures: viewer zoom and pan, rotate and crop into a new picture, original untouched', async ({ page }) => {
+  await page.goto('/chat?new=' + Date.now());
+  await drop(page, composer(page), [F.b]);
+  await waitReady(page, 1);
+  await cards(page).first().getByRole('button', { name: /^Open / }).click({ position: { x: 12, y: 62 } });
+  const dlg = page.getByRole('dialog', { name: /portrait-b/ });
+  await expect(dlg).toBeVisible();
+  const img = dlg.locator('img.pic');
+  await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+  const w0 = (await img.boundingBox())!.width;
+  await page.keyboard.press('+'); await page.keyboard.press('+');
+  await expect.poll(async () => (await img.boundingBox())!.width).toBeGreaterThan(w0 * 1.4);
+  await shot(page, '25a-zoomed');
+  await page.keyboard.press('0');
+  await dlg.getByRole('button', { name: /^Edit/ }).click();
+  await dlg.getByRole('button', { name: 'Rotate right' }).click();
+  await dlg.getByRole('button', { name: '1:1' }).click();
+  await expect(dlg.locator('.out')).toContainText('500 × 500');          // the 500×700 picture, turned, is 700×500; the largest square is 500×500
+  await page.waitForTimeout(300);
+  await shot(page, '25b-picture-edit');
+  const before = (await editedAssets(page)).length;
+  await dlg.getByRole('button', { name: 'Save copy' }).click();
+  await expect.poll(async () => (await editedAssets(page)).length, { timeout: 30_000 }).toBe(before + 1);
+  const made = (await editedAssets(page))[0];
+  expect([made.width, made.height, made.mime]).toEqual([500, 500, 'image/jpeg']);
+  const orig = (await api(page, '/api/media/assets?origin=upload') as any[]).find((a) => a.id === made.parent);
+  expect(sha256(await content(page, orig.id))).toBe(sha(F.b));
 });

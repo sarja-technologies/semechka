@@ -351,3 +351,25 @@ def test_a_video_the_browser_cannot_play_is_kept_and_gets_a_playable_preview_cop
     # trimming it works from the original and gives a playable MP4
     n = wait_edit(mp, mp.post(f"/api/media/assets/{a['id']}/edits", json={"trim": {"start": 0.5, "end": 1.5}}).json()["id"])["asset"]
     assert n["media"]["codec"] == "h264" and n["media"]["playable"] is True and n["preview"] == "original"
+
+
+def test_library_quota_and_permissions_are_enforced(mp, app, clip, jpeg):
+    from .conftest import make_user
+    assert mp.put("/api/admin/settings/media.max_assets", json={"value": 2}).status_code == 200
+    assert up(mp, jpeg, "a.jpg").status_code == 200 and up(mp, jpeg, "b.jpg").status_code == 200
+    r = up(mp, clip)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "gallery_full"
+    a = mp.get("/api/media/assets").json()[0]
+    assert mp.post(f"/api/media/assets/{a['id']}/edits", json={"rotate": 90}).status_code == 409            # edits count too
+    assert mp.delete(f"/api/media/assets/{a['id']}").status_code == 200
+    assert up(mp, jpeg, "c.jpg").status_code == 200                                                         # room again
+    # a person without attachments and without picture/video mode cannot add or list anything
+    guest = make_user(mp, app, "guest@example.test", role="guest")
+    assert up(guest, jpeg, "g.jpg").status_code == 403
+    assert guest.get("/api/media/assets").status_code == 403
+    assert guest.get("/api/me").json()["ui"]["composer"]["media_library"] is False
+    # signed out: nothing
+    from .conftest import Api
+    anon = Api(app)
+    assert up(anon, jpeg, "x.jpg").status_code in (401, 403)
+    assert anon.get(f"/api/media/assets/{a['id']}/content").status_code in (401, 403)
