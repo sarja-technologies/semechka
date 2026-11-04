@@ -72,7 +72,7 @@ export class Tray {
         const live = this.items[this.items.length - 1];
         up.start().then((asset) => {
           if (up.status === 'cancelled') { this.drop(live.key); return; }
-          if (asset) { live.asset = asset; live.upload = null; live.kind = asset.kind; live.name = asset.name ?? live.name; live.size = asset.size; autoAssign(this.items, cx.slots()); this.save(); }
+          if (asset) { live.asset = asset; this.watchPreview(live.key); live.upload = null; live.kind = asset.kind; live.name = asset.name ?? live.name; live.size = asset.size; autoAssign(this.items, cx.slots()); this.save(); }
           else live.error = up.error;
         });
         autoAssign(this.items, cx.slots());
@@ -90,6 +90,18 @@ export class Tray {
     }
     this.save();
     return refused;
+  }
+
+  /** A video the browser cannot play gets a converted copy for playback in the background; pick it up when it is ready. */
+  watchPreview(key: string, tries = 0) {
+    const it = this.find(key);
+    if (!it?.asset || it.asset.preview !== 'pending' || tries > 150) return;
+    setTimeout(() => {
+      const cur = this.find(key);
+      if (!cur?.asset || cur.asset.preview !== 'pending') return;
+      fetchAsset(cur.asset.id).then((a) => { if (this.find(key)?.asset) { this.find(key)!.asset = { ...cur.asset!, ...a }; this.save(); } })
+        .catch(() => {}).finally(() => this.watchPreview(key, tries + 1));
+    }, 2000);
   }
 
   addAsset(a: Asset, slots: Slot[]): boolean {
@@ -196,7 +208,7 @@ export class Tray {
     for (const it of [...this.items]) {
       if (!it.asset) continue;
       const a = it.asset;
-      fetchAsset(a.id).then((fresh) => { const t = this.find(it.key); if (t) t.asset = { ...a, ...fresh }; })
+      fetchAsset(a.id).then((fresh) => { const t = this.find(it.key); if (t) { t.asset = { ...a, ...fresh }; this.watchPreview(it.key); } })
         .catch((e) => {
           if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
             this.drop(it.key);

@@ -444,3 +444,20 @@ test('22 add from the Library through the + menu', async ({ page }) => {
   await expect(cards(page).first().getByRole('combobox')).toHaveValue('video');
   await expect(cards(page).first()).toHaveAttribute('aria-label', /edited/);
 });
+
+test('23 a video the browser cannot play (HEVC) is kept as is, gets a playable copy in the background, and then plays in its card', async ({ page }) => {
+  await openOpenJutsu(page);
+  await drop(page, composer(page), [F.hevc]);
+  await waitReady(page, 1);
+  const id = ((await api(page, '/api/media/assets?origin=upload')) as any[]).find((a) => a.name === 'hevc.mp4').id;
+  const first = (await api(page, `/api/media/assets/${id}`)) as any;
+  expect(first.media.codec).toBe('hevc'); expect(first.media.playable).toBe(false);
+  await expect.poll(async () => ((await api(page, `/api/media/assets/${id}`)) as any).preview, { timeout: 60_000 }).toBe('proxy');
+  // the card picks the converted copy up by itself and plays it
+  const playBtn = cards(page).first().getByRole('button', { name: /^Play / });
+  await expect(playBtn).toHaveAttribute('title', 'Play', { timeout: 15_000 });   // no more "preparing a playable copy"
+  await playBtn.click();
+  const v = cards(page).first().locator('video');
+  await expect.poll(() => v.evaluate((x: HTMLVideoElement) => x.currentTime), { timeout: 20_000 }).toBeGreaterThan(0.2);
+  expect(sha256(await content(page, id))).toBe(sha(F.hevc));   // the original (what an operation receives) is untouched
+});

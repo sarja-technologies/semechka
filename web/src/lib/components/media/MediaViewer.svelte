@@ -11,7 +11,7 @@
   import MediaCropEditor, { type Rect } from './MediaCropEditor.svelte';
   import VideoTrimmer from './VideoTrimmer.svelte';
   import { viewer, closeViewer } from '$lib/media/viewer.svelte';
-  import { contentUrl, fmtDuration, fmtSize, isLibraryId, playbackNote, type Asset } from '$lib/media/assets';
+  import { contentUrl, fetchAsset, fmtDuration, fmtSize, isLibraryId, playbackNote, type Asset } from '$lib/media/assets';
   import { PRESETS, fitRect, runEdit, type EditHandle } from '$lib/media/edit';
   import { playing, stopped } from '$lib/media/playback';
 
@@ -73,6 +73,16 @@
   $effect(() => { const f = () => (full = document.fullscreenElement === root); document.addEventListener('fullscreenchange', f); return () => document.removeEventListener('fullscreenchange', f); });
   // the page behind does not scroll while the viewer is open
   $effect(() => { if (!asset) return; const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; }; });
+
+  // a converted copy for playback is being made: pick it up when it is ready
+  $effect(() => {
+    const a = asset;
+    if (!a || a.preview !== 'pending' || !isLibraryId(a.id)) return;
+    const t = setInterval(() => {
+      fetchAsset(a.id).then((n) => { if (viewer.asset?.id === a.id && n.preview !== 'pending') { viewer.asset = { ...viewer.asset, ...n }; vErr = ''; } }).catch(() => {});
+    }, 2000);
+    return () => clearInterval(t);
+  });
 
   function close() {
     handle?.cancel();

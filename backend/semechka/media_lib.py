@@ -518,13 +518,13 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
                              size=size, width=pr.width, height=pr.height, duration=pr.duration, seed=None, prompt_enc="",
                              params_enc=st.vault.encrypt(json.dumps(meta), "media"), expires_at=expires_at))
             s.flush()
+            if not pr.playable and pr.kind == "video":
+                start_proxy(st, user_id, aid, pr)  # begins after this block commits (nothing here awaits); the result says "pending"
             a = s.get(MediaAsset, aid)
             out = asset_json(st, a)
     except BaseException:
         remove_files(st, user_id, aid)
         raise
-    if not pr.playable and pr.kind == "video":
-        start_proxy(st, user_id, aid, pr)
     return out
 
 

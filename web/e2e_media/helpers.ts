@@ -28,7 +28,8 @@ export function fixtures() {
   const notes = path.join(FIX, 'notes.txt');
   if (!existsSync(notes)) writeFileSync(notes, 'Shot list for the harbour clip.\n');
   const big = ff(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=40', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '14', '-pix_fmt', 'yuv420p'], path.join(FIX, 'big.mp4'));
-  return { clip, mov, webm, a, b, c, junk, notes, big };
+  const hevc = ff(['-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=24:duration=2', '-c:v', 'libx265', '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1', '-x265-params', 'log-level=none'], path.join(FIX, 'hevc.mp4'));
+  return { clip, mov, webm, a, b, c, junk, notes, big, hevc };
 }
 
 export const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex');

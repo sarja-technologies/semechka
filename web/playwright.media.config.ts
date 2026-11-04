@@ -12,6 +12,7 @@ if (process.env.TEST_WORKER_INDEX === undefined) { rmSync(TMP, { recursive: true
 export default defineConfig({
   testDir: './e2e_media',
   testMatch: /.*\.spec\.ts/,
+  testIgnore: /staging\//,
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

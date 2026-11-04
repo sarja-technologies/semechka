@@ -331,3 +331,23 @@ def test_no_save_uploads_stay_in_memory_and_can_be_edited(mp, st, clip, tmp_path
     assert e["status"] == "completed" and e["asset"]["id"].startswith("me_")
     assert not list((st.cfg.data_dir / "tmp").rglob("w-*"))
     assert any(x["id"] == a["id"] for x in mp.get("/api/media/assets").json())
+
+
+def test_a_video_the_browser_cannot_play_is_kept_and_gets_a_playable_preview_copy(mp, tmp_path):
+    """HEVC does not play in most browsers: the original stays the source of truth (what an operation receives); a converted copy is used for playback only."""
+    hevc = ff("-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=2", "-c:v", "libx265", "-pix_fmt", "yuv420p", "-tag:v", "hvc1", "-x265-params", "log-level=none", out=tmp_path / "h.mp4")
+    a = up(mp, hevc, "h265.mp4").json()
+    assert a["media"]["codec"] == "hevc" and a["media"]["playable"] is False and a["preview"] in ("pending", "proxy")
+    for _ in range(100):
+        a = mp.get(f"/api/media/assets/{a['id']}").json()
+        if a["preview"] == "proxy":
+            break
+        time.sleep(0.2)
+    assert a["preview"] == "proxy"
+    assert mp.get(f"/api/media/assets/{a['id']}/content").content == hevc                       # the original, unchanged
+    prox = mp.get(f"/api/media/assets/{a['id']}/content", params={"preview": "true"}).content
+    w, h, d, _ = probe(prox, tmp_path)
+    assert (w, h) == (320, 240) and abs(d - 2) < 0.3 and prox != hevc
+    # trimming it works from the original and gives a playable MP4
+    n = wait_edit(mp, mp.post(f"/api/media/assets/{a['id']}/edits", json={"trim": {"start": 0.5, "end": 1.5}}).json()["id"])["asset"]
+    assert n["media"]["codec"] == "h264" and n["media"]["playable"] is True and n["preview"] == "original"

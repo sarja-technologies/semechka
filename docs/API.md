@@ -136,6 +136,24 @@ queued. `message.media` is the job. Poll `GET /api/media/jobs/{job_id}` until `s
 `POST /api/media/jobs/{job_id}/cancel`. To edit or animate an existing picture, pass its id as `source_id`. Limits and
 sizes per model come from `GET /api/media/options?kind=image|video`.
 
+### Library: uploads, previews and edits (0.8.0)
+
+Pictures and videos a person adds, and copies they edit, live in the same Library as generated results (details in `docs/MEDIA_COMPOSER.md`).
+
+- `POST /api/media/uploads?name=<file name>[&ephemeral=true]`: the file as the raw request body (any `Content-Type`; the bytes decide). Streamed to disk,
+  limited by `media.upload_max_mb`. Returns the asset: `{id, kind, mime, size, width, height, duration, name, origin: "upload", media: {codec, fps, audio,
+  playable}, has_thumb, preview: "original"|"pending"|"proxy"|"none", saved}`. `413` too large, `415` unsupported type (reason in `message`), `422` unreadable,
+  `409` Library full, `429` too many uploads at once.
+- `GET /api/media/assets?kind=&origin=generated|upload|edit&before=<created_at>&limit=` list; `GET /api/media/assets/{id}` one.
+- `GET /api/media/assets/{id}/content` (supports `Range`; `?preview=true` for the converted playback copy; `?download=true`), `/thumb` (JPEG ~480 px),
+  `/strip?n=12&h=64` (n frames side by side, for a trim timeline). Owner only; anyone else gets `404`.
+- `POST /api/media/assets/{id}/edits` with `{trim: {start, end}, crop: {x, y, w, h}, rotate: 0|90|180|270, flip, mute, name}` (crop in pixels of the rotated
+  frame; video sizes are made even) starts a real ffmpeg edit that writes a NEW asset (`origin: "edit"`, `parent`, `edit`). Returns `{id, status}`; poll
+  `GET /api/media/edits/{id}` (`running|completed|failed|cancelled`, `progress`, `asset`) and cancel with `POST /api/media/edits/{id}/cancel`.
+- `POST /api/media/profile-jobs` accepts `asset:<input>` form fields (a Library asset id; repeat for several, in order) as well as `file:<input>` parts.
+  Inputs an operation does not use are refused (files) or dropped (settings) according to the schema the engine published.
+
+
 ### Attachments
 
 `POST /api/chat/attachments` (multipart field `file`; add `?ephemeral=true` for no-save chats) answers with
