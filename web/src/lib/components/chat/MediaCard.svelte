@@ -5,11 +5,15 @@
   import { get, post, ApiError } from '$lib/api';
   import { toast } from '$lib/toast.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { openViewer } from '$lib/media/viewer.svelte';
 
   let { job: initial, kind, onchange, onuse }: { job: any; kind: 'image' | 'video'; onchange?: (job: any) => void; onuse?: (asset: any) => void } = $props();
   let job = $state<any>(null);
   $effect.pre(() => { if (!job || initial?.id !== job.id || initial?.status !== job.status) job = initial; });
-  let cancelling = $state(false), zoom = $state<any>(null);
+  let cancelling = $state(false);
+  /** Results open in the shared viewer: zoom and pan, a full player, and (for saved files) trim and crop into a new copy. */
+  const view = (a: any) => openViewer({ ...a, name: a.name ?? (job?.prompt ? job.prompt.slice(0, 60) : undefined), origin: a.origin ?? 'generated' }, { siblings: (job?.assets ?? []).filter((x: any) => x.saved !== false),
+    useLabel: onuse && a.saved ? 'Use as source' : undefined, onuse: onuse && a.saved ? (n: any) => onuse?.(n) : undefined });
   const active = $derived(job && (job.status === 'queued' || job.status === 'running'));
 
   onMount(() => {
@@ -77,18 +81,19 @@
     {#each job.assets ?? [] as a (a.id)}
       <figure class="res">
         {#if a.kind === 'image' || a.mime?.startsWith('image/')}
-          <button class="zoom" onclick={() => (zoom = a)} aria-label="Open the picture larger">
+          <button class="zoom" onclick={() => view(a)} aria-label="Open the picture larger">
             <img src={src(a)} alt={`Generated from: ${job.prompt}`} loading="lazy" width={a.width} height={a.height} />
           </button>
         {:else}
           <!-- svelte-ignore a11y_media_has_caption -->
-          <video src={src(a)} controls preload="metadata" width={a.width} height={a.height} playsinline></video>
+          <div class="vbox"><video src={src(a)} controls preload="metadata" width={a.width} height={a.height} playsinline></video>
+            <button class="exp" type="button" onclick={() => view(a)} aria-label="Open the video larger" title="Open larger"><Icon name="expand" size={14} /></button></div>
         {/if}
         <figcaption>
           <span class="tiny muted">{[job.model, details(a)].filter(Boolean).join(' · ')}</span>
           <span class="acts">
             <a class="btn ghost sm" href={dl(a)} download><Icon name="download" size={14} /> Download</a>
-            {#if onuse && (a.kind === 'image' || a.mime?.startsWith('image/')) && a.saved}<button class="btn ghost sm" onclick={() => onuse?.(a)}><Icon name="edit" size={14} /> Use as source</button>{/if}
+            {#if onuse && a.saved}<button class="btn ghost sm" onclick={() => onuse?.(a)}><Icon name="edit" size={14} /> Use as source</button>{/if}
           </span>
           {#if !a.saved && a.expires_at}<span class="tiny muted">Not saved: available for about {mins(a.expires_at)} more minute{mins(a.expires_at) === 1 ? '' : 's'}. Download it to keep it.</span>{/if}
         </figcaption>
@@ -97,13 +102,6 @@
   </div>
 {/if}
 
-{#if zoom}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="lightbox" role="dialog" aria-modal="true" aria-label="Picture" tabindex="-1" onclick={() => (zoom = null)} onkeydown={(e) => e.key === 'Escape' && (zoom = null)}>
-    <img src={src(zoom)} alt={`Generated from: ${job.prompt}`} />
-    <button class="btn sm close" onclick={() => (zoom = null)}>Close</button>
-  </div>
-{/if}
 
 <style>
   .mcard { display: grid; gap: 8px; max-width: min(100%, 560px); }
@@ -124,7 +122,6 @@
   .res video { border-radius: var(--radius); border: 1px solid var(--border); }
   figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
   .acts { display: inline-flex; gap: 2px; margin-left: auto; }
-  .lightbox { position: fixed; inset: 0; z-index: 95; background: rgba(8, 9, 10, 0.88); display: grid; place-items: center; padding: 24px; }
-  .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .close { position: fixed; top: 12px; right: 12px; }
+  .vbox { position: relative; } .exp { all: unset; position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; background: rgba(14, 15, 16, 0.7); color: #fff; cursor: pointer; opacity: 0; transition: opacity var(--fast) var(--ease); }
+  .vbox:hover .exp, .exp:focus-visible { opacity: 1; } .exp:focus-visible { outline: 2px solid var(--accent); }
 </style>

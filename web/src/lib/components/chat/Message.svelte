@@ -5,6 +5,10 @@
   import Sources from '$lib/components/Sources.svelte';
   import ModelIcon from './ModelIcon.svelte';
   import MediaCard from './MediaCard.svelte';
+  import VideoPreview from '$lib/components/media/VideoPreview.svelte';
+  import ImagePreview from '$lib/components/media/ImagePreview.svelte';
+  import { openViewer } from '$lib/media/viewer.svelte';
+  import { isLibraryId, type Asset } from '$lib/media/assets';
   import type { Msg, Attachment, MsgActions } from '$lib/chat/thread.svelte';
 
   let { m, label, busy, canBranch, canRegenerate, techOn, showSources, selected = false, act }:
@@ -16,6 +20,9 @@
   const op = $derived(user ? m.meta?.operation : undefined);
   const sib = $derived(m.siblings);
   const attUrl = (a: Attachment) => (a.id.startsWith('ma_') || a.id.startsWith('me_') ? `/api/media/assets/${a.id}/content` : `/api/chat/attachments/${a.id}/content`);
+  const asset = (a: Attachment): Asset => ({ id: a.id, kind: a.kind === 'video' ? 'video' : 'image', mime: a.mime, size: a.size, width: a.width, height: a.height, duration: a.duration, name: a.name,
+    url: isLibraryId(a.id) ? undefined : attUrl(a) });
+  const visual = (m: Msg) => (m.attachments ?? []).filter((a) => !a.missing && (a.kind === 'image' || a.kind === 'video')).map(asset);
   const size = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
   function saveEdit() { const t = editing?.trim(); if (!t && !m.attachments?.length) return; editing = null; act.edit(m, t ?? ''); }
   function editKey(e: KeyboardEvent) {
@@ -51,7 +58,11 @@
         <div class="atts">
           {#each m.attachments as a (a.id)}
             {#if a.missing}<span class="chip">File removed</span>
-            {:else if a.kind === 'image'}<a class="thumb" href={attUrl(a)} target="_blank" rel="noopener"><img src={attUrl(a)} alt={a.name} loading="lazy" /></a>
+            {:else if a.kind === 'image' || a.kind === 'video'}
+              <div class="ac" class:vid={a.kind === 'video'} title={a.name}>
+                {#if a.kind === 'video'}<VideoPreview asset={asset(a)} ratio="16 / 10" onopen={() => openViewer(asset(a), { siblings: visual(m) })} />
+                {:else}<ImagePreview asset={asset(a)} ratio="1 / 1" onopen={() => openViewer(asset(a), { siblings: visual(m) })} />{/if}
+              </div>
             {:else}<span class="file"><Icon name="log" size={16} /><span class="fn">{a.name}</span><span class="tiny muted">{size(a.size)}</span></span>{/if}
           {/each}
         </div>
@@ -104,8 +115,9 @@
   :global([data-align='right']) .user .body { justify-items: end; }
   .editbox { display: grid; gap: 8px; width: min(640px, 85vw); }
   .atts { display: flex; flex-wrap: wrap; gap: 6px; }
-  .thumb { display: block; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
-  .thumb img { display: block; max-width: 220px; max-height: 180px; object-fit: cover; }
+  .ac { width: 132px; height: 132px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--m-card, var(--bg-2)); transition: border-color var(--fast) var(--ease); }
+  .ac:hover { border-color: var(--border-strong); } .ac.vid { width: 208px; height: 130px; }
+  @media (max-width: 719px) { .ac { width: 112px; height: 112px; } .ac.vid { width: 176px; height: 110px; } }
   .file { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-bg); font-size: 13px; max-width: 280px; }
   .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .note { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; }

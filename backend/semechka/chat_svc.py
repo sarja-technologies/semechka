@@ -25,6 +25,7 @@ IMAGE_TOKENS = 1100  # rough cost of one image; the true figure depends on the m
 DEFAULT_RATIO = 0.3  # tokens per character before the engine has told us anything
 CTX_ERR = re.compile(r"\((\d+) tokens\) exceeds the available context size \((\d+) tokens\)")
 SOURCE_PREFIXES = ("at_", "ae_", "ma_")
+VISION_MAX = 25 * 2**20  # the largest picture handed to a model
 
 
 # ---- the tree --------------------------------------------------------------------------------------
@@ -81,8 +82,11 @@ def describe_source(st, s, user_id: str, sid: str) -> dict | None:
         a = s.get(MediaAsset, sid)
         if a is None or a.user_id != user_id or a.kind != "image":
             return None
-        return {"id": a.id, "name": "generated image", "kind": "image", "mime": a.mime, "size": a.size,
-                "width": a.width, "height": a.height, "saved": True, "generated": True}
+        from . import media_lib
+        meta = media_lib.meta_of(st, a)
+        added = meta.get("origin") in media_lib.ORIGINS  # a picture the person uploaded or edited, not a generated one
+        return {"id": a.id, "name": media_lib.display_name(meta, "image", a.id) if added else "generated image", "kind": "image", "mime": a.mime,
+                "size": a.size, "width": a.width, "height": a.height, "saved": True, "generated": not added}
     return attachments_svc.describe(st, s, user_id, sid)
 
 
@@ -111,6 +115,8 @@ def claim_attachments(st, s, user_id: str, ids: list[str], conv: Conversation | 
         d = describe_source(st, s, user_id, sid)
         if d is None:
             raise attachments_svc.AttachmentError("not_found", "Attachment not found.", 404)
+        if sid.startswith("ma_") and d["size"] > VISION_MAX:
+            raise attachments_svc.AttachmentError("too_large", f"“{d['name']}” is {d['size'] // 2**20} MB, too large for a model to read. Use a picture under {VISION_MAX // 2**20} MB.", 413)
         if sid.startswith("at_"):
             row = s.get(ChatAttachment, sid)
             if row.conversation_id not in (None, conv.id):

@@ -20,3 +20,5 @@ web/.e2e-tmp/
 web/test-results/
 web/playwright-report/
 web/shots-out/
+web/.e2e-media-tmp/
+web/shots-media/

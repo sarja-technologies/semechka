@@ -119,7 +119,7 @@
 <style>
   .tv { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
   .scroll { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; position: relative; outline: none; }
-  .col { max-width: var(--msg-w); margin: 0 auto; padding: 16px 24px 24px; width: 100%; }
+  .col { max-width: var(--msg-w); margin: 0 auto; padding: 16px 24px 24px; width: 100%; min-height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
   .top { min-height: 1px; display: flex; justify-content: center; margin-bottom: 8px; }
   .msg { margin: 0 0 20px; display: flex; flex-direction: column; }
   .msg.user { align-items: flex-start; }

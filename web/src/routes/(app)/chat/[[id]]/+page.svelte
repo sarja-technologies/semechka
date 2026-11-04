@@ -25,7 +25,7 @@
   const thread = new Thread(untrack(() => workspace));
   let composer: Composer | undefined = $state();
   let assistantId = $state<string | null>(null), collectionIds = $state<string[]>([]);
-  let protOpen = $state(false), selected = $state<string | null>(null), dragging = $state(0);
+  let protOpen = $state(false), selected = $state<string | null>(null);
 
   // ---- route ---------------------------------------------------------------------------------------------------
   function onRoute(id: string | undefined) {
@@ -100,14 +100,7 @@
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && thread.busy && !document.querySelector('[role="dialog"]')) { e.preventDefault(); thread.stop(); }
   }
-  // Files dropped anywhere on the conversation are attached to the next message.
-  const canDrop = $derived(!!ui.composer.attachments);
-  function dragOver(e: DragEvent) { if (canDrop && e.dataTransfer?.types.includes('Files')) e.preventDefault(); }
-  function drop(e: DragEvent) {
-    dragging = 0;
-    if (!canDrop || !e.dataTransfer?.files.length) return;
-    e.preventDefault(); composer?.addFiles(e.dataTransfer.files);
-  }
+  // Files dropped anywhere in the app are attached by the composer's drop target (MediaDropzone).
 
   // ---- technical details --------------------------------------------------------------------------------------
   const techOn = $derived(!!ui.tech.drawer && !!app.me.user.prefs.show_tech);
@@ -130,8 +123,7 @@
 {#if !ui.modes[workspace]?.enabled}
   <div class="blocked"><h1>{workspace === 'code' ? 'Code' : 'Chat'}</h1><div class="notice warn" role="status"><div><strong>{workspace === 'code' ? 'The code workspace is' : 'Chat is'} not available to you.</strong> {ui.modes[workspace]?.reason}</div></div></div>
 {:else}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="chat" class:drawer={techOn} ondragenter={(e) => { if (canDrop && e.dataTransfer?.types.includes('Files')) dragging++; }} ondragleave={() => (dragging = Math.max(0, dragging - 1))} ondragover={dragOver} ondrop={drop}>
+  <div class="chat" class:drawer={techOn}>
     <section class="conv" aria-label="Conversation">
       {#if ui.tech.drawer}
         <div class="tools"><button class="btn ghost sm" aria-pressed={techOn} onclick={toggleTech} title="Technical details for replies"><Icon name="cpu" size={15} /> {techOn ? 'Hide details' : 'Details'}</button></div>
@@ -156,7 +148,6 @@
       <div class="dock">
         <Composer bind:this={composer} {thread} {workspace} bind:assistantId bind:collectionIds onsend={send} onstop={() => thread.stop()} onctx={ctxChanged} onprotect={() => (protOpen = true)} />
       </div>
-      {#if dragging > 0 && canDrop}<div class="dropzone" aria-hidden="true"><Icon name="upload" size={22} /> Drop files to attach them</div>{/if}
     </section>
 
     {#if techOn}
@@ -196,15 +187,13 @@
   .dock { flex: none; padding: 0 24px 14px; background: var(--bg); }
   .dock > :global(*) { max-width: var(--msg-w); margin: 0 auto; }
   /* the welcome sits in the lower-middle of the pane, just above the composer */
-  .empty { min-height: 56vh; padding: 0 0 28px; display: grid; gap: 12px; align-content: end; justify-items: center; text-align: center; }
+  .empty { margin-top: auto; padding: 48px 0 28px; display: grid; gap: 12px; align-content: end; justify-items: center; text-align: center; }
   .empty h1 { font-size: 28px; font-weight: 400; letter-spacing: -0.015em; }
   .empty p { margin: 0; max-width: 60ch; }
   .empty .panel { text-align: left; width: 100%; }
   .sugg { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); width: 100%; margin-top: 12px; }
   .sugg .btn { white-space: normal; text-align: left; justify-content: flex-start; align-items: flex-start; height: auto; padding: 12px 14px; line-height: 1.4;
     background: var(--card-bg); border-radius: var(--radius-composer); box-shadow: none; color: var(--fg-2); font-weight: 400; }
-  .dropzone { position: absolute; inset: 8px; border: 2px dashed var(--fg-muted); border-radius: var(--radius); background: color-mix(in srgb, var(--bg) 85%, transparent);
-    display: grid; place-content: center; justify-items: center; gap: 8px; font-weight: 600; z-index: 20; pointer-events: none; }
   .details { border-left: 1px solid var(--border); padding: 12px 16px; overflow: auto; background: var(--card-bg); display: grid; gap: 8px; align-content: start; }
   .dh { display: flex; align-items: center; justify-content: space-between; } .dh h2 { font-size: 15px; }
   .details h3 { margin-top: 8px; }
@@ -214,5 +203,5 @@
     .chat.drawer { grid-template-columns: minmax(0, 1fr); }
     .details { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 45vh; border-left: 0; border-top: 1px solid var(--border-strong); box-shadow: var(--shadow); }
   }
-  @media (max-width: 719px) { .dock { padding: 0 8px 8px; } .empty { min-height: 40vh; } .empty h1 { font-size: 24px; } .tools { top: 4px; right: 4px; } }
+  @media (max-width: 719px) { .dock { padding: 0 8px 8px; } .empty h1 { font-size: 24px; } .tools { top: 4px; right: 4px; } }
 </style>

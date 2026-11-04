@@ -1,5 +1,26 @@
 # Release notes
 
+## 0.8.0 (media composer: drag and drop, previews, trim and crop, OpenJutsu references in the composer)
+
+Schema unchanged (11). New setting `media.upload_max_mb` (default 512). Needs `ffmpeg` and `ffprobe` on the server for videos. Full description,
+routes, limits and rollback: `docs/MEDIA_COMPOSER.md`.
+
+- **Attach anything visual.** Drag and drop (anywhere in the app), paste, the attach button, or the Library; several files at once; real progress,
+  cancel and retry; large videos stream to disk (never held in memory) and are stored in a chunked encrypted format that supports byte ranges.
+- **Cards, not file names.** Real thumbnails; videos show duration, resolution and size and play inside the card; a full viewer (zoom and pan, or a
+  full player with scrubber, volume, speed, full screen, frame stepping, shortcuts) opens from the composer, the Library, results and sent messages.
+- **OpenJutsu references stay in the composer.** One compact tray above the prompt holds the source video and reference pictures with their roles
+  (from the engine's own schema), reorderable, with play / replace / edit / remove. Changing the operation keeps every file; unused ones are marked;
+  impossible combinations are explained. Files go to the engine's real parameters (`video`, `refs`, in order).
+- **Real trimming and cropping.** Timeline with frame thumbnails and draggable handles, exact times, crop presets (Original, 1:1, 16:9, 9:16, 4:3,
+  Free) over the real video, preview, rotate and mirror for pictures. ffmpeg writes a new file; the original is untouched; "Use as source" puts the
+  edited file into the same place, and that exact file is what the engine receives (byte for byte, tested).
+- **Library.** Generated, uploaded and edited items together with thumbnails, filters, "Use in a new message", edit, download, delete; drop files on it.
+- **Drafts survive.** Tray, roles, operation, model and text are kept per conversation across navigation and reloads.
+- Fixes found while testing: an editing profile's settings now show only what the chosen operation uses (and switches are checkboxes); the words in
+  the message box go to the operation's main text input (swap: "who is replaced"); older servers' profiles without `family` are recognised as OpenJutsu;
+  the welcome text is no longer hidden behind a tall composer.
+
 ## 0.7.0 (Work Mode: engine tools, delegation, skills; UI integrated)
 
 Merges the Work Mode backend (0.6.0) with its web UI and adds the second phase. Schema unchanged (11). Off until an administrator switches on

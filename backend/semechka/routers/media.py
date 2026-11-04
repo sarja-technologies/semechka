@@ -10,7 +10,7 @@ from starlette.datastructures import UploadFile as StarUploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .. import media_svc, services
+from .. import media_lib, media_svc, services
 from ..adapters import AdapterError
 from ..deps import Ctx, current
 from ..media_models import MediaAsset, MediaJob
@@ -137,6 +137,18 @@ async def create_profile_job(request: Request, ctx: Ctx = Depends(current)):
         if key.startswith("file:") and isinstance(val, StarUploadFile):
             uploads.setdefault(key[5:], []).append((val.file, val.content_type or "", val.filename or "upload"))
     sizes = {n: [((mime or ""), _size(fo)) for fo, mime, _ in items] for n, items in uploads.items()}
+    # Files already in the person's library (uploaded, edited or generated) are named by id: ``asset:<input>`` = <asset id>, in order.
+    picked: dict[str, list] = {}
+    for key, val in form.multi_items():
+        if key.startswith("asset:") and isinstance(val, str):
+            got = media_lib.owned(st, s, ctx.user.id, val.strip())
+            if got is None:
+                raise HTTPException(422, {"code": "asset_missing", "message": "A selected file is no longer in your library. Remove it and add it again."})
+            picked.setdefault(key[6:], []).append((val.strip(), got))
+            info = media_lib.mem_info(st, got) if isinstance(got, str) else {"mime": got.mime, "size": got.size}
+            sizes.setdefault(key[6:], []).append((info["mime"], info["size"]))
+    if sum(len(v) for v in picked.values()) > 12:
+        raise HTTPException(422, {"code": "invalid", "message": "At most 12 library files can be used at once."})
     days = _val(ctx, "privacy.chat_retention_days")
     save = admit_job(ctx, str(form.get("save", "true")).lower() != "false", "video")
     try:
@@ -144,8 +156,16 @@ async def create_profile_job(request: Request, ctx: Ctx = Depends(current)):
     except media_svc.ParamError as e:
         raise HTTPException(422, {"code": "invalid", "message": str(e)}) from e
     s.commit()
+    expires = time.time() + days * 86400 if days and days > 0 else None
     try:
-        jid = await media_svc.submit_profile(st, ctx.user, m, b, clean, uploads, save, time.time() + days * 86400 if days and days > 0 else None)
+        with media_lib.materialise(st, [g for lst in picked.values() for _, g in lst]) as opened:
+            it = iter(opened)
+            for name, lst in picked.items():
+                for _aid, _g in lst:
+                    fh, mime, nm, _k = next(it)
+                    uploads.setdefault(name, []).append((fh, mime, nm))
+            jid = await media_svc.submit_profile(st, ctx.user, m, b, clean, uploads, save, expires,
+                                                 sources={n: [i for i, _ in lst] for n, lst in picked.items()} or None)
     except AdapterError as e:
         raise _backend_error(e) from e
     await media_svc.refresh(st, jid)
@@ -275,26 +295,11 @@ def _ranged(data: bytes, mime: str, request: Request, filename: str | None) -> R
 
 
 @router.get("/assets/{aid}/content")
-def asset_content(aid: str, request: Request, download: bool = False, ctx: Ctx = Depends(current)):
-    # Same 404 for missing and for someone else's: existence is not disclosed.
-    miss = HTTPException(404, {"code": "not_found", "message": "Not found."})
-    if aid.startswith("me_"):
-        media_svc.purge_mem(ctx.st)
-        v = media_svc._mem(ctx.st).get(aid)
-        if v is None or v["user_id"] != ctx.user.id:
-            raise miss
-        data, mime, kind = v["data"], v["mime"], v["meta"]["kind"]
-    else:
-        a = ctx.s.get(MediaAsset, aid)
-        if a is None or a.user_id != ctx.user.id:
-            raise miss
-        try:
-            data, mime, kind = media_svc.read_asset(ctx.st, a), a.mime, a.kind
-        except (OSError, ValueError) as e:
-            raise HTTPException(410, {"code": "gone", "message": "The file is no longer available."}) from e
-    _gate(ctx, kind)
-    name = f"semechka-{kind}-{aid[-8:]}.{media_svc.SAFE_MIME.get(mime, 'bin')}" if download else None
-    return _ranged(data, mime, request, name)
+def asset_content(aid: str, request: Request, download: bool = False, preview: bool = False, ctx: Ctx = Depends(current)):
+    """The file, by byte range. Same 404 for missing and for someone else's: existence is not disclosed. ``preview`` asks for the converted
+    copy of a video the browser cannot play, when there is one."""
+    from . import media_assets
+    return media_assets.serve_content(request, ctx, aid, download, preview)
 
 
 @router.delete("/assets/{aid}")
@@ -339,6 +344,12 @@ def protection(kind: str, ctx: Ctx = Depends(current)):
                       "text": "With no-save on, the prompt, settings and result are not written to Semechka's database "
                               f"or disk. The result lives in server memory for {media_svc.EPHEMERAL_TTL // 60} minutes. "
                               "The engine's own job record (see above) still exists, and usage counts (no text) are kept."})
+    lines.append({"topic": "Files you add",
+                  "text": "Pictures and videos you upload are encrypted on the server in the same way as results (kept for "
+                          + (f"{days} days" if days and days > 0 else "as long as you keep them" if days != 0 else "a few minutes only: this organisation stores no files")
+                          + "). While one is being checked, previewed or edited, a temporary plain copy exists on the server's disk for a few seconds "
+                            "(in memory for no-save items) and is then deleted. Only you can open them; they are sent to the inference backend only "
+                            "when you use one in a request."})
     lines.append({"topic": "Who can see it", "status": "info",
                   "text": "Only you can open your results through Semechka. Administrator screens do not show them."})
     return {"lines": lines, "ephemeral_available": ephemeral_ok}
