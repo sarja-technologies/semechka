@@ -513,7 +513,7 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
         await seal_to_store(st, user_id, aid, src)
         if thumb:
             await asyncio.to_thread(write_sidecar, st, user_id, aid, "thumb", thumb.read_bytes())
-        with st.db.session() as s:
+        with st.db.session(write=True) as s:
             s.add(MediaAsset(id=aid, user_id=user_id, job_id=None, kind=pr.kind, model_id="edit" if origin == "edit" else "upload", mime=pr.mime,
                              size=size, width=pr.width, height=pr.height, duration=pr.duration, seed=None, prompt_enc="",
                              params_enc=st.vault.encrypt(json.dumps(meta), "media"), expires_at=expires_at))

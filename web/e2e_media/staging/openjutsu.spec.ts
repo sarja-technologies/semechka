@@ -49,19 +49,24 @@ test('real OpenJutsu: drag a video in, trim and crop it, send it, and the engine
   await expect(page.locator('article.msg.user .ac')).toHaveCount(2);
   await shot(page, 's4-sent');
   // follow the real job
-  let last = '';
+  let last = '', bad = 0;
   const t0 = Date.now();
   let job: any = null;
   for (;;) {
-    const jobs = await (await page.request.get('/api/media/jobs?kind=video')).json();
-    job = jobs[0];
+    // poll the way the browser does while a job runs (list, the job itself, the Library), a few times a second: none of it may fail
+    const burst = await Promise.all([page.request.get('/api/media/jobs?kind=video'), page.request.get('/api/media/jobs?kind=video'), page.request.get('/api/media/assets?limit=5')]);
+    for (const r of burst) if (!r.ok()) { bad++; console.log('NON-200 while the job runs:', r.status(), r.url()); }
+    job = (await burst[0].json())[0];
+    const one = await page.request.get(`/api/media/jobs/${job.id}`);
+    if (!one.ok()) { bad++; console.log('NON-200 on the job itself:', one.status()); }
     const line = `${job.status} ${job.progress_text ?? ''} ${job.progress != null ? Math.round(job.progress * 100) + '%' : ''}`;
     if (line !== last) { console.log(`[${Math.round((Date.now() - t0) / 1000)}s] ${line}`); last = line; }
     if (['completed', 'failed', 'cancelled'].includes(job.status)) break;
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(700);
     if (Date.now() - t0 > 25 * 60_000) throw new Error('job did not finish in 25 minutes');
   }
   console.log('job', job.id, job.status, job.error ?? '', 'sources', JSON.stringify(job.params?.sources));
+  expect(bad, 'requests that failed while the job ran').toBe(0);
   expect(job.status).toBe('completed');
   expect(job.params.sources.video).toEqual([edited.id]);
   const res = job.assets[0];

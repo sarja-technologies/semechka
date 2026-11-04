@@ -258,7 +258,7 @@ async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, upl
     remote = await ad.media_submit_profile(m.real_id.split(":", 1)[1], sent, job_id, **({"title": origin + " " + m.real_id.split(":", 1)[1]} if origin else {}))
     # what is shown for the job: the prompt, or the main text the operation takes (first string input of the schema)
     prompt = str(inputs.get("prompt") or next((v for k, v in inputs.items() if isinstance(v, str) and v and (spec.get(k) or {}).get("type") == "string"), ""))
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         s.add(MediaJob(id=job_id, user_id=user.id, kind="video", model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                        prompt_enc=st.vault.encrypt(prompt, "media") if save else None,
                        params_enc=st.vault.encrypt(json.dumps({**{k: v for k, v in inputs.items() if k != "prompt"}, **({"sources": sources} if sources else {})}), "media") if save else None,
@@ -360,7 +360,7 @@ def job_out(st, s, p, j: MediaJob, models: dict | None = None) -> dict:
 
 # ---- lifecycle -------------------------------------------------------------------------------------
 def _finish(st, job_id: str, status: str, error: str | None = None, text: str | None = None) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(MediaJob, job_id)
         if j is None or j.status not in ACTIVE:
             return
@@ -388,7 +388,7 @@ async def submit(st, user: User, kind: str, m: Model, b: Backend, params: dict, 
     real = m.real_id.split(":", 1)[1]
     remote = await ad.media_submit(kind, {**params, "model": real}, job_id, **({"title": f"{origin} {kind}"} if origin else {}))
     params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image")}
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = MediaJob(id=job_id, user_id=user.id, kind=kind, model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                      prompt_enc=st.vault.encrypt(params["prompt"], "media") if save else None,
                      params_enc=st.vault.encrypt(json.dumps({k: v for k, v in params.items() if k != "prompt"}), "media")
@@ -445,13 +445,13 @@ async def refresh(st, job_id: str) -> None:
             if time.time() - last_ok > UNREACHABLE_GIVE_UP_S:
                 _finish(st, job_id, "failed", f"The inference backend has not answered for {UNREACHABLE_GIVE_UP_S // 60} minutes.")
             else:
-                with st.db.session() as s:
+                with st.db.session(write=True) as s:
                     j = s.get(MediaJob, job_id)
                     if j:
                         j.progress_text = "Waiting for the inference backend" if e.kind == "unreachable" else str(e)[:300]
             return
         status = r["status"]
-        with st.db.session() as s:
+        with st.db.session(write=True) as s:
             j = s.get(MediaJob, job_id)
             j.last_ok = time.time()
             j.queue_position = r.get("queue_position")
@@ -492,7 +492,7 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
             for o in outputs:
                 await _discard(ad, o)
         else:
-            with st.db.session() as s:
+            with st.db.session(write=True) as s:
                 j = s.get(MediaJob, job_id)
                 j.progress_text = "Retrieving the result"
         return
@@ -501,15 +501,23 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
         with st.db.session() as s:
             u = s.get(User, user_id)
             days = st.settings.value_for(s, "privacy.chat_retention_days", services.load_principal(s, u)) if u else -1
-            expires = now + days * 86400 if days and days > 0 else None
-            for o, data, mime in fetched:
-                aid = "ma_" + uuid.uuid4().hex[:24]
-                write_asset(st, user_id, aid, data)
-                s.add(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
-                                 size=len(data), width=o.get("width"), height=o.get("height"),
-                                 duration=o.get("duration"), seed=o.get("seed"),
-                                 prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
-                                 expires_at=expires))
+        expires = now + days * 86400 if days and days > 0 else None
+        rows = []
+        for o, data, mime in fetched:  # files first (slow), the write lock only for the rows (fast)
+            aid = "ma_" + uuid.uuid4().hex[:24]
+            write_asset(st, user_id, aid, data)
+            rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
+                                   size=len(data), width=o.get("width"), height=o.get("height"),
+                                   duration=o.get("duration"), seed=o.get("seed"),
+                                   prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
+                                   expires_at=expires))
+        try:
+            with st.db.session(write=True) as s:
+                s.add_all(rows)
+        except BaseException:
+            for r in rows:
+                remove_asset_file(st, user_id, r.id)
+            raise
     else:
         purge_mem(st)
         if mem_bytes(st) + sum(len(d) for _, d, _ in fetched) > EPHEMERAL_CAP_BYTES:
@@ -537,7 +545,7 @@ async def _discard(ad, o) -> None:
 
 
 async def cancel(st, job_id: str) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(MediaJob, job_id)
         if j is None or j.status not in ACTIVE:
             return
@@ -566,7 +574,7 @@ def sweep(st) -> dict:
     now = time.time()
     purge_mem(st)
     removed = orphans = 0
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         for a in s.execute(select(MediaAsset).where(MediaAsset.expires_at != None, MediaAsset.expires_at < now)).scalars().all():  # noqa: E711
             remove_asset_file(st, a.user_id, a.id)
             s.delete(a)
