@@ -33,7 +33,7 @@ from .models_agents import Agent
 from .models_files import Job
 from .models_tenancy import Org, Workspace
 from .models_work import WorkEvent, WorkSession
-from .work_tools import Wk, a_int, a_str, guess_mime, norm_path, put, register_artifact, scrub, work_tool
+from .work_tools import Wk, a_bool, a_int, a_str, guess_mime, norm_path, put, register_artifact, scrub, work_tool
 
 POLL_S = 2.0              # how often a waiting tool asks the engine (tests make it small)
 HEARTBEAT_S = 20.0        # a waiting tool says it is still waiting at least this often
@@ -543,7 +543,8 @@ def wait_cap(w: Wk) -> float:
 
 def request_key(kind: str, model_id: str, params: dict, files: dict | None = None) -> str:
     """Names one generation request: the same model, the same settings and the same input files (by content)."""
-    blob = json.dumps([kind, model_id, params, files or {}], sort_keys=True, default=str)
+    norm = {k: (" ".join(v.split()) if isinstance(v, str) and k in ("prompt", "negative_prompt") else v) for k, v in params.items()}
+    blob = json.dumps([kind, model_id, norm, files or {}], sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
@@ -575,7 +576,7 @@ def same_request(w: Wk, key: str) -> ToolOut | None:
             if info.get("exists"):
                 w.done(path=d["out"], files=[d["out"]], job=jid)
                 return ToolOut(f"Not started again: this run already made exactly this (job {jid}) and /work/{d['out']} is in your workspace "
-                               f"({info['size']:,} bytes). Use that file. For a different result change the prompt, the seed or the model.")
+                               f"({info['size']:,} bytes). Use that file. For a different result change the prompt, the seed or the model, or pass \"regenerate\": true to make a new one on purpose.")
     return None
 
 
@@ -639,7 +640,7 @@ def t_generate_image(tc, w: Wk, a: dict) -> ToolOut:
         if isinstance(a.get("denoise"), (int, float)):
             params["denoise"] = float(a["denoise"])
     key = request_key("image", m.id, {**params, "out": out}, {"source": hashlib.sha256(data).hexdigest()} if data else None)
-    again = same_request(w, key)
+    again = None if a_bool(a, "regenerate") else same_request(w, key)
     if again is not None:
         return again
     if data is not None:
@@ -703,7 +704,7 @@ def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
         except media_svc.ParamError as e:
             raise ToolError(str(e)) from None
         key = request_key("video", m.id, {**clean, "out": out}, {k: [hashlib.sha256(x[0]).hexdigest() for x in v] for k, v in uploads.items()})
-        again = same_request(w, key)
+        again = None if a_bool(a, "regenerate") else same_request(w, key)
         if again is not None:
             return again
         with scope(w) as (s, p, org, ws, sess):
@@ -727,7 +728,7 @@ def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
         name = name or w.container()
         start = _read_source(w, name, norm_path(str(inputs["start_image"]), allow_empty=False), "inputs.start_image", kinds=("image/",))
     key = request_key("video", m.id, {**params, "out": out}, {"start": hashlib.sha256(start[0]).hexdigest()} if start else None)
-    again = same_request(w, key)
+    again = None if a_bool(a, "regenerate") else same_request(w, key)
     if again is not None:
         return again
     if start:

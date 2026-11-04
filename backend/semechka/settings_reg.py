@@ -54,6 +54,23 @@ class Def:
         }
 
 
+def _tool_budgets(v):
+    if not isinstance(v, dict) or len(v) > 100:
+        raise SettingError("Must be a map of tool name to a number of calls.")
+    out = {}
+    for k, n in v.items():
+        if not isinstance(k, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,40}", k) or isinstance(n, bool) or not isinstance(n, int) or not 0 <= n <= 2000:
+            raise SettingError("Each entry is a tool name and a whole number from 0 to 2000.")
+        out[k] = n
+    return out
+
+
+def _str_list(v):
+    if not isinstance(v, list) or len(v) > 50 or not all(isinstance(x, str) and 1 <= len(x) <= 100 for x in v):
+        raise SettingError("Must be a list of up to 50 short texts.")
+    return [x.strip() for x in v if x.strip()]
+
+
 # ---- validators ------------------------------------------------------------------------------------
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -583,6 +600,27 @@ DEFS: list[Def] = [
     Def("work.engine_wait_s", WK, "Longest wait for one image or video job (seconds)",
         "generate_image and generate_video wait this long for the engine to finish; after that the job keeps running and the agent can "
         "collect it with wait_job.", "int", 1800, min=30, max=14400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    # ---- Work Mode: budgets and models (task 6) ----
+    Def("work.max_tool_calls", WK, "Tool calls per run (all tools)",
+        "A run that has made this many tool calls gets a refusal for the next one and is told to finish with what it has.", "int", 150,
+        min=1, max=2000, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.tool_budgets", WK, "Tool calls per run, per tool",
+        "A map of tool name to the most calls one run may make of it (0 switches the tool off for Work Mode). Tools not listed are limited only by "
+        "the total. Expensive generation tools are listed by default.", "json",
+        {"generate_image": 12, "generate_video": 4, "delegate": 8, "wait_job": 80, "work_shell": 120, "work_python": 80, "work_git": 60},
+        scopes=["deployment"], edit_perm="admin.quotas.edit", validator=lambda v: _tool_budgets(v)),
+    Def("work.default_model", WK, "Preferred agent model",
+        "The model a new session starts with when the person does not choose one: the first enabled chat model whose id or name contains this "
+        "text and that the person may use. Empty means the first model the person may use.", "string", "qwen3-4b-instruct-2507",
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.helper_only_models", WK, "Helper-only models",
+        "Models whose id or name contains one of these texts cannot be chosen as the agent of a session (too small to drive the tool loop); they can "
+        "still be asked for a bounded answer through delegation, with the limits below.", "json", ["qwen3.5-0.8b"],
+        scopes=["deployment"], edit_perm="admin.quotas.edit", validator=lambda v: _str_list(v)),
+    Def("work.helper_max_tokens", WK, "Longest answer from a helper-only model (tokens)", "", "int", 384, min=32, max=4096,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("work.helper_timeout_s", WK, "Longest task for a helper-only model (seconds)", "", "int", 90, min=10, max=900,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
     # ---- semantic retrieval ----
     Def("embeddings.url", SYS, "Embedding service address",
         "Base address of an OpenAI-compatible embeddings endpoint (for example http://127.0.0.1:8760). Empty turns "

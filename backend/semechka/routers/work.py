@@ -83,6 +83,8 @@ def options(ctx: Ctx = Depends(current)):
     c = work_svc.cfg(ctx.st, ctx.s)
     models = []
     for m, b in services.accessible_models(ctx.s, ctx.principal, ctx.st, "work", include_hidden=False):
+        if work_svc.helper_only(ctx.st, ctx.s, m):   # not offered as an agent; delegation can still ask it
+            continue
         caps = catalog_svc.capabilities(m)
         n_ctx, _ = chat_svc.window_for(ctx.st, m)
         models.append({"id": m.id, "alias": m.alias, "tools": True, "vision": "vision" in caps, "context": n_ctx,

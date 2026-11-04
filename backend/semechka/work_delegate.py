@@ -147,6 +147,11 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
             raise ToolError(f"'{model_ref[:60]}' is not a model you may use. Call list_models with kind chat for the ones you can.")
         m, b = hit
         vision_ok = services.model_access(s, p, m, b, w.st, "vision")[0]
+        small = work_svc.helper_only(w.st, s, m)
+        if small:   # a helper-only model gets tighter limits: shorter answer, shorter wait, no pictures, no further consulting
+            d = w.st.settings.deployment
+            max_tokens, timeout_s = min(max_tokens, int(d(s, "work.helper_max_tokens"))), min(timeout_s, int(d(s, "work.helper_timeout_s")))
+            vision_ok = False
         person = s.get(User, w.user_id).display_name
         if caller_model is None:
             caller_model = sess.model_id
@@ -160,7 +165,8 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
     t0 = time.monotonic()
     deadline = t0 + timeout_s
     text = task + (("\n\n" + extra) if extra else "")
-    msgs = [{"role": "system", "content": SYSTEM + (NEST if depth < max_depth else "")},
+    can_nest = depth < max_depth and not small
+    msgs = [{"role": "system", "content": SYSTEM + (NEST if can_nest else "")},
             {"role": "user", "content": [{"type": "text", "text": text}, *imgs] if imgs else text}]
     used = {"tokens_in": 0, "tokens_out": 0}
     last_note = {"at": 0.0}
@@ -182,7 +188,7 @@ def delegate_once(w: Wk, model_ref: str, task: str, files: list, depth: int, par
             u = info.get("usage") or {}
             used["tokens_in"] += int(u.get("prompt_tokens") or 0)
             used["tokens_out"] += int(u.get("completion_tokens") or 0)
-            nested = _nested_request(reply) if depth < max_depth else None
+            nested = _nested_request(reply) if can_nest else None
             if nested is None:
                 answer = _clean_answer(reply)
                 break

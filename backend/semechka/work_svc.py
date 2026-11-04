@@ -182,10 +182,36 @@ def ensure_agent(st, s, org_id: str) -> Agent:
     return a
 
 
+def helper_only(st, s, model: Model | None) -> bool:
+    """A model the administrator keeps out of the agent seat (too small to drive the tool loop); delegation may still ask it a question."""
+    if model is None:
+        return False
+    pats = [str(x).lower() for x in (st.settings.deployment(s, "work.helper_only_models") or []) if str(x).strip()]
+    hay = f"{model.real_id} {model.alias}".lower()
+    return any(p in hay for p in pats)
+
+
 def check_model(st, s, principal, org: Org | None, ws: Workspace | None, model_id: str) -> None:
     why = gateway_svc.check(st, s, principal, org, ws, model_id, "chat")
     if why:
         raise WorkError("model", why, 403)
+    m = s.get(Model, model_id)
+    if helper_only(st, s, m):
+        raise WorkError("helper_only", f"{m.alias} is a helper model: it can answer a question when another model delegates to it, but it is too "
+                                       "small to run a session. Choose another model.", 422)
+
+
+def default_model(st, s, principal, org: Org | None, ws: Workspace | None, agent_only) -> str | None:
+    """The preferred agent model (`work.default_model`) if this person may use it, else the first model they may use that is allowed in the agent seat."""
+    want = str(st.settings.deployment(s, "work.default_model") or "").strip().lower()
+    rows = [m for m in gateway_svc.models_for(st, s, principal, org, ws, "chat", only=agent_only or None)
+            if not helper_only(st, s, s.get(Model, m["id"]))]
+    if want:
+        for m in rows:
+            row = s.get(Model, m["id"])
+            if want in f"{row.real_id} {row.alias}".lower():
+                return m["id"]
+    return rows[0]["id"] if rows else None
 
 
 def _check_network(st, s, principal, network: str) -> None:
@@ -217,9 +243,7 @@ def create_session(st, s, user, principal, *, title: str = "", objective: str = 
     if model_id:
         check_model(st, s, principal, org, ws, model_id)
     else:  # the first chat model this person may use, chosen now so the session keeps one model until it is changed
-        for m in gateway_svc.models_for(st, s, principal, org, ws, "chat", only=agent_svc.agent_models(st, s) or None):
-            model_id = m["id"]
-            break
+        model_id = default_model(st, s, principal, org, ws, agent_svc.agent_models(st, s))
         if not model_id:
             raise WorkError("model", "No chat model is available to you.", 409)
     title = (title or "").strip()[:200]
@@ -998,6 +1022,7 @@ NETWORK_RE = re.compile(r"\b(curl|wget|ssh|scp|rsync|nc|ncat|telnet|ftp|pip3?\s+
                         r"git\s+(clone|fetch|pull|push|remote)|requests\.|urllib|http\.client|socket\.|aiohttp|https?://)", re.I)
 DESTRUCTIVE_RE = re.compile(r"(\brm\s+(-[a-zA-Z]*[rRf][a-zA-Z]*\s+)+(/work/?\*?|/work/\.\*|\.\.?/?\*?|\*|~/?\*?)(\s|$|;|&|\|)|"
                             r"\bfind\s+(/work|\.)\s.*-delete|\bshutil\.rmtree\(\s*['\"](/work|\.)/?['\"]|\bmkfs\b|\bdd\s+if=.*of=/)", re.I)
+BUDGET_PREFIX = "Run budget:"
 GIT_NETWORK = {"clone", "fetch", "pull", "push", "remote"}
 
 
@@ -1164,11 +1189,31 @@ class WorkExtension(agent_svc.RunExtension):
                  {"step": step.n, "tool": step.tool, "status": "pending", "reason": (step.meta or {}).get("approval_reason", ""),
                   "args": args}, run_id=run.id, step_n=step.n)
 
+    def budget_refusal(self, tc, spec) -> str | None:
+        """Per-run tool-call budgets (`work.max_tool_calls`, `work.tool_budgets`). Counts the calls this run already made, not the refused ones."""
+        d = tc.st.settings.deployment
+        total_max = int(d(tc.s, "work.max_tool_calls"))
+        per = (d(tc.s, "work.tool_budgets") or {}).get(spec.name)
+        rows = tc.s.execute(select(AgentStep.tool, AgentStep.error).where(
+            AgentStep.run_id == tc.run.id, AgentStep.kind == "tool", AgentStep.n < tc.step.n,
+            AgentStep.status.in_(("done", "error", "running", "interrupted")))).all()
+        made = [t for t, err in rows if not (err or "").startswith(BUDGET_PREFIX)]
+        if len(made) >= total_max:
+            return (f"{BUDGET_PREFIX} this run has made {len(made)} tool calls, the most allowed ({total_max}). "
+                    "Stop calling tools and give your final answer with what you have.")
+        if per is not None and made.count(spec.name) >= int(per):
+            return (f"{BUDGET_PREFIX} {spec.name} may be called {int(per)} times in one run" + (" (it is switched off)" if int(per) == 0 else "") +
+                    f", and this run has used {made.count(spec.name)}. Use what you already have, choose another way, or give your final answer.")
+        return None
+
     def before_tool(self, tc, spec, args) -> None:
         sess = self._sess(tc.s, tc.run)
         if sess is None:
             raise agent_svc.ToolError("The session no longer exists.")
         tc.work_session = sess
+        why = self.budget_refusal(tc, spec) if tc.step is not None else None
+        if why:
+            raise agent_svc.ToolError(why)
         if sess.network == "internet":
             from .models import User
             p = services.load_principal(tc.s, tc.s.get(User, tc.run.user_id))
