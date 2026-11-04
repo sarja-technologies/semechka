@@ -302,7 +302,7 @@ async def submit(request: Request):
     STATE["n"] += 1
     jid = f"j_{STATE['n']:04d}"
     STATE["jobs"][jid] = {"id": jid, "kind": kind, "status": "queued", "progress": 0.0, "progress_text": "Queued",
-                          "simple": simple, "polls": 0, "error": None, "generations": []}
+                          "simple": simple, "polls": 0, "error": None, "generations": [], "title": body.get("title")}
     STATE["submissions"].append({"kind": kind, **simple})
     if key:
         STATE["by_key"][key] = jid
@@ -382,7 +382,7 @@ async def submit_profile(pid: str, request: Request):
     jid = f"j_{STATE['n']:04d}"
     inputs = body.get("inputs") or {}
     STATE["jobs"][jid] = {"id": jid, "kind": "video", "status": "queued", "progress": 0.0, "progress_text": "Queued", "polls": 0,
-                          "error": None, "generations": [], "simple": {"prompt": inputs.get("prompt", ""), "width": 832, "height": 480,
+                          "title": body.get("title"), "error": None, "generations": [], "simple": {"prompt": inputs.get("prompt", ""), "width": 832, "height": 480,
                                                                        "frames": 33, "fps": 16}}
     STATE["profile_submissions"].append({"profile": pid, "inputs": inputs, "client_key": key})
     if key:

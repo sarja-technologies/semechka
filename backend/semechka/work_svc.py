@@ -1039,6 +1039,18 @@ class WorkExtension(agent_svc.RunExtension):
             emit(st, s, sess, "state", "A command was interrupted by a restart; the run continues and will check its state",
                  {"steps": [x.n for x in steps]}, run_id=run.id)
 
+    RESUMABLE = ("work_shell", "work_python", "work_git", "generate_image", "generate_video", "wait_job")
+
+    def can_resume(self, step) -> bool:
+        # these tools name their work by run and step (a detached command, a generation request), so running them again re-attaches
+        return step.tool in self.RESUMABLE
+
+    def on_resumed(self, st, s, run, steps) -> None:
+        sess = self._sess(s, run)
+        if sess is not None:
+            emit(st, s, sess, "state", "The server restarted while a tool was running; reconnecting to it (it is not started again)",
+                 {"steps": [x.n for x in steps]}, run_id=run.id)
+
     def limits(self, st, s, run) -> dict:
         sess = self._sess(s, run)
         if sess is None:

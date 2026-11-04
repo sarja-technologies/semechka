@@ -121,6 +121,8 @@ class Wk:
     network: str
     tc: object
     job_id: str = ""  # the durable job of the run (its cancel flag is how a long wait notices Cancel)
+    tool: str = ""    # the tool being run
+    resumed: bool = False  # this step was mid-flight when the server stopped and is being picked up again (never started twice)
     result: dict = field(default_factory=dict)
     new_artifacts: list = field(default_factory=list)  # artifacts this call created or changed (reported to the run)
 
@@ -152,7 +154,8 @@ def work_tool(name: str, summary: str, args: str, *, mutating: bool = False):
                 raise ToolError("The session no longer exists.")
             lim = work_svc.effective(work_svc.cfg(tc.st, tc.s), sess)
             w = Wk(tc.st, sess.id, sess.container_name, lim, tc.run.id, sess.org_id, tc.run.user_id,
-                   tc.step.n if tc.step is not None else None, sess.network, tc, job_id=tc.job.id if getattr(tc, "job", None) else "")
+                   tc.step.n if tc.step is not None else None, sess.network, tc, job_id=tc.job.id if getattr(tc, "job", None) else "",
+                   tool=tc.step.tool if tc.step is not None else "", resumed=bool(tc.step is not None and (tc.step.meta or {}).get("resumed")))
             tc.s.rollback()  # no transaction is open while the container works; ORM objects reload on next use
             try:
                 try:
@@ -199,15 +202,77 @@ def _bump(w: Wk, delta: int) -> None:
 
 
 # ---- command results ----------------------------------------------------------------------------------------
+HEARTBEAT_FIRST_S = 10.0   # a command shorter than this never gets a job card
+HEARTBEAT_S = 15.0         # then one update at least this often (60 s once it has run for five minutes): no silent wait
+
+
+def job_key(w: Wk) -> str:
+    """Names ONE tool call. The same call after a restart gets the same name, which is how it finds the command it started
+    instead of starting it again."""
+    if w.step_n is None:
+        import uuid
+        return "c" + uuid.uuid4().hex[:20]
+    return "c" + hashlib.sha1(f"{w.sid}:{w.run_id}:{w.step_n}".encode()).hexdigest()[:20]
+
+
+def fmt_s(sec: float) -> str:
+    sec = int(sec)
+    return f"{sec // 3600}h {sec % 3600 // 60}m" if sec >= 3600 else f"{sec // 60}m {sec % 60}s" if sec >= 60 else f"{sec}s"
+
+
+def command_event(w: Wk, jid: str, status: str, phase: str, *, tool: str = "", error: str | None = None, **extra) -> None:
+    data = {"job_id": jid, "job_kind": "command", "model": tool or None, "status": status, "phase": phase, "progress": None, **extra}
+    if error:
+        data["error"] = error
+    data = {k: v for k, v in data.items() if v is not None or k == "progress"}
+    try:
+        with w.st.db.session(write=True) as s:
+            sess = s.get(WorkSession, w.sid)
+            if sess is not None:
+                work_svc.emit(w.st, s, sess, "job", f"command {status}", data, run_id=w.run_id, step_n=w.step_n)
+    except Exception:  # noqa: BLE001  a progress note must never fail the command
+        log.debug("work: command event failed", exc_info=True)
+
+
 def run_command(w: Wk, name: str, *, cmd: str | None = None, argv: list[str] | None = None, timeout_s: int, cwd: str = "",
                 cleanup_ok: bool = False) -> ToolOut:
     limit = w.lim["workspace_mb"] * MB
     check_quota(w, name, 0, cleanup=cleanup_ok)  # raises unless the command is a cleanup and we are over
+    jid = job_key(w)
+    tool = (w.tool or "").replace("work_", "")
+    t0 = time.monotonic()
+    beat = {"next": HEARTBEAT_FIRST_S, "shown": False, "n": 0}
+
+    def tick(status: dict) -> str | None:
+        """Called on every poll of the detached command: cancel, and the heartbeat that keeps the timeline alive."""
+        from . import jobs_svc
+        if w.job_id and jobs_svc.cancelled(w.st, w.job_id):
+            return "cancel"
+        el = float(status.get("elapsed_s") or time.monotonic() - t0)
+        if el >= beat["next"]:
+            beat["shown"], beat["n"] = True, beat["n"] + 1
+            beat["next"] = el + (HEARTBEAT_S if el < 300 else 60.0)
+            ob, eb = int(status.get("out_bytes") or 0), int(status.get("err_bytes") or 0)
+            work_svc.touch(w.st, w.sid)
+            command_event(w, jid, "running", f"Running for {fmt_s(el)}; {ob + eb:,} bytes of output so far", tool=tool,
+                          elapsed_s=round(el), out_bytes=ob, err_bytes=eb, timeout_s=timeout_s)
+        return None
+
     # both streams plus the report lines must fit in what the model is shown, so each stream gets half (head and tail kept)
-    res = w.rt.exec(name, cmd, argv=argv, timeout_s=timeout_s, max_output=max(500, (w.lim["output_chars"] - 700) // 2), cwd=cwd,
-                    quota_bytes=int(limit * 1.05) if limit else 0)
+    res = w.rt.run_job(name, jid, cmd, argv=argv, timeout_s=timeout_s, max_output=max(500, (w.lim["output_chars"] - 700) // 2), cwd=cwd,
+                       quota_bytes=int(limit * 1.05) if limit else 0, on_tick=tick)
+    if beat["shown"]:
+        ended = ("failed" if res.lost or res.timed_out or res.quota_killed or res.oom_killed else
+                 "cancelled" if res.interrupted else "completed" if res.exit == 0 else "failed")
+        command_event(w, jid, ended, f"Ended after {fmt_s(res.duration_s)} (exit {res.exit})" if not res.lost else "Lost: the container restarted",
+                      tool=tool, elapsed_s=round(res.duration_s))
     after = used_bytes(w, name, fresh=True)
     w.done(exit=res.exit, duration_s=res.duration_s, timed_out=res.timed_out)
+    if res.lost:
+        w.done(exit=-1, lost=True)
+        return ToolOut("LOST: the command's supervisor is gone (the session container was restarted, or the command was killed from outside) "
+                       f"after about {fmt_s(res.duration_s)}. Its outcome is UNKNOWN and it was NOT started again. Look at the files in /work "
+                       "to see how far it got before you decide to run it again.")
     lines = [f"exit code {res.exit}" + (f" ({res.signal})" if res.signal else "") + f" in {res.duration_s:.2f}s"]
     if res.timed_out:
         lines.append(f"TIMED OUT after {timeout_s}s: the command and everything it started were killed.")

@@ -53,17 +53,17 @@ class SarnessMediaMixin:
                                kind="rejected" if r.status_code < 500 else "backend_error")
         return r
 
-    async def media_submit(self, kind: str, params: dict, client_key: str) -> str:
+    async def media_submit(self, kind: str, params: dict, client_key: str, title: str | None = None) -> str:
         keys = _IMAGE_KEYS if kind == "image" else _VIDEO_KEYS
         simple = {k: params[k] for k in keys if params.get(k) is not None}
         r = await self._call("POST", "/v1/jobs", json={"kind": kind, "simple": simple, "client_key": client_key,
-                                                      "title": f"semechka {kind}"})
+                                                      "title": title or f"semechka {kind}"})
         return r.json()["id"]
 
-    async def media_submit_profile(self, profile_id: str, inputs: dict, client_key: str) -> str:
+    async def media_submit_profile(self, profile_id: str, inputs: dict, client_key: str, title: str | None = None) -> str:
         """Queue a composite-profile job (e.g. OpenJutsu). ``inputs`` holds plain values and engine file ids."""
         r = await self._call("POST", f"/v1/profiles/{profile_id}/jobs", json={"inputs": inputs, "client_key": client_key,
-                                                                              "title": f"semechka {profile_id}"})
+                                                                              "title": title or f"semechka {profile_id}"})
         return r.json()["id"]
 
     async def media_upload(self, data, mime: str, name: str) -> str:

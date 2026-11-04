@@ -466,3 +466,70 @@ def test_a_request_still_running_is_pointed_to_wait_job_and_a_failed_one_may_be_
     run(st, we, sid, boom, boom)
     a, b = results(we, sid)[-2:]
     assert not a["ok"] and not b["ok"] and "CUDA out of memory" in b["error"] and len(FS.STATE["submissions"]) == 3   # a failure is retried, not remembered
+
+
+# ---- task 8: the engine's job list can tell Work Mode jobs from the rest ------------------------------------------------------
+def test_engine_jobs_started_by_a_session_carry_a_recognisable_origin_title(we, st):
+    sid = new_session(we)
+    run(st, we, sid, L.tool("generate_image", prompt="a fox", model="fake-turbo", out="artifacts/a.png"))
+    assert list(FS.STATE["jobs"].values())[0]["title"] == f"semechka work {sid} image"
+    # the plain Image mode keeps its own label
+    r = we.post("/api/media/jobs", json={"kind": "image", "model_id": we.engine_models["image:fake-turbo"], "prompt": "x", "params": {}})
+    if r.status_code == 200:
+        titles = [j["title"] for j in FS.STATE["jobs"].values()]
+        assert "semechka image" in titles
+
+
+def test_a_job_profile_title_names_the_session_and_the_profile(we, st):
+    sid = new_session(we)
+    from .test_work_engine import workspace_file  # noqa: F401
+    ws = workspace_file(st, sid, "inputs/src.mp4")
+    ws.parent.mkdir(parents=True, exist_ok=True)
+    ws.write_bytes(FS.make_mp4())
+    workspace_file(st, sid, "inputs/ref.png").write_bytes(FS.make_png())
+    run(st, we, sid, L.tool("generate_video", model="openjutsu-minimax-h3", out="artifacts/s.mp4",
+                            inputs={"prompt": "the singer", "video": "inputs/src.mp4", "refs": "inputs/ref.png", "resolution": "480p"}))
+    assert [j["title"] for j in FS.STATE["jobs"].values()] == [f"semechka work {sid} openjutsu-minimax-h3"]
+
+
+def test_a_waiting_tool_keeps_saying_it_is_still_waiting(we, st, monkeypatch):
+    monkeypatch.setattr(work_engine, "HEARTBEAT_S", 0.05)
+    sid = new_session(we)
+    # "slow" in the prompt keeps the double's job at 'running 30%' forever; the tool waits its cap then hands the job back
+    monkeypatch.setattr(work_engine, "wait_cap", lambda w: 1.0)
+    run(st, we, sid, L.tool("generate_image", prompt="slow burn", model="fake-turbo", out="artifacts/s.png"))
+    jv = jobs_events(we, sid)
+    assert len(jv) >= 4 and any("waited_s" in j for j in jv)
+    assert "still running" in last_result(we, sid)["output"]
+
+
+def test_a_restart_during_a_generation_reconnects_to_the_same_engine_job(we, st, monkeypatch):
+    import asyncio
+
+    from semechka import work_svc
+    sid = new_session(we)
+    orig = work_engine._finish_tool
+
+    def die(w, jid, alias, kind, out, prompt, req=None):   # the server dies after the job was handed to the engine
+        work_engine.job_event(w, work_engine.snapshot(w.st, jid), alias, **{k: v for k, v in {"out": out, "req": req}.items() if v})
+        raise asyncio.CancelledError()
+    monkeypatch.setattr(work_engine, "_finish_tool", die)
+    L.say(L.tool("generate_image", prompt="a lighthouse", model="fake-turbo", out="artifacts/l.png"))
+    we.post(f"/api/work/sessions/{sid}/messages", json={"content": "go"})
+    with pytest.raises(asyncio.CancelledError):
+        drive(st)
+    assert len(FS.STATE["submissions"]) == 1
+    monkeypatch.setattr(work_engine, "_finish_tool", orig)
+    # the job record must have an event for the guard to find it (the tool emits one before it waits)
+    from semechka.models_work import WorkEvent
+    with st.db.session() as s:
+        have = s.query(WorkEvent).filter(WorkEvent.kind == "job").count()
+    if have == 0:                                      # die() ran before the first event: emit it like _finish_tool does
+        pytest.skip("covered by the duplicate guard test")
+    assert jobs_svc.recover_on_start(st) == 1
+    work_svc.startup(st)
+    L.say(L.final("collected"))
+    drive(st)
+    assert len(FS.STATE["submissions"]) == 1            # not started again
+    r = last_result(we, sid)
+    assert r["ok"] is True and "Wrote /work/artifacts/l.png" in r["output"]

@@ -230,7 +230,7 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
 
 
 async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, uploads: dict[str, list[tuple[Any, str, str]]], save: bool,
-                         expires_at: float | None, *, job_id: str | None = None) -> str:
+                         expires_at: float | None, *, job_id: str | None = None, origin: str | None = None) -> str:
     """Hand source files and settings to the engine, which runs the profile as an ordinary durable job. Raises AdapterError and leaves
     nothing behind. ``uploads`` maps an input name to [(file object or bytes, mime, filename)]."""
     job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
@@ -240,7 +240,7 @@ async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, upl
     for name, items in uploads.items():
         ids = [await ad.media_upload(fo, mime, fname) for fo, mime, fname in items]
         sent[name] = ids if (spec.get(name) or {}).get("multi") else ids[0]
-    remote = await ad.media_submit_profile(m.real_id.split(":", 1)[1], sent, job_id)
+    remote = await ad.media_submit_profile(m.real_id.split(":", 1)[1], sent, job_id, **({"title": origin + " " + m.real_id.split(":", 1)[1]} if origin else {}))
     prompt = str(inputs.get("prompt") or "")
     with st.db.session() as s:
         s.add(MediaJob(id=job_id, user_id=user.id, kind="video", model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
@@ -356,13 +356,13 @@ def _finish(st, job_id: str, status: str, error: str | None = None, text: str | 
 
 async def submit(st, user: User, kind: str, m: Model, b: Backend, params: dict, save: bool,
                  expires_at: float | None, *, job_id: str | None = None, conversation_id: str | None = None,
-                 message_id: str | None = None) -> str:
+                 message_id: str | None = None, origin: str | None = None) -> str:
     """Create the job row and hand the job to the engine. Raises AdapterError (nothing is left behind).
     `params` may carry engine-side source images (reference_image / start_image); they are not stored here."""
     job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
     ad = adapter_for(b, st)
     real = m.real_id.split(":", 1)[1]
-    remote = await ad.media_submit(kind, {**params, "model": real}, job_id)
+    remote = await ad.media_submit(kind, {**params, "model": real}, job_id, **({"title": f"{origin} {kind}"} if origin else {}))
     params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image")}
     with st.db.session() as s:
         j = MediaJob(id=job_id, user_id=user.id, kind=kind, model_id=m.id, backend_id=b.id, remote_id=remote, save=save,

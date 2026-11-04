@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,7 @@ class ExecResult:
     signal: str = ""
     truncated_stdout: int = 0   # bytes left out between the head and the tail kept
     truncated_stderr: int = 0
+    lost: bool = False          # the detached command's supervisor vanished (container restarted or killed): outcome unknown
 
 
 @dataclass
@@ -113,7 +115,7 @@ class Refused(Exception):
 
 req = json.loads(sys.stdin.buffer.readline())
 ROOT = os.path.realpath(req["root"])
-SKIP = {".git", ".home", "node_modules", "__pycache__", ".cache", ".npm", ".venv"}
+SKIP = {".git", ".home", ".jobs", "node_modules", "__pycache__", ".cache", ".npm", ".venv"}
 
 def inside(p):
     return p == ROOT or p.startswith(ROOT + os.sep)
@@ -170,6 +172,8 @@ def op_list():
     out = []
     with os.scandir(real) as it:
         for e in sorted(it, key=lambda e: (not e.is_dir(follow_symlinks=False), e.name.lower())):
+            if e.name == ".jobs" and real == ROOT:   # the bookkeeping of detached commands is not the person's file
+                continue
             try:
                 s = e.stat(follow_symlinks=False)
             except OSError:
@@ -335,7 +339,8 @@ def oom_count():
             pass
     return None
 
-def op_exec():
+def run_cmd(req, on_progress=None):
+    """Run one command to the end and -> the reply dict. `on_progress(dict)` is called about once a second while it runs."""
     cmd = req.get("argv") or ["bash", "-c", req["cmd"]]
     cwd = resolve(req.get("cwd"))[1]
     if not os.path.isdir(cwd):
@@ -364,11 +369,24 @@ def op_exec():
     maxout = int(req.get("max_output", 65536)); head_n = maxout * 6 // 10; tail_n = maxout - head_n
     bufs = {"out": [bytearray(), bytearray(), 0], "err": [bytearray(), bytearray(), 0]}
     t0 = time.monotonic(); oom0 = oom_count()
+    state = {"interrupted": False}
+    def on_term(*_):
+        state["interrupted"] = True
+        pg = state.get("pg")
+        if pg:
+            try:
+                os.killpg(pg, signal.SIGKILL)
+            except OSError:
+                pass
+    signal.signal(signal.SIGTERM, on_term)   # installed BEFORE the command starts: a cancel can never miss it
     try:
         p = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True, preexec_fn=pre)
     except OSError as e:
         raise Refused("cannot start the command: " + str(e.strerror or e))
+    state["pg"] = p.pid
+    if state["interrupted"]:
+        on_term()
     def pump(stream, key):
         head, tail, dropped = bufs[key]
         while True:
@@ -384,16 +402,13 @@ def op_exec():
     threads = [threading.Thread(target=pump, args=(p.stdout, "out"), daemon=True), threading.Thread(target=pump, args=(p.stderr, "err"), daemon=True)]
     for t in threads:
         t.start()
-    state = {"interrupted": False}
-    def on_term(*_):
-        state["interrupted"] = True
-        try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except OSError:
-            pass
-    signal.signal(signal.SIGTERM, on_term)
     timeout = float(req.get("cmd_timeout", 120)); quota = int(req.get("quota_bytes") or 0)
-    timed_out = quota_killed = False; last_du = t0
+    timed_out = quota_killed = False; last_du = t0; last_prog = -10.0
+    def progress():
+        so = bytes(bufs["out"][0]) + bytes(bufs["out"][1]); se = bytes(bufs["err"][0]) + bytes(bufs["err"][1])
+        on_progress({"elapsed_s": round(time.monotonic() - t0, 1), "cmd_pid": p.pid, "pid": os.getpid(),
+                     "out_bytes": len(so) + bufs["out"][2], "err_bytes": len(se) + bufs["err"][2],
+                     "tail": (so + se)[-400:].decode("utf-8", "replace")})
     while p.poll() is None:
         now = time.monotonic()
         if now - t0 > timeout:
@@ -404,6 +419,12 @@ def op_exec():
             if du(ROOT) > quota:
                 quota_killed = True
                 break
+        if on_progress and now - last_prog >= 1.0:
+            last_prog = now
+            try:
+                progress()
+            except Exception:
+                pass
         time.sleep(0.05)
     if timed_out or quota_killed:
         try:
@@ -436,10 +457,127 @@ def op_exec():
         head, tail, dropped = bufs[key]
         return (bytes(head) + bytes(tail)).decode("utf-8", "replace"), dropped
     so, do = text("out"); se, de = text("err")
-    reply({"ok": True, "exit": rc, "signal": sig, "stdout": so, "stderr": se, "truncated_stdout": do, "truncated_stderr": de,
-           "timed_out": timed_out, "quota_killed": quota_killed, "interrupted": state["interrupted"],
-           "oom_killed": bool(oom0 is not None and oom1 is not None and oom1 > oom0),
-           "duration_s": round(time.monotonic() - t0, 3)})
+    return {"ok": True, "exit": rc, "signal": sig, "stdout": so, "stderr": se, "truncated_stdout": do, "truncated_stderr": de,
+            "timed_out": timed_out, "quota_killed": quota_killed, "interrupted": state["interrupted"],
+            "oom_killed": bool(oom0 is not None and oom1 is not None and oom1 > oom0),
+            "duration_s": round(time.monotonic() - t0, 3)}
+
+def op_exec():
+    reply(run_cmd(req))
+
+# ---- detached jobs: a command that outlives the call that started it (and a restart of the program that polls it) ----------
+JOB_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
+
+def jobdir(jid):
+    if not isinstance(jid, str) or not JOB_RE.match(jid):
+        raise Refused("invalid job id")
+    return resolve(".jobs/" + jid)[1]
+
+def wjson(path, obj):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+def rjson(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+def alive(pid):
+    try:
+        s = open("/proc/" + str(int(pid)) + "/stat").read()
+        if s[s.rindex(")") + 2:].split()[0] == "Z":
+            return False
+        return b"\x00-I\x00-c\x00" in open("/proc/" + str(int(pid)) + "/cmdline", "rb").read()[:64]
+    except (OSError, ValueError, IndexError):
+        return False
+
+def op_spawn():
+    jid = req.get("job"); jd = jobdir(jid)
+    if os.path.exists(os.path.join(jd, "request.json")):
+        reply({"ok": True, "job": jid, "existing": True}); return
+    cwd = resolve(req.get("cwd"))[1]
+    if not os.path.isdir(cwd):
+        raise Refused("working directory does not exist")
+    root = os.path.dirname(jd)
+    os.makedirs(jd)
+    now = time.time()
+    for d in os.listdir(root):   # finished jobs nobody collected are dropped after two days
+        dp = os.path.join(root, d)
+        try:
+            if d != jid and now - os.stat(dp).st_mtime > 172800 and not os.path.islink(dp):
+                shutil.rmtree(dp, ignore_errors=True)
+        except OSError:
+            pass
+    wjson(os.path.join(jd, "request.json"), {"job": jid, "created": now})
+    sys.stdout.flush()
+    pid = os.fork()
+    if pid:
+        for _ in range(150):
+            if os.path.exists(os.path.join(jd, "status.json")) or os.path.exists(os.path.join(jd, "result.json")):
+                break
+            time.sleep(0.02)
+        reply({"ok": True, "job": jid, "existing": False, "pid": pid}); return
+    code = 0
+    try:
+        os.setsid()
+        fd = os.open(os.devnull, os.O_RDWR)
+        for i in (0, 1, 2):
+            os.dup2(fd, i)
+        def prog(d):
+            wjson(os.path.join(jd, "status.json"), {**d, "updated": time.time(), "started": now})
+        prog({"elapsed_s": 0, "pid": os.getpid(), "out_bytes": 0, "err_bytes": 0, "tail": ""})
+        try:
+            res = run_cmd(req, prog)
+        except Refused as e:
+            res = {"ok": False, "error": str(e), "refused": True}
+        except BaseException as e:
+            res = {"ok": False, "error": type(e).__name__ + ": " + str(e)[:200]}
+        wjson(os.path.join(jd, "result.json"), res)
+    except BaseException:
+        code = 1
+    os._exit(code)
+
+def op_jobstat():
+    jid = req.get("job"); jd = jobdir(jid)
+    if not os.path.isdir(jd):
+        reply({"ok": True, "state": "absent"}); return
+    res = rjson(os.path.join(jd, "result.json"))
+    if res is not None:
+        reply({"ok": True, "state": "done", "result": res}); return
+    stt = rjson(os.path.join(jd, "status.json")) or {}
+    if stt.get("pid") and alive(stt["pid"]):
+        reply({"ok": True, "state": "running", **stt}); return
+    if not stt and time.time() - (rjson(os.path.join(jd, "request.json")) or {}).get("created", 0) < 5:
+        reply({"ok": True, "state": "running", "elapsed_s": 0}); return
+    res = rjson(os.path.join(jd, "result.json"))   # it may have been written between the two reads
+    if res is not None:
+        reply({"ok": True, "state": "done", "result": res}); return
+    reply({"ok": True, "state": "lost", **stt})
+
+def op_jobkill():
+    jid = req.get("job"); jd = jobdir(jid)
+    stt = rjson(os.path.join(jd, "status.json")) or {}
+    ok = False
+    if stt.get("pid") and alive(stt["pid"]) and stt["pid"] != os.getpid():
+        try:
+            os.kill(int(stt["pid"]), signal.SIGTERM); ok = True
+        except OSError:
+            pass
+    reply({"ok": True, "signalled": ok})
+
+def op_jobforget():
+    jid = req.get("job"); jd = jobdir(jid)
+    if os.path.isdir(jd) and not os.path.islink(jd):
+        shutil.rmtree(jd, ignore_errors=True)
+    try:
+        os.rmdir(os.path.dirname(jd))   # the folder goes with its last job
+    except OSError:
+        pass
+    reply({"ok": True})
 
 def ppid_of(pid):
     try:
@@ -558,6 +696,83 @@ class WorkRuntime(ABC):
                              cwd=cwd, env=env or {}, quota_bytes=quota_bytes, fsize_bytes=fsize_mb * 1048576)
         return ExecResult(head["exit"], head["stdout"], head["stderr"], head["duration_s"], head["timed_out"], head["quota_killed"],
                           head["oom_killed"], head["interrupted"], head.get("signal", ""), head["truncated_stdout"], head["truncated_stderr"])
+
+    # ---- detached jobs: the command runs under a supervisor inside the container, so it survives the caller -----------------
+    @staticmethod
+    def _result(res: dict) -> ExecResult:
+        if not res.get("ok", True):
+            err = res.get("error", "the command could not be started")
+            if res.get("refused"):
+                raise PathRefused(err)
+            raise RuntimeError_(err)
+        return ExecResult(res["exit"], res["stdout"], res["stderr"], res["duration_s"], res["timed_out"], res["quota_killed"],
+                          res["oom_killed"], res["interrupted"], res.get("signal", ""), res["truncated_stdout"], res["truncated_stderr"])
+
+    def spawn(self, name: str, job: str, cmd: str | None = None, *, argv: list[str] | None = None, timeout_s: int = 120,
+              max_output: int = 65536, cwd: str = "", env: dict | None = None, quota_bytes: int = 0, fsize_mb: int = 512) -> dict:
+        """Start a command detached from this call. IDEMPOTENT per `job` id: a second call with the same id does not start anything
+        (-> {"existing": True}), which is what lets a restarted caller reconnect without running the command twice."""
+        head, _ = self._call(name, "spawn", timeout=30, job=job, cmd=cmd, argv=argv, cmd_timeout=timeout_s, max_output=max_output, cwd=cwd,
+                             env=env or {}, quota_bytes=quota_bytes, fsize_bytes=fsize_mb * 1048576)
+        return head
+
+    def job_status(self, name: str, job: str) -> dict:
+        """{"state": absent | running | done | lost, ...}; running carries elapsed_s, out_bytes, err_bytes, tail."""
+        head, _ = self._call(name, "jobstat", timeout=20, job=job)
+        return head
+
+    def job_kill(self, name: str, job: str) -> bool:
+        head, _ = self._call(name, "jobkill", timeout=20, job=job)
+        return bool(head.get("signalled"))
+
+    def job_forget(self, name: str, job: str) -> None:
+        try:
+            self._call(name, "jobforget", timeout=20, job=job)
+        except RuntimeError_:
+            pass
+
+    def run_job(self, name: str, job: str, cmd: str | None = None, *, argv: list[str] | None = None, timeout_s: int = 120,
+                max_output: int = 65536, cwd: str = "", env: dict | None = None, quota_bytes: int = 0, fsize_mb: int = 512,
+                on_tick=None, poll_max_s: float = 1.0) -> ExecResult:
+        """spawn + poll until the command ends. `on_tick(status) -> "cancel" | None` is called on every poll (heartbeat, cancel).
+        A caller that was restarted calls this again with the same `job`: it finds the running (or finished) command and waits for it."""
+        self.spawn(name, job, cmd, argv=argv, timeout_s=timeout_s, max_output=max_output, cwd=cwd, env=env, quota_bytes=quota_bytes,
+                   fsize_mb=fsize_mb)
+        delay, fails, cancelled_at = 0.1, 0, None
+        hard = time.monotonic() + timeout_s + 120   # the supervisor enforces timeout_s itself; this only guards a vanished supervisor
+        while True:
+            try:
+                st_ = self.job_status(name, job)
+                fails = 0
+            except RuntimeError_:
+                fails += 1
+                if fails >= 6:
+                    raise
+                time.sleep(min(2.0, 0.3 * fails))
+                continue
+            state = st_.get("state")
+            if state == "done":
+                res = self._result(st_["result"])
+                self.job_forget(name, job)
+                return res
+            if state in ("absent", "lost"):
+                self.job_forget(name, job)
+                return ExecResult(-1, "", "", float(st_.get("elapsed_s") or 0), lost=True)
+            if on_tick and cancelled_at is None and on_tick(st_) == "cancel":
+                cancelled_at = time.monotonic()
+                try:
+                    self.job_kill(name, job)
+                except RuntimeError_:
+                    pass
+            if time.monotonic() > hard or (cancelled_at is not None and time.monotonic() - cancelled_at > 20):
+                try:
+                    self.job_kill(name, job)
+                except RuntimeError_:
+                    pass
+                self.job_forget(name, job)
+                return ExecResult(-1, "", "", float(st_.get("elapsed_s") or 0), lost=True)
+            time.sleep(delay)
+            delay = min(poll_max_s, delay * 1.5)
 
     def list(self, name: str, path: str = "") -> list[FsEntry]:
         head, _ = self._call(name, "list", path=path)

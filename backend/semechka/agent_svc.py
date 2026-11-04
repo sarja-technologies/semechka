@@ -85,6 +85,14 @@ class RunExtension:
     def on_interrupted(self, st, s, run, steps) -> None:
         """Tool steps that were mid-flight when the previous worker died; they have just been marked 'interrupted'."""
 
+    def can_resume(self, step) -> bool:
+        """A tool step that was mid-flight when the worker died: True when running the tool again picks up the work it started instead of
+        starting it twice (the tool names its work by run and step). Otherwise the step is marked 'interrupted' and never replayed."""
+        return False
+
+    def on_resumed(self, st, s, run, steps) -> None:
+        """Steps that were picked up again (can_resume was True)."""
+
     def limits(self, st, s, run) -> dict:
         return {}
 
@@ -881,16 +889,22 @@ def _prepare_turn(st, job_id: str) -> Turn:
         steps = _steps(s, run.id)
         # resume bookkeeping: a tool that was mid-flight when a worker died is reported as interrupted, never replayed
         died = [stp for stp in steps if stp.kind == "tool" and stp.status == "running" and stp.meta.get("started")]
-        for stp in died:
+        again = [stp for stp in died if ext and ext.can_resume(stp)]
+        gone = [stp for stp in died if stp not in again]
+        for stp in gone:
             stp.status, stp.finished_at = "interrupted", time.time()
-        if died and ext:
-            ext.on_interrupted(st, s, run, died)
+        for stp in again:
+            stp.meta = {**(stp.meta or {}), "resumed": True}
+        if gone and ext:
+            ext.on_interrupted(st, s, run, gone)
+        if again and ext:
+            ext.on_resumed(st, s, run, again)
         for stp in steps:
             if stp.kind == "tool" and stp.status == "awaiting_approval":
                 job.status = "awaiting_approval"
                 s.commit()  # the pause must stick: leaving the context manager by exception would roll it back
                 raise jobs_svc.JobPaused()
-            if stp.kind == "tool" and (stp.status == "approved" or (stp.status == "running" and not stp.meta.get("started"))):
+            if stp.kind == "tool" and (stp.status == "approved" or (stp.status == "running" and (not stp.meta.get("started") or stp in again))):
                 s.commit()
                 return Turn("tool", step_n=stp.n)
         usage = run.usage or {}

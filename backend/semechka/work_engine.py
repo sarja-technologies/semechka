@@ -36,6 +36,7 @@ from .models_work import WorkEvent, WorkSession
 from .work_tools import Wk, a_int, a_str, guess_mime, norm_path, put, register_artifact, scrub, work_tool
 
 POLL_S = 2.0              # how often a waiting tool asks the engine (tests make it small)
+HEARTBEAT_S = 20.0        # a waiting tool says it is still waiting at least this often
 CACHE_S = 5.0             # engine registry and resources are read at most this often
 MAX_SOURCE_BYTES = 40 * 1024 * 1024
 KINDS = ("chat", "image", "video")
@@ -368,6 +369,7 @@ def wait_for(w: Wk, job_id: str, timeout_s: float, alias: str, extra: dict) -> d
     """Advance the job through the media block until it ends or `timeout_s` passes; one `job` event per real change. -> snapshot."""
     deadline = time.monotonic() + max(0.0, timeout_s)
     last_key, last_t = None, 0.0
+    t_start, last_beat = time.monotonic(), time.monotonic()
     while True:
         refresh_job(w.st, job_id)
         snap = snapshot(w.st, job_id)
@@ -378,6 +380,12 @@ def wait_for(w: Wk, job_id: str, timeout_s: float, alias: str, extra: dict) -> d
         if key != last_key and (snap["status"] not in ("queued", "running") or last_key is None or key[:2] != last_key[:2] or time.monotonic() - last_t >= 1.0):
             job_event(w, snap, alias, **extra)
             last_key, last_t = key, time.monotonic()
+            last_beat = last_t
+        elif snap["status"] in media_svc.ACTIVE and time.monotonic() - last_beat >= HEARTBEAT_S:
+            # nothing changed for a while: say so, so a long queue or a slow step never looks like a hang
+            job_event(w, snap, alias, waited_s=int(time.monotonic() - t_start), **extra)
+            work_svc.touch(w.st, w.sid)
+            last_beat = time.monotonic()
         if snap["status"] not in media_svc.ACTIVE:
             return snap
         if cancel_requested(w):
@@ -503,6 +511,12 @@ def _read_source(w: Wk, name: str, rel: str, what: str, *, kinds: tuple[str, ...
     return data, mime
 
 
+def origin_of(w: Wk) -> str:
+    """How the engine's job list (and Spark Control) recognises a job that a Work Mode session started: the job title is
+    `semechka work <session id> <kind or profile>`. Nothing personal: the session id is opaque."""
+    return f"semechka work {w.sid}"
+
+
 def _launch(w: Wk, kind: str, m: Model, b: Backend, p, params: dict | None, profile: tuple | None, label: str) -> tuple[str, str]:
     """Admission, then submit through the media block. -> (job id, model alias)."""
     with w.st.db.session() as s:
@@ -515,9 +529,9 @@ def _launch(w: Wk, kind: str, m: Model, b: Backend, p, params: dict | None, prof
     who = SimpleNamespace(id=w.user_id)
     if profile is not None:
         clean, uploads = profile
-        jid = bridge(media_svc.submit_profile(w.st, who, m, b, clean, uploads, save, expires), 600)
+        jid = bridge(media_svc.submit_profile(w.st, who, m, b, clean, uploads, save, expires, origin=origin_of(w)), 600)
     else:
-        jid = bridge(media_svc.submit(w.st, who, kind, m, b, params, save, expires), 600)
+        jid = bridge(media_svc.submit(w.st, who, kind, m, b, params, save, expires, origin=origin_of(w)), 600)
     return jid, m.alias
 
 
@@ -553,6 +567,8 @@ def same_request(w: Wk, key: str) -> ToolOut | None:
         if d.get("status") in ("queued", "running"):
             snap = snapshot(w.st, jid)
             if snap and snap["status"] in media_svc.ACTIVE:
+                if w.resumed:  # this very call was running when the server stopped: pick the job up again and wait for it
+                    return _finish_tool(w, jid, _alias(w.st, snap["model_id"]), snap["kind"], d.get("out"), "", key)
                 return ToolOut(f"Not started again: this exact request is already running as job {jid}. Collect it with wait_job {{\"id\": \"{jid}\"}}.")
         if d.get("status") == "completed" and d.get("out") and d.get("artifact_id"):
             info = w.rt.stat(w.container(), d["out"])

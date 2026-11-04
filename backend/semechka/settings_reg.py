@@ -544,7 +544,8 @@ DEFS: list[Def] = [
     Def("work.workspace_max_mb", WK, "Workspace size ceiling (MB)",
         "Size of one session's /work volume. Checked before every write and command; a command that grows it past the limit "
         "is stopped.", "int", 2048, min=64, max=102400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
-    Def("work.tool_timeout_s", WK, "Longest single command (seconds)", "A command still running after this is killed.", "int", 300,
+    Def("work.tool_timeout_s", WK, "Longest single command (seconds)", "A command still running after this is killed. Long commands run detached inside the container, so they survive a server restart and "
+        "show progress on the timeline.", "int", 1800,
         min=5, max=3600, scopes=["deployment"], edit_perm="admin.quotas.edit"),
     Def("work.output_max_chars", WK, "Longest tool output shown to the model (characters)",
         "Longer output is cut and the cut is reported.", "int", 12000, min=1000, max=100000, scopes=["deployment"],
