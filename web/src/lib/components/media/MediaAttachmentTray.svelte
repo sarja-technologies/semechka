@@ -11,8 +11,10 @@
   import { opLabel } from '$lib/media/roles';
   import { openViewer } from '$lib/media/viewer.svelte';
 
-  let { tray, slots = [], verdict, operation = null, onreplace, useLabel = 'Use edited version', onadd }:
-    { tray: Tray; slots?: Slot[]; verdict?: Verdict; operation?: string | null; onreplace: (key: string) => void; useLabel?: string; onadd?: () => void } = $props();
+  let { tray, slots = [], verdict, operation = null, onreplace, useLabel = 'Use edited version', onadd, empty = [], onslot, dropHint = false }:
+    { tray: Tray; slots?: Slot[]; verdict?: Verdict; operation?: string | null; onreplace: (key: string) => void; useLabel?: string; onadd?: () => void;
+      /** places that still want a file: shown as visible "add" cards so nobody has to guess where to put a source video or a reference picture */
+      empty?: Slot[]; onslot?: (s: Slot) => void; dropHint?: boolean } = $props();
 
   let over = $state<string | null>(null), dragKey = $state<string | null>(null), live = $state('');
   const stateOf = (it: TrayItem) => verdict?.state[it.key] ?? 'used';
@@ -112,6 +114,15 @@
       </div>
     </article>
   {/each}
+  {#each empty as sl (sl.input)}
+    <div role="listitem" class="slotwrap">
+      <button type="button" class="slot" class:need={sl.min > 0} onclick={() => onslot?.(sl)} aria-label={`Add ${sl.label.toLowerCase()}${sl.min > 0 ? ' (required)' : ' (optional)'}: choose a file or drop one here`}>
+        <Icon name={sl.kind === 'video' ? 'video' : 'image'} size={22} />
+        <strong>{sl.label}</strong>
+        <span>{sl.min > 0 ? 'Required' : 'Optional'} · click or drop</span>
+      </button>
+    </div>
+  {/each}
   {#if onadd}
     <div role="listitem" class="addwrap"><button type="button" class="add" onclick={onadd} aria-label="Add from your Library" title="Add from your Library"><Icon name="library" size={18} /><span>Library</span></button></div>
   {/if}
@@ -153,7 +164,13 @@
     transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease); }
   .sel select:hover { border-color: var(--border-strong); background: var(--hover); } .sel select:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 1px; }
   .sel :global(svg) { position: absolute; right: 6px; top: 6px; pointer-events: none; color: var(--fg-muted); }
-  .addwrap { flex: none; }
+  .addwrap, .slotwrap { flex: none; }
+  .slot { all: unset; box-sizing: border-box; width: 132px; height: 82px; border-radius: 10px; border: 1.5px dashed var(--border-strong); display: grid; place-content: center; justify-items: center; gap: 2px; text-align: center; cursor: pointer; color: var(--fg-muted);
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+  .slot strong { font-size: 12.5px; font-weight: 600; color: var(--fg); } .slot span { font-size: 11px; }
+  .slot.need { border-color: color-mix(in srgb, var(--m-ring) 70%, var(--border-strong)); }
+  .slot:hover { background: var(--m-ring-soft); border-color: var(--m-ring); color: var(--fg); } .slot:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }
+  @media (max-width: 719px) { .slot { width: 118px; height: 74px; } }
   .add { all: unset; flex: none; box-sizing: border-box; width: 56px; height: 82px; border-radius: 10px; border: 1px dashed var(--border-strong); display: grid; place-content: center; justify-items: center; gap: 3px; cursor: pointer; color: var(--fg-muted);
     font-size: 11px; transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease); }
   .add:hover { background: var(--hover); color: var(--fg); } .add:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }

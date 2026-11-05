@@ -523,3 +523,23 @@ test('25 pictures: viewer zoom and pan, rotate and crop into a new picture, orig
   const orig = (await api(page, '/api/media/assets?origin=upload') as any[]).find((a) => a.id === made.parent);
   expect(sha256(await content(page, orig.id))).toBe(sha(F.b));
 });
+
+test('26 choosing OpenJutsu shows visible, labelled places to add the source video and the reference pictures', async ({ page }) => {
+  await openOpenJutsu(page);
+  const video = page.getByRole('button', { name: /^Add source video \(required\)/ });
+  const refs = page.getByRole('button', { name: /^Add reference picture/ });
+  await expect(video).toBeVisible(); await expect(refs).toBeVisible();
+  await shot(page, '26a-empty-slots');
+  const chooser = page.waitForEvent('filechooser');
+  await video.click();
+  await (await chooser).setFiles([F.clip]);
+  await waitReady(page, 1);
+  await expect(cards(page).first().getByRole('combobox')).toHaveValue('video');
+  await expect(video).toHaveCount(0);            // filled: its place is now the card
+  const c2 = page.waitForEvent('filechooser');
+  await refs.click();
+  await (await c2).setFiles([F.a]);
+  await waitReady(page, 2);
+  await expect(cards(page).nth(1).getByRole('combobox')).toHaveValue('refs');
+  await shot(page, '26b-filled');
+});

@@ -111,6 +111,15 @@
   }
   function replace(key: string) { replacing = key; fileInput?.click(); }
   function choose() { replacing = null; fileInput?.click(); }
+  /** The add card of one slot: the file picker offers only that kind of file. */
+  function chooseFor(sl: Slot) {
+    replacing = null;
+    if (!fileInput) return;
+    const was = fileInput.accept;
+    fileInput.accept = `${sl.kind}/*`;
+    fileInput.click();
+    setTimeout(() => { if (fileInput) fileInput.accept = was; }, 1000);
+  }
 
   // ---- picture and video settings (from the engine's limits for the chosen model) ------------------------------
   const mediaOpts = $state<Record<string, any>>({});
@@ -177,6 +186,8 @@
   const slotKey = $derived(JSON.stringify(slots.map((x) => [x.input, x.kind, x.max])));
   // roles follow the operation: files whose role the operation does not use are kept (and shown as unused), never dropped
   $effect(() => { void slotKey; void tray; untrack(() => { autoAssign(tray.items, slots); tray.save(); }); });
+  /** Places that still want a file, shown as visible add cards (an editing operation's source video and reference pictures). */
+  const emptySlots = $derived(slots.filter((sl) => tray.items.filter((i) => i.role === sl.input && verdict.state[i.key] === 'used').length < sl.max));
   const usedItems = $derived(tray.ready.filter((i) => verdict.state[i.key] === 'used'));
   const attProblem = $derived(tray.busy ? 'Wait for the upload to finish.' : tray.failed ? 'Retry or remove the file that did not upload.' : verdict.problems[0] ?? '');
 
@@ -295,9 +306,9 @@
         {/each}
       </div>
     {/if}
-    {#if tray.items.length}
+    {#if tray.items.length || (op !== 'text' && emptySlots.length)}
       <div class="trayrow">
-        <MediaAttachmentTray {tray} {slots} {verdict} {operation} onreplace={replace} onadd={canMedia ? () => (pickerOpen = true) : undefined}
+        <MediaAttachmentTray {tray} {slots} {verdict} {operation} onreplace={replace} onadd={canMedia ? () => (pickerOpen = true) : undefined} empty={op !== 'text' ? emptySlots : []} onslot={chooseFor}
           useLabel={prof ? 'Use as source' : 'Use edited version'} />
       </div>
     {/if}
