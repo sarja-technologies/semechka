@@ -303,11 +303,13 @@ def test_profile_requests_are_checked_against_the_engines_schema_before_anything
     workspace_file(st, sid, "inputs/ref2.png").write_bytes(FS.make_png())
     L.reset()
     base = {"prompt": "the singer", "video": "inputs/src.mp4", "refs": "inputs/ref.png"}
+    # generate_video is budgeted per run (4, work.tool_budgets): refused requests count, so the eight checks run as two runs of four
     run(st, we, sid,
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "refs": ["inputs/ref.png", "inputs/ref2.png"]}),      # ONE reference picture
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={"prompt": "x", "video": "inputs/src.mp4"}),                     # refs missing
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "resolution": "4k"}),
-        L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "mask_margin": 500}),
+        L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "mask_margin": 500}))
+    run(st, we, sid,
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "extra": 1}),
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "video": "inputs/ref.png"}),                            # a picture is not a video
         L.tool("generate_video", model="openjutsu-minimax-h3", inputs={**base, "video": "../etc/passwd"}),
