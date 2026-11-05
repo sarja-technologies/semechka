@@ -22,7 +22,7 @@
   const ordinal = (it: TrayItem) => { const same = tray.items.filter((x) => x.role === it.role && stateOf(x) !== 'unused'); return same.length > 1 ? same.indexOf(it) + 1 : 0; };
   const caption = (it: TrayItem) => {
     const s = stateOf(it);
-    return s === 'unused' ? `Not used${operation ? ` by ${opLabel(operation).toLowerCase()}` : ''}` : s === 'extra' ? 'Too many for this role' : s === 'unassigned' ? 'Choose a role' : '';
+    return s === 'unused' ? (operation ? `Not used by ${opLabel(operation).toLowerCase()}` : it.kind === 'video' ? 'Chat can’t read video' : 'Not used') : s === 'extra' ? 'Too many for this role' : s === 'unassigned' ? 'Choose a role' : '';
   };
 
   function open(it: TrayItem) {

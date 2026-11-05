@@ -123,5 +123,31 @@ class SarnessMediaMixin:
         except httpx.HTTPError as e:
             raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
 
+    async def media_fetch_to(self, ref: str, dest, max_bytes: int) -> str:
+        """Stream a result file to ``dest`` (a path) without holding it in memory. Returns its content type. Removes ``dest`` on any failure."""
+        import os
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=10)) as c:
+                async with c.stream("GET", f"{self.base_url}/v1/files/{ref}", headers=_h(self.api_key)) as r:
+                    if r.status_code >= 400:
+                        raise AdapterError(f"Sarness could not return the file (HTTP {r.status_code}).")
+                    if int(r.headers.get("content-length") or 0) > max_bytes:
+                        raise AdapterError("The generated file is larger than this deployment allows.", kind="too_large")
+                    n = 0
+                    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as f:
+                        async for chunk in r.aiter_bytes(1 << 20):
+                            n += len(chunk)
+                            if n > max_bytes:
+                                raise AdapterError("The generated file is larger than this deployment allows.", kind="too_large")
+                            f.write(chunk)
+                    return r.headers.get("content-type", "application/octet-stream").split(";")[0]
+        except httpx.HTTPError as e:
+            os.path.exists(dest) and os.unlink(dest)
+            raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
+        except BaseException:
+            os.path.exists(dest) and os.unlink(dest)
+            raise
+
     async def media_discard(self, discard_id: str) -> None:
         await self._call("DELETE", f"/v1/generations/{discard_id}?permanent=true")

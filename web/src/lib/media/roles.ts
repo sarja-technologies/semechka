@@ -96,7 +96,8 @@ export function evaluate(items: Item[], slots: Slot[], operation: string | null)
     }
   }
   const unused = items.filter((i) => state[i.key] === 'unused');
-  if (unused.length) notes.push(`${unused.length === 1 ? `“${unused[0].name}” is` : `${unused.length} files are`} kept here but not used${operation ? ` by ${opLabel(operation).toLowerCase()}` : ''}.`);
+  if (!operation && unused.some((i) => i.kind === 'video')) notes.push('Chat models do not read video. It stays here and is used when you switch to Video.');
+  else if (unused.length) notes.push(`${unused.length === 1 ? `“${unused[0].name}” is` : `${unused.length} files are`} kept here but not used${operation ? ` by ${opLabel(operation).toLowerCase()}` : ''}.`);
   const un = items.filter((i) => state[i.key] === 'unassigned' && !covered.has(i.key));
   if (un.length) {
     const wantVideo = un.some((i) => i.kind === 'video') && !slots.some((s) => s.kind === 'video');

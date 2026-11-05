@@ -373,3 +373,26 @@ def test_library_quota_and_permissions_are_enforced(mp, app, clip, jpeg):
     anon = Api(app)
     assert up(anon, jpeg, "x.jpg").status_code in (401, 403)
     assert anon.get(f"/api/media/assets/{a['id']}/content").status_code in (401, 403)
+
+
+def test_generated_results_are_streamed_into_chunked_storage_not_held_in_memory(mp, st, monkeypatch, clip):
+    """A saved result larger than one storage chunk goes engine -> scratch file -> sealed chunks; ranges read back exactly; no scratch is left."""
+    from semechka import media_store
+    big = (clip * 8 + bytes(range(256)) * 9000)[: 3 * media_store.CHUNK + 123]
+    big = b"\x00\x00\x00\x18ftypmp42" + big[12:]
+    monkeypatch.setattr(fs, "make_mp4", lambda: big)
+    from .test_media import vid
+    mid = next(m for m in mp.get("/api/media/options", params={"kind": "video"}).json()["models"] if m["alias"] == "fake-clip")["id"]
+    r = vid(mp, mid)
+    assert r.status_code == 200, r.text
+    j = finish(mp, r.json()["id"])
+    assert j["status"] == "completed", j
+    a = j["assets"][0]
+    assert a["size"] == len(big)
+    disk = next((st.cfg.data_dir / "assets").rglob(f"{a['id']}.bin"))
+    assert disk.read_bytes()[:4] == b"SMC1"
+    assert mp.get(f"/api/media/assets/{a['id']}/content").content == big
+    lo = media_store.CHUNK - 5
+    part = mp.get(f"/api/media/assets/{a['id']}/content", headers={"range": f"bytes={lo}-{lo + 100}"})
+    assert part.status_code == 206 and part.content == big[lo:lo + 101]
+    assert not list((st.cfg.data_dir / "tmp" / "media").glob("w-*"))

@@ -31,7 +31,8 @@ from .models import Backend, Message, Model, UsageEvent, User
 log = logging.getLogger("semechka.media")
 
 MEDIA_KINDS = ("image", "video")
-MAX_BYTES = {"image": 40 * 1024 * 1024, "video": 200 * 1024 * 1024}
+MAX_BYTES = {"image": 40 * 1024 * 1024, "video": 1024 * 1024 * 1024}  # saved results stream to disk, so the cap is about disk, not memory
+EPHEMERAL_MAX = 200 * 1024 * 1024  # no-save results are held in memory
 EPHEMERAL_TTL = 15 * 60
 EPHEMERAL_CAP_BYTES = 512 * 1024 * 1024
 UNREACHABLE_GIVE_UP_S = 10 * 60
@@ -470,66 +471,78 @@ async def refresh(st, job_id: str) -> None:
 
 
 async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, prompt, params_enc) -> None:
+    """Copy the engine's result files into Semechka. Saved results are streamed engine -> scratch file -> sealed chunked file (never held in
+    memory, so large videos work); no-save results are held in memory for a few minutes, so they keep the smaller cap."""
+    import contextlib
+
+    from . import media_lib
     if not outputs:
         _finish(st, job_id, "failed", "The engine finished without producing a file.")
         return
-    cap = MAX_BYTES[kind]
-    fetched = []
-    try:
-        for o in outputs:
-            data, mime = await ad.media_fetch(o["ref"], cap)
-            if mime not in SAFE_MIME:
-                raise AdapterError("The engine returned a file type Semechka does not serve.", kind="bad_type")
-            fetched.append((o, data, mime))
-    except AdapterError as e:
-        permanent = e.kind in ("too_large", "bad_type")
-        key = f"fetch_fail:{job_id}"
-        cnt = st.__dict__.setdefault("media_counters", {})
-        cnt[key] = cnt.get(key, 0) + 1
-        if permanent or cnt[key] >= MAX_FETCH_FAILURES:
-            cnt.pop(key, None)
-            _finish(st, job_id, "failed", str(e))
-            for o in outputs:
-                await _discard(ad, o)
-        else:
-            with st.db.session(write=True) as s:
-                j = s.get(MediaJob, job_id)
-                j.progress_text = "Retrieving the result"
-        return
-    now = time.time()
-    if save:
-        with st.db.session() as s:
-            u = s.get(User, user_id)
-            days = st.settings.value_for(s, "privacy.chat_retention_days", services.load_principal(s, u)) if u else -1
-        expires = now + days * 86400 if days and days > 0 else None
-        rows = []
-        for o, data, mime in fetched:  # files first (slow), the write lock only for the rows (fast)
-            aid = "ma_" + uuid.uuid4().hex[:24]
-            write_asset(st, user_id, aid, data)
-            rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
-                                   size=len(data), width=o.get("width"), height=o.get("height"),
-                                   duration=o.get("duration"), seed=o.get("seed"),
-                                   prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
-                                   expires_at=expires))
+    cap = MAX_BYTES[kind] if save else min(MAX_BYTES[kind], EPHEMERAL_MAX)
+    with contextlib.ExitStack() as stack:
+        tmp = stack.enter_context(media_lib.scratch(st, not save)) if save else None
+        fetched = []
         try:
-            with st.db.session(write=True) as s:
-                s.add_all(rows)
-        except BaseException:
-            for r in rows:
-                remove_asset_file(st, user_id, r.id)
-            raise
-    else:
-        purge_mem(st)
-        if mem_bytes(st) + sum(len(d) for _, d, _ in fetched) > EPHEMERAL_CAP_BYTES:
-            _finish(st, job_id, "failed", "Temporary storage for no-save results is full. Try again in a few minutes.")
-            for o in outputs:
-                await _discard(ad, o)
+            for i, o in enumerate(outputs):
+                if save:
+                    dest = tmp / f"out{i}"
+                    mime = await ad.media_fetch_to(o["ref"], dest, cap)
+                    payload = dest
+                else:
+                    payload, mime = await ad.media_fetch(o["ref"], cap)
+                if mime not in SAFE_MIME:
+                    raise AdapterError("The engine returned a file type Semechka does not serve.", kind="bad_type")
+                fetched.append((o, payload, mime))
+        except AdapterError as e:
+            permanent = e.kind in ("too_large", "bad_type")
+            key = f"fetch_fail:{job_id}"
+            cnt = st.__dict__.setdefault("media_counters", {})
+            cnt[key] = cnt.get(key, 0) + 1
+            if permanent or cnt[key] >= MAX_FETCH_FAILURES:
+                cnt.pop(key, None)
+                _finish(st, job_id, "failed", str(e))
+                for o in outputs:
+                    await _discard(ad, o)
+            else:
+                with st.db.session(write=True) as s:
+                    j = s.get(MediaJob, job_id)
+                    j.progress_text = "Retrieving the result"
             return
-        for o, data, mime in fetched:
-            _mem(st)["me_" + uuid.uuid4().hex[:24]] = {
-                "user_id": user_id, "job_id": job_id, "data": data, "mime": mime, "expires": now + EPHEMERAL_TTL,
-                "meta": {"kind": kind, "width": o.get("width"), "height": o.get("height"),
-                         "duration": o.get("duration"), "seed": o.get("seed"), "created_at": now}}
+        now = time.time()
+        if save:
+            with st.db.session() as s:
+                u = s.get(User, user_id)
+                days = st.settings.value_for(s, "privacy.chat_retention_days", services.load_principal(s, u)) if u else -1
+            expires = now + days * 86400 if days and days > 0 else None
+            rows = []
+            try:
+                for o, path, mime in fetched:  # files first (slow), the write lock only for the rows (fast)
+                    aid = "ma_" + uuid.uuid4().hex[:24]
+                    size = await media_lib.seal_to_store(st, user_id, aid, path)
+                    rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
+                                           size=size, width=o.get("width"), height=o.get("height"),
+                                           duration=o.get("duration"), seed=o.get("seed"),
+                                           prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
+                                           expires_at=expires))
+                with st.db.session(write=True) as s:
+                    s.add_all(rows)
+            except BaseException:
+                for r in rows:
+                    remove_asset_file(st, user_id, r.id)
+                raise
+        else:
+            purge_mem(st)
+            if mem_bytes(st) + sum(len(d) for _, d, _ in fetched) > EPHEMERAL_CAP_BYTES:
+                _finish(st, job_id, "failed", "Temporary storage for no-save results is full. Try again in a few minutes.")
+                for o in outputs:
+                    await _discard(ad, o)
+                return
+            for o, data, mime in fetched:
+                _mem(st)["me_" + uuid.uuid4().hex[:24]] = {
+                    "user_id": user_id, "job_id": job_id, "data": data, "mime": mime, "expires": now + EPHEMERAL_TTL,
+                    "meta": {"kind": kind, "width": o.get("width"), "height": o.get("height"),
+                             "duration": o.get("duration"), "seed": o.get("seed"), "created_at": now}}
     st.__dict__.setdefault("media_counters", {}).pop(f"fetch_fail:{job_id}", None)
     for o in outputs:  # the engine keeps no copy of the result file
         await _discard(ad, o)
