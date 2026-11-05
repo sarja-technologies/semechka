@@ -20,6 +20,7 @@ import sys
 import time
 import types
 
+from semechka import work_svc  # noqa: F401  (import first: work_svc and work_tools import each other)
 from semechka import sandbox_svc, work_runtime, work_tools
 from semechka.work_runtime import ContainerSpec, DockerRuntime, PathRefused
 
