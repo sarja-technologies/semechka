@@ -10,6 +10,13 @@
   import ContextBar from '$lib/components/ContextBar.svelte';
   import ModelChooser from './ModelChooser.svelte';
   import ProfileForm from './ProfileForm.svelte';
+  import MediaDropzone from '$lib/components/media/MediaDropzone.svelte';
+  import MediaAttachmentTray from '$lib/components/media/MediaAttachmentTray.svelte';
+  import MediaAssetPicker from '$lib/components/media/MediaAssetPicker.svelte';
+  import AttachMenu from '$lib/components/media/AttachMenu.svelte';
+  import { trayFor, type AddContext } from '$lib/media/tray.svelte';
+  import { autoAssign, currentOperation, evaluate, opLabel, plainSlots, profileSlots, type Slot } from '$lib/media/roles';
+  import { isLibraryId, type Asset } from '$lib/media/assets';
 
   let { thread, workspace, assistantId = $bindable(null), collectionIds = $bindable([]), onsend, onstop, onctx, onprotect }:
     { thread: Thread; workspace: 'chat' | 'code'; assistantId: string | null; collectionIds: string[]; onsend: (t: Turn) => void; onstop: () => void;
@@ -31,11 +38,14 @@
   const catOp = $derived<Operation>(op === 'text' ? textOp : op);
   const cat = $derived(catalog(catOp));
   let chosen = $state<Record<string, string>>({});
+  const wanted: Record<string, string> = {};
   $effect(() => { const o = catOp; untrack(() => loadCatalog(o)); });
   // fall back to the administrator's default (or the first allowed model) whenever the current choice is not offered
   $effect(() => {
     const c = cat; if (!c || c.error) return;
     const cur = untrack(() => chosen[catOp]);
+    const want = wanted[catOp];  // the model of a saved draft wins over the default, once
+    if (want && c.models.some((m: any) => m.id === want)) { chosen[catOp] = want; delete wanted[catOp]; return; }
     if (!cur || !c.models.some((m: any) => m.id === cur)) chosen[catOp] = c.default ?? c.models[0]?.id ?? '';
   });
   const modelId = $derived(chosen[catOp] ?? '');
@@ -56,47 +66,51 @@
   function autosize() { tick().then(() => { if (!box) return; box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 240) + 'px'; }); }
 
   // ---- attachments --------------------------------------------------------------------------------------------
-  type Pending = Attachment & { uploading?: boolean; error?: string; local?: string };
-  let atts = $state<Pending[]>([]), attNote = $state('');
+  // The tray (lib/media/tray.svelte.ts) holds what is attached; it outlives this component, so attachments and running uploads survive moving
+  // to another page and back. Everything below only decides which part each file plays for the chosen operation.
   const canAttach = $derived(!!ui.composer.attachments);
-  const maxMb = $derived<number>(ui.composer.attachment_max_mb ?? 10);
-  const ready = $derived(atts.filter((a) => !a.uploading && !a.error));
-  const hasImage = $derived(ready.some((a) => a.kind === 'image'));
-  const uploading = $derived(atts.some((a) => a.uploading));
+  const canMedia = $derived(!!ui.composer.media_library);
+  const maxMb = $derived<number>(ui.composer.media_upload_max_mb ?? 512);
+  const tray = $derived(trayFor(`${workspace}:${thread.id ?? 'new'}`, app.me.user.id));
+  const hasImage = $derived(tray.ready.some((i) => i.kind === 'image'));
+  let attNote = $state(''), pickerOpen = $state(false), replacing = $state<string | null>(null), fileInput: HTMLInputElement | undefined = $state();
+  const cx = $derived<AddContext>({
+    maxMb, ephemeral: thread.ephemeral, media: canMedia, legacy: canAttach ? (f: File) => thread.attach(f) : undefined, limit: 12,
+    // a no-save conversation reads its pictures from memory the older way
+    legacyImages: thread.ephemeral && op === 'text', slots: () => slots
+  });
 
-  export async function addFiles(list: FileList | File[]) {
+  export function addFiles(list: FileList | File[]) {
     attNote = '';
-    if (!canAttach) { attNote = 'Attachments are turned off for you.'; return; }
-    for (const f of [...list]) {
-      if (atts.length >= 10) { attNote = 'At most 10 files per message.'; break; }
-      if (f.size > maxMb * 1048576) { attNote = `${f.name} is larger than ${maxMb} MB.`; continue; }
-      const local = f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined;
-      const row: Pending = { id: `up_${Math.random().toString(36).slice(2)}`, name: f.name, kind: f.type.startsWith('image/') ? 'image' : 'text', mime: f.type, size: f.size, uploading: true, local };
-      atts.push(row);
-      const r = atts[atts.length - 1];
-      try { const a = await thread.attach(f); Object.assign(r, a, { uploading: false }); }
-      catch (e) { r.uploading = false; r.error = errText(e); }
-    }
+    if (!canAttach && !canMedia) { attNote = 'Attachments are turned off for you.'; return; }
+    const refused = tray.addFiles([...list], cx);
+    if (refused.length) attNote = refused[0] + (refused.length > 1 ? ` (+${refused.length - 1} more)` : '');
   }
-  /** A picture generated earlier becomes the source for an edit or an animation. */
-  export function useSource(a: any) {
-    if (atts.some((x) => x.id === a.id)) return;
-    atts = [...atts.filter((x) => !x.id.startsWith('ma_')), { id: a.id, name: 'Generated picture', kind: 'image', mime: a.mime, size: a.size, width: a.width, height: a.height, generated: true }];
-    if (op === 'text' && ops.some((o) => o.id === 'image')) op = 'image';
+  /** A picture or video from the Library, or a picture generated earlier, joins the message. */
+  export function addAsset(a: Asset) {
+    if (op === 'text' && a.kind === 'video' && ops.some((o) => o.id === 'video')) op = 'video';
+    tray.addAsset(a, slots);
     focus();
   }
-  async function removeAtt(i: number) {
-    const a = atts[i];
-    atts.splice(i, 1);
-    if (a.local) URL.revokeObjectURL(a.local);
-    if (!a.uploading && !a.error && !a.id.startsWith('ma_')) { try { await del(`/api/chat/attachments/${a.id}`); } catch { /* removed after a day anyway */ } }
+  /** A picture or video generated (or edited) earlier becomes the source for an edit, an animation or an editing operation. */
+  export function useSource(a: any) {
+    const video = a.kind === 'video' || a.mime?.startsWith('video/');
+    const asset = { origin: 'generated', name: video ? 'Generated video' : 'Generated picture', ...a, kind: video ? 'video' : 'image' } as Asset;
+    if (!video) for (const it of [...tray.items]) if (it.role === 'source' && it.roleAuto) tray.remove(it.key);
+    tray.addAsset(asset, slots);
+    if (video && ops.some((o) => o.id === 'video')) op = 'video';
+    else if (!video && op === 'text' && ops.some((o) => o.id === 'image')) op = 'image';
+    focus();
   }
-  function pick(e: Event) { const inp = e.currentTarget as HTMLInputElement; if (inp.files) addFiles(inp.files); inp.value = ''; }
-  function paste(e: ClipboardEvent) {
-    const files = [...(e.clipboardData?.files ?? [])];
-    if (files.length && canAttach) { e.preventDefault(); addFiles(files); }
+  function pick(e: Event) {
+    const inp = e.currentTarget as HTMLInputElement;
+    if (!inp.files?.length) return;
+    if (replacing) { const k = replacing; replacing = null; const r = tray.replaceWithFile(k, inp.files[0], cx); if (r.length) attNote = r[0]; }
+    else addFiles(inp.files);
+    inp.value = '';
   }
-  const thumb = (a: Pending) => a.local ?? (a.id.startsWith('ma_') ? `/api/media/assets/${a.id}/content` : `/api/chat/attachments/${a.id}/content`);
+  function replace(key: string) { replacing = key; fileInput?.click(); }
+  function choose() { replacing = null; fileInput?.click(); }
 
   // ---- picture and video settings (from the engine's limits for the chosen model) ------------------------------
   const mediaOpts = $state<Record<string, any>>({});
@@ -110,9 +124,18 @@
   const mopt = $derived(op !== 'text' ? mediaOpts[op]?.models?.find((m: any) => m.id === modelId) : null);
   // An editing profile (OpenJutsu ...) replaces the ordinary picture/video settings with a form built from the engine's own schema.
   const prof = $derived(op === 'video' && mopt?.profile ? mopt.profile : null);
-  let pvals = $state<Record<string, any>>({}), pfiles = $state<Record<string, File[]>>({}), pproblem = $state('');
-  const profMaxMb = $derived<number>(mediaOpts.video?.caps?.profile_upload_max_mb ?? 512);
-  $effect(() => { void modelId; pvals = {}; pfiles = {}; pproblem = ''; });
+  let pvals = $state<Record<string, any>>({}), pproblem = $state(''), profOpen = $state(false);
+  $effect(() => { void modelId; pvals = {}; pproblem = ''; });
+  const operation = $derived(prof ? currentOperation(prof, pvals) : null);
+  const opChoices = $derived<string[]>(prof?.inputs_schema?.operation?.values ?? []);
+  /** The words typed in the message box go to the profile's main text input for this operation: its prompt when the operation uses one, else the first short text input. */
+  const textField = $derived.by<string | null>(() => {
+    const sch: Record<string, any> = prof?.inputs_schema ?? {};
+    const uses = (x: any) => !operation || !x.operations || x.operations.includes(operation);
+    if (sch.prompt && uses(sch.prompt)) return 'prompt';
+    return Object.entries(sch).find(([, x]) => x.type === 'string' && uses(x) && (x.max_length ?? 500) <= 1000)?.[0] ?? null;
+  });
+  const textSpec = $derived<any>(textField ? prof?.inputs_schema?.[textField] : null);
   /** Video models list their resolutions; picture models give a side range and a multiple, so offer common shapes. */
   const sizes = $derived.by<{ v: string; label: string }[]>(() => {
     const lim = mopt?.limits ?? {};
@@ -149,21 +172,65 @@
   const needSource = $derived(op !== 'text' && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'txt2img' : x === 't2v' || x === 'ti2v')));
   const cannotUseSource = $derived(op !== 'text' && hasImage && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'edit' || x === 'img2img' : x === 'i2v' || x === 'ti2v')));
 
+  const slots = $derived<Slot[]>(prof ? profileSlots(prof, operation) : plainSlots(op, { needSource: !!needSource, canUseSource: !cannotUseSource, vision: true }));
+  const verdict = $derived(evaluate(tray.items, slots, operation));
+  const slotKey = $derived(JSON.stringify(slots.map((x) => [x.input, x.kind, x.max])));
+  // roles follow the operation: files whose role the operation does not use are kept (and shown as unused), never dropped
+  $effect(() => { void slotKey; void tray; untrack(() => { autoAssign(tray.items, slots); tray.save(); }); });
+  const usedItems = $derived(tray.ready.filter((i) => verdict.state[i.key] === 'used'));
+  const attProblem = $derived(tray.busy ? 'Wait for the upload to finish.' : tray.failed ? 'Retry or remove the file that did not upload.' : verdict.problems[0] ?? '');
+
+  // ---- the draft: what is being written survives moving to another page and a reload (per conversation, in this browser tab) -------------
+  const dkey = $derived(`sem.composer.${app.me.user.id}.${workspace}:${thread.id ?? 'new'}`);
+  let restored = false;
+  function restoreDraft() {
+    try {
+      const d = JSON.parse(sessionStorage.getItem(dkey) ?? 'null');
+      if (d) {
+        if (d.op && ops.some((o) => o.id === d.op)) op = d.op;
+        if (typeof d.text === 'string' && !text) { text = d.text; autosize(); }
+        if (d.model) wanted[d.op === 'image' || d.op === 'video' ? d.op : textOp] = d.model;
+      }
+    } catch { /* no saved draft */ }
+    restored = true;
+  }
+  restoreDraft();
+  let saveT: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const snapshot = JSON.stringify({ op, model: chosen[catOp] ?? null, text });
+    const key = dkey;
+    if (!restored) return;
+    clearTimeout(saveT);
+    saveT = setTimeout(() => { try { if (op === 'text' && !text && !chosen[catOp]) sessionStorage.removeItem(key); else sessionStorage.setItem(key, snapshot); } catch { /* storage unavailable */ } }, 250);
+    return () => clearTimeout(saveT);
+  });
+
   // ---- sending -----------------------------------------------------------------------------------------------
   const busy = $derived(thread.busy);
   const tooLong = $derived(text.length > ui.composer.max_chars);
-  const blocked = $derived(!modelId || uploading || tooLong || (op !== 'text' && (!text.trim() || (prof ? !!pproblem : (needSource && !hasImage || cannotUseSource || (vmax && seconds > vmax + 1e-9))))));
-  const canSend = $derived(!busy && !blocked && (!!text.trim() || (op === 'text' && ready.length > 0)));
+  const promptRequired = $derived(!!textSpec?.required);
+  const textTooLong = $derived(!!textSpec?.max_length && text.length > textSpec.max_length);
+  const blocked = $derived(!modelId || tray.busy || tray.failed || tooLong || textTooLong || (op !== 'text' && (prof ? (!!pproblem || !!verdict.problems.length || (promptRequired && !text.trim()))
+    : (!text.trim() || (needSource && !hasImage) || !!cannotUseSource || (vmax && seconds > vmax + 1e-9) || !!verdict.problems.length))));
+  const canSend = $derived(!busy && !blocked && (!!text.trim() || (op === 'text' && usedItems.length > 0) || (!!prof && usedItems.some((i) => i.kind === 'video'))));
+  /** What the message carries, in the shape the thread sends. */
+  const asAttachment = (i: (typeof tray.items)[number]): Attachment => i.legacy ?? { id: i.asset!.id, name: i.name, kind: i.kind === 'video' ? 'video' : 'image', mime: i.asset!.mime, size: i.asset!.size,
+    width: i.asset!.width, height: i.asset!.height, duration: i.asset!.duration, role: i.role ?? undefined, generated: i.asset!.origin === 'generated' } as Attachment;
   function send() {
     if (!canSend) return;
-    const turn: Turn = { content: text.trim(), attachments: ready.map(({ uploading: _u, error: _e, local: _l, ...a }) => a), operation: op, modelId,
+    // only what the chosen operation uses goes with the message; the rest stays where it is until the operation changes back
+    const sent = usedItems.filter((i) => (op === 'text' ? i.kind !== 'video' : prof ? true : i.role === 'source'));
+    const byRole: Record<string, string[]> = {};
+    if (prof) for (const i of sent) if (i.asset && i.role) (byRole[i.role] ??= []).push(i.asset.id);
+    const turn: Turn = { content: text.trim(), attachments: sent.map(asAttachment), operation: op, modelId,
       modelLabel: model?.label ?? model?.alias ?? 'Assistant', media: op !== 'text' ? mediaParams() : undefined,
-      sourceId: op !== 'text' ? ready.find((a) => a.kind === 'image')?.id ?? null : null,
-      profile: prof ? { inputs: { ...pvals }, files: Object.fromEntries(Object.entries(pfiles).filter(([, l]) => l.length)) } : undefined };
-    if (prof) { pvals = {}; pfiles = {}; }
-    for (const a of atts) if (a.local) URL.revokeObjectURL(a.local);
+      sourceId: op !== 'text' && !prof ? sent.find((i) => i.kind === 'image')?.asset?.id ?? sent.find((i) => i.kind === 'image')?.legacy?.id ?? null : null,
+      label: prof ? `${operation ? opLabel(operation) : 'Edit'} · ${prof.name ?? model?.alias ?? 'editing'}` : undefined,
+      profile: prof ? { inputs: { ...pvals, ...(operation ? { operation } : {}) }, assets: byRole, textField: textField ?? undefined } : undefined };
+    if (prof) pvals = {};
     if (turn.content) mine = [turn.content, ...mine.filter((x) => x !== turn.content)].slice(0, 50);
-    text = ''; atts = []; attNote = ''; autosize();
+    text = ''; tray.clear(); attNote = ''; autosize();
+    try { sessionStorage.removeItem(dkey); } catch { /* storage unavailable */ }
     onsend(turn);
   }
   /** What the current choices would send, for regenerate and edit (same operation and model as shown). */
@@ -202,43 +269,53 @@
   const canEph = $derived(!!ui.composer.ephemeral);
   const fresh = $derived(!thread.id && !thread.messages.length && !busy);
   const placeholder = $derived(!cat ? 'Message' : cat.error ? cat.error : !cat.models.length ? 'No model is available to you for this'
+    : prof ? (textSpec ? (textSpec.label ?? 'Describe what you want').replace(/\s*\([^)]*\)\s*$/, '') : 'Attach a video, then send')
     : op === 'image' ? (hasImage ? 'Describe the change to the picture' : 'Describe the picture') : op === 'video' ? (hasImage ? 'Describe the motion' : 'Describe the video')
     : workspace === 'code' ? 'Ask about code, or paste some' : 'Message');
   const retention = $derived(ui.retention?.show && ui.retention.place === 'composer' ? (thread.ephemeral ? 'This conversation is not saved.' : ui.retention.text) : '');
 </script>
 
+<div class="cwrap">
+<MediaDropzone onfiles={addFiles} disabled={!canAttach && !canMedia} hint={prof ? 'Drop videos and reference pictures' : op === 'text' ? 'Drop pictures to attach them' : 'Drop pictures or videos'}
+  sub={prof ? 'They are added to the tray above your message' : `Up to ${maxMb} MB each`}>
 <div class="composer" data-op={op}>
-  {#if atts.length || attNote}
-    <div class="atts">
-      {#each atts as a, i (a.id)}
-        <div class="att" class:bad={a.error}>
-          {#if a.kind === 'image'}<img src={thumb(a)} alt="" />{:else}<Icon name="log" size={16} />{/if}
-          <span class="an">{a.error ? `${a.name}: ${a.error}` : a.name}</span>
-          {#if a.uploading}<span class="tiny muted" role="status">Uploading…</span>{/if}
-          <button class="btn ghost icon sm" aria-label={`Remove ${a.name}`} onclick={() => removeAtt(i)}><Icon name="x" size={14} /></button>
-        </div>
-      {/each}
-      {#if attNote}<span class="err" role="status">{attNote}</span>{/if}
-    </div>
-  {/if}
-
   {#if op === 'text' && hasImage && model && !(model.capabilities ?? []).includes('vision')}
     <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model.label ?? model.alias} cannot read images. It will receive only the file names. Choose a model that can see pictures.</p>
-  {:else if op !== 'text' && needSource && !hasImage}
+  {:else if op !== 'text' && !prof && needSource && !hasImage}
     <p class="hint warnline" role="status"><Icon name="info" size={14} /> {model?.label} {op === 'image' ? 'edits pictures: attach the picture to change.' : 'animates a picture: attach the starting picture.'}</p>
-  {:else if cannotUseSource}
+  {:else if !prof && cannotUseSource}
     <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model?.label} {op === 'image' ? 'cannot edit pictures' : 'cannot animate a picture'}. Remove the picture or choose another model.</p>
   {/if}
 
   <div class="box" data-focus-ring>
+    {#if prof && opChoices.length}
+      <div class="opsel" role="radiogroup" aria-label={`${prof.inputs_schema.operation.label ?? 'Operation'} (${prof.name ?? 'editing'})`}>
+        {#each opChoices as o (o)}
+          <button type="button" role="radio" aria-checked={operation === o} class="oc" class:on={operation === o} onclick={() => (pvals = { ...pvals, operation: o })} disabled={busy}>{opLabel(o)}</button>
+        {/each}
+      </div>
+    {/if}
+    {#if tray.items.length}
+      <div class="trayrow">
+        <MediaAttachmentTray {tray} {slots} {verdict} {operation} onreplace={replace} onadd={canMedia ? () => (pickerOpen = true) : undefined}
+          useLabel={prof ? 'Use as source' : 'Use edited version'} />
+      </div>
+    {/if}
+    {#if attNote || tray.notes.length || attProblem || verdict.notes.length}
+      <div class="tnotes" role="status" aria-live="polite">
+        {#if attNote}<span class="bad"><Icon name="warn" size={13} /> {attNote}</span>{/if}
+        {#each tray.notes as n}<span class="muted"><Icon name="info" size={13} /> {n}</span>{/each}
+        {#if tray.items.length && attProblem && op !== 'text'}<span class="warn"><Icon name="info" size={13} /> {attProblem}</span>{/if}
+        {#each verdict.notes as n}<span class="muted"><Icon name="info" size={13} /> {n}</span>{/each}
+      </div>
+    {/if}
     <label class="sr-only" for="msg">Message</label>
-    <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={() => { hist = -1; autosize(); }} onpaste={paste} {placeholder}
+    <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={() => { hist = -1; autosize(); }} {placeholder}
       disabled={!!cat && (!!cat.error || !cat.models?.length)} aria-describedby="composer-help" aria-keyshortcuts={historyKeys ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}></textarea>
     <div class="bar">
-      {#if canAttach}
-        <label class="round ghostr" title="Attach files or pictures" aria-label="Attach files or pictures">
-          <Icon name="plus" size={18} /><input type="file" multiple class="sr-only" onchange={pick} accept={op === 'text' ? undefined : 'image/*'} />
-        </label>
+      {#if canAttach || canMedia}
+        <AttachMenu onupload={choose} onlibrary={() => (pickerOpen = true)} withLibrary={canMedia} />
+        <input type="file" multiple class="sr-only" tabindex="-1" aria-hidden="true" bind:this={fileInput} onchange={pick} accept={canMedia ? 'image/*,video/*,.txt,.md,.csv,.json,.pdf' : undefined} />
       {/if}
       {#if showOps}
         <div class="ops" role="radiogroup" aria-label="What to make">
@@ -249,7 +326,9 @@
           {/each}
         </div>
       {/if}
-      {#if op !== 'text' && mopt}
+      {#if prof}
+        <button type="button" class="round ghostr" class:on={profOpen} aria-expanded={profOpen} aria-controls="profile-settings" title="Settings for this operation" aria-label="Settings for this operation" onclick={() => (profOpen = !profOpen)}><Icon name="sliders" size={16} /></button>
+      {:else if op !== 'text' && mopt}
         <button type="button" class="round ghostr" class:on={setOpen} aria-expanded={setOpen} aria-controls="media-settings" title="Picture and video settings" aria-label="Settings" onclick={() => (setOpen = !setOpen)}><Icon name="sliders" size={16} /></button>
       {/if}
       <span class="spacer"></span>
@@ -268,7 +347,9 @@
   </div>
 
   {#if prof}
-    <ProfileForm profile={prof} maxMb={profMaxMb} bind:values={pvals} bind:files={pfiles} bind:problem={pproblem} />
+    <div id="profile-settings" hidden={!profOpen}><ProfileForm profile={prof} {operation} exclude={textField} bind:values={pvals} bind:problem={pproblem} /></div>
+    {#if !profOpen && pproblem && prof.ready}<p class="tiny err" role="status">{pproblem} <button type="button" class="linkish" onclick={() => (profOpen = true)}>Open settings</button></p>{/if}
+    {#if !prof.ready}<p class="tiny err" role="status">This can’t run yet: {prof.reason ?? 'the server has not finished setting it up.'}</p>{/if}
   {/if}
   {#if setOpen && op !== 'text' && mopt && !prof}
     <div class="settings" id="media-settings">
@@ -292,7 +373,7 @@
   <div class="foot" id="composer-help">
     {#if op === 'text'}<ContextBar bind:assistantId bind:collectionIds disabled={busy} onchange={onctx} />{/if}
     {#if model?.external}<span class="chip warn">External service</span>{/if}
-    {#if canEph && fresh && !atts.length}
+    {#if canEph && fresh && !tray.items.length}
       <label class="small row eph"><input type="checkbox" checked={thread.ephemeral} onchange={(e) => thread.reset(e.currentTarget.checked)} /> Don't save this conversation</label>
     {:else if thread.ephemeral}<span class="chip">Not saved</span>{/if}
     <span class="spacer"></span>
@@ -301,10 +382,15 @@
     {#if text.length > ui.composer.max_chars * 0.8}<span class="tiny" class:err={tooLong}>{text.length.toLocaleString()} / {ui.composer.max_chars.toLocaleString()}</span>{/if}
   </div>
 </div>
+</MediaDropzone>
+
+<MediaAssetPicker bind:open={pickerOpen} accept={prof ? 'any' : op === 'text' ? 'image' : 'image'} onpick={(list) => { for (const a of list) addAsset(a); }} />
+</div>
 
 <style>
-  .composer { width: 100%; display: grid; gap: 6px; }
-  .box { background: var(--composer-bg); border: 1px solid var(--border); border-radius: var(--radius-composer); padding: 10px 10px 8px 14px; display: grid; gap: 6px;
+  .cwrap { width: 100%; min-width: 0; }
+  .composer { width: 100%; min-width: 0; display: grid; gap: 6px; }
+  .box { min-width: 0; grid-template-columns: minmax(0, 1fr); background: var(--composer-bg); border: 1px solid var(--border); border-radius: var(--radius-composer); padding: 10px 10px 8px 14px; display: grid; gap: 6px;
     box-shadow: var(--shadow-sm); transition: border-color var(--fast) var(--ease); }
   /* the field has no ring of its own; the whole box carries a 2px ring (border plus spread) while it has focus */
   .box:focus-within { border-color: var(--border-strong); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-strong); }
@@ -314,7 +400,7 @@
   .bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: -6px; }
   .round { all: unset; box-sizing: border-box; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; cursor: pointer; flex: none;
     transition: background var(--fast) var(--ease), color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
-  .round:focus-visible, .round:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .round:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .ghostr { color: var(--fg-muted); } .ghostr:hover, .ghostr.on { background: var(--hover); color: var(--fg); }
   .send { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
   .send:hover:not(:disabled) { opacity: 0.88; }
@@ -325,11 +411,14 @@
   .opb.on { background: var(--composer-bg); color: var(--fg); font-weight: 500; box-shadow: var(--shadow-sm); }
   .opb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .opb:disabled { cursor: default; }
-  .atts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .att { display: inline-flex; align-items: center; gap: 6px; padding: 3px 3px 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-bg); font-size: 13px; max-width: 260px; }
-  .att.bad { border-color: var(--danger); color: var(--danger); }
-  .att img { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; }
-  .an { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .opsel { display: flex; gap: 2px; padding: 2px; margin: 0 0 2px; border-radius: 999px; background: var(--bg-2); width: max-content; max-width: 100%; overflow-x: auto; }
+  .oc { all: unset; box-sizing: border-box; height: 26px; padding: 0 11px; border-radius: 999px; cursor: pointer; font-size: 12.5px; color: var(--fg-muted); white-space: nowrap;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease); }
+  .oc:hover:not(:disabled) { color: var(--fg); background: var(--hover); } .oc.on { background: var(--composer-bg); color: var(--fg); font-weight: 600; box-shadow: var(--shadow-sm); }
+  .oc:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 1px; } .oc:disabled { cursor: default; }
+  .trayrow { min-width: 0; margin: 2px -4px 0 -4px; padding: 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+  .tnotes { display: grid; gap: 2px; font-size: 12px; } .tnotes span { display: flex; gap: 6px; align-items: flex-start; } .tnotes .bad { color: var(--danger); } .tnotes .warn { color: var(--warn); } .tnotes .muted { color: var(--fg-muted); }
+  .tnotes :global(svg) { flex: none; margin-top: 2px; }
   .warnline { display: flex; gap: 6px; align-items: center; margin: 0; }
   .settings { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-bg); }
   .fld { display: grid; gap: 2px; font-size: 12px; color: var(--fg-muted); width: 130px; }
@@ -341,6 +430,8 @@
   .linkish:hover { color: var(--fg); text-decoration: underline; } .linkish:focus-visible { outline: 2px solid var(--accent); }
   @media (max-width: 719px) {
     .ol { display: none; } .opb { padding: 0 7px; }
+    .bar { flex-wrap: nowrap; } .bar .spacer { display: none; } .composer .bar :global(.mc) { flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; } .composer .bar :global(.mc .trigger) { max-width: 100%; min-width: 0; }
+    .opsel { flex-wrap: wrap; border-radius: 16px; }
     .foot :global(.ctx) { width: 100%; }
   }
   @media (pointer: coarse) {

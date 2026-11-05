@@ -190,7 +190,7 @@ def profile_meta(p: dict) -> dict:
         "engine_name": p.get("name"), "architecture": p.get("family"), "description": p.get("notes"),
         "media": {"kind": p.get("category") or "video", "modes": ["video-edit"], "negative_prompt": False, "schedulers": [],
                   "audio": True, "defaults": {}, "limits": {},
-                  "profile": {"id": p["id"], "ready": bool(r.get("ready")), "state": r.get("state"), "reason": r.get("reason"),
+                  "profile": {"id": p["id"], "family": p.get("family"), "ready": bool(r.get("ready")), "state": r.get("state"), "reason": r.get("reason"),
                               "official": p.get("official", True), "inputs_schema": p.get("inputs_schema") or {},
                               "operations": (p.get("capabilities") or {}).get("operations") or [],
                               "estimate_mb": (p.get("memory") or {}).get("estimate_mb")}},

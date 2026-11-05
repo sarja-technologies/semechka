@@ -4,7 +4,7 @@ import { get, post, postForm, patch, stream, upload, qs, ApiError } from '$lib/a
 import { upsert, touch } from './store.svelte';
 
 export type Attachment = { id: string; name: string; kind: 'image' | 'text' | string; mime: string; size: number;
-  width?: number | null; height?: number | null; saved?: boolean; generated?: boolean; missing?: boolean };
+  width?: number | null; height?: number | null; saved?: boolean; generated?: boolean; missing?: boolean; duration?: number | null; role?: string };
 export type Msg = {
   id: string; parent_id: string | null; role: 'user' | 'assistant' | string; kind: 'text' | 'image' | 'video' | string;
   content: string; status: string; created_at: number; model: string | null; model_id: string | null;
@@ -26,8 +26,10 @@ export type Live = {
 };
 export type Turn = { content: string; attachments: Attachment[]; operation: 'text' | 'image' | 'video'; modelId: string;
   modelLabel: string; media?: Record<string, unknown>; sourceId?: string | null;
-  /** An editing profile (e.g. OpenJutsu): settings and the source files, sent as one multipart request. */
-  profile?: { inputs: Record<string, unknown>; files: Record<string, File[]> } };
+  /** What the person sees in the conversation when the prompt is empty (an editing profile has no free prompt in most operations). */
+  label?: string;
+  /** An editing profile (e.g. OpenJutsu): its settings, and the library files for each input in order, sent as one multipart request. */
+  profile?: { inputs: Record<string, unknown>; assets?: Record<string, string[]>; files?: Record<string, File[]>; textField?: string } };
 
 const SLICE = 40;
 export const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Something unexpected happened. Try again.');
@@ -244,12 +246,13 @@ export class Thread {
         // saved to the person's gallery (Library) and shown here while it runs.
         const fd = new FormData();
         fd.append('model_id', turn.modelId); fd.append('save', this.ephemeral ? 'false' : 'true');
-        fd.append('inputs', JSON.stringify({ ...turn.profile.inputs, prompt: turn.content }));
-        for (const [name, list] of Object.entries(turn.profile.files)) for (const f of list) fd.append(`file:${name}`, f, f.name);
+        fd.append('inputs', JSON.stringify({ ...turn.profile.inputs, ...(turn.content ? { [turn.profile.textField ?? 'prompt']: turn.content } : {}) }));
+        for (const [name, list] of Object.entries(turn.profile.files ?? {})) for (const f of list) fd.append(`file:${name}`, f, f.name);
+        for (const [name, ids] of Object.entries(turn.profile.assets ?? {})) for (const id of ids) fd.append(`asset:${name}`, id);
         const job = await postForm('/api/media/profile-jobs', fd);
         if (mine !== this.epoch) return;
         const out = [...this.before(mode === 'send' ? null : anchor)];
-        out.push(localMsg('user', turn.content, { kind }));
+        out.push(localMsg('user', turn.content || turn.label || '', { kind, attachments: turn.attachments }));
         out.push(localMsg('assistant', turn.content, { kind, status: 'pending', model: turn.modelLabel, model_id: turn.modelId, media: job }));
         this.messages = out;
       } else if (this.ephemeral) {

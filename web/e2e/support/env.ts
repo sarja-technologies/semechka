@@ -11,7 +11,7 @@ export const TMP = path.join(WEB, '.e2e-tmp');
 
 // A worktree has no virtualenv of its own; fall back to the one in the main checkout.
 function findPython(): string {
-  const cands = [process.env.SEMECHKA_PY, path.join(ROOT, '.venv/bin/python'), path.resolve(ROOT, '../../../.venv/bin/python'), path.resolve(ROOT, '../../.venv/bin/python')];
+  const cands = [process.env.SEMECHKA_PY, path.join(ROOT, '.venv/bin/python'), path.resolve(ROOT, '../../../.venv/bin/python'), path.resolve(ROOT, '../../.venv/bin/python'), path.resolve(ROOT, '../semechka/.venv/bin/python')];
   const hit = cands.find((c) => c && existsSync(c));
   if (!hit) throw new Error('No Python virtualenv found. Set SEMECHKA_PY to a python with the backend dependencies installed.');
   return hit;

@@ -70,7 +70,7 @@ class SarnessMediaMixin:
         """Hand a source image to the engine (image editing, image-to-video). Returns the engine's file id.
         The engine keeps uploaded files in its own storage; it has no endpoint to delete them."""
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=10)) as c:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=10)) as c:
                 r = await c.post(self.base_url + "/v1/uploads", headers=_h(self.api_key),
                                  files={"file": (name, data, mime)})
         except httpx.HTTPError as e:

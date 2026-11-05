@@ -470,6 +470,10 @@ DEFS: list[Def] = [
     Def("media.profile_upload_max_mb", Q, "Largest source file for video editing (MB)",
         "Source videos and reference pictures sent to an editing profile (for example OpenJutsu) may not exceed this.", "int", 512,
         min=1, max=2048, scopes=["deployment", "role", "team"], merge="min", edit_perm="admin.quotas.edit"),
+    Def("media.upload_max_mb", Q, "Largest picture or video a person can upload (MB)",
+        "Files added to the message box or the Library. Larger files are refused before they are stored. No-save uploads are held in memory "
+        "and are limited to 256 MB whatever this says.", "int", 512, min=1, max=4096, scopes=["deployment", "role", "team"], merge="min",
+        edit_perm="admin.quotas.edit"),
     # ---- cloud workspaces ----
     Def("cloud.rollout", SYS, "Who may use the cloud features",
         "Everyone: anyone the cloud switches and their organisation roles allow. Administrators only: workspaces, files, "

@@ -1,0 +1,429 @@
+{
+ "id": "openjutsu-minimax-h3",
+ "name": "OpenJutsu - MiniMax H3",
+ "family": "openjutsu",
+ "category": "video",
+ "kinds": [
+  "video"
+ ],
+ "backend": "comfyui",
+ "official": true,
+ "base_model": "MiniMax H3",
+ "estimate_mb": 86016,
+ "operations": [
+  "swap",
+  "advanced_swap",
+  "object_edit",
+  "check_mask"
+ ],
+ "outputs": [
+  "video"
+ ],
+ "inputs_schema": {
+  "operation": {
+   "type": "enum",
+   "values": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ],
+   "default": "swap",
+   "label": "Operation",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "video": {
+   "type": "file",
+   "kind": "video",
+   "required": true,
+   "label": "Source video",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "refs": {
+   "type": "file",
+   "kind": "image",
+   "multi": true,
+   "max_files": 4,
+   "label": "Reference pictures",
+   "description": "swap: exactly one (the new person). advanced_swap: one per person to replace (1-4), in the order of 'roles'. object_edit: at most one (what it should look like). check_mask: none.",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "prompt": {
+   "type": "string",
+   "max_length": 500,
+   "label": "Who is replaced (swap)",
+   "description": "swap: who in the video the picture's person replaces, e.g. 'the singer'. Not a free generation prompt.",
+   "operations": [
+    "swap"
+   ]
+  },
+  "roles": {
+   "type": "string",
+   "max_length": 800,
+   "label": "Who each picture replaces (advanced_swap)",
+   "description": "One line per reference picture, e.g. 'the drummer - man in a cap'. Only the part before ' - ' reaches H3; the rest helps match people. Empty lines are named by screen time.",
+   "operations": [
+    "advanced_swap"
+   ]
+  },
+  "target": {
+   "type": "string",
+   "max_length": 120,
+   "label": "What to replace (swap, check_mask)",
+   "description": "What SAM tracks; the biggest match is replaced ('person' by default, or 'cat').",
+   "operations": [
+    "swap",
+    "check_mask"
+   ]
+  },
+  "object_mode": {
+   "type": "enum",
+   "values": [
+    "change",
+    "remove",
+    "background",
+    "add"
+   ],
+   "default": "change",
+   "label": "Edit kind (object_edit)",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "object_target": {
+   "type": "string",
+   "max_length": 200,
+   "label": "What to change (object_edit)",
+   "description": "Words SAM tracks, e.g. 'hair' or 'hair, top' (comma separated). For 'background' it is what stays (e.g. 'person'). Not used by 'add'.",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "change_to": {
+   "type": "string",
+   "max_length": 500,
+   "label": "What it becomes (object_edit)",
+   "description": "change/background: the new look or place in words (or use a picture). remove: what shows instead, only when not obvious. add: the object, e.g. 'a chocolate cake on a plate'.",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "keep_outline": {
+   "type": "bool",
+   "default": false,
+   "label": "Keep the old outline (object_edit change)",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "biggest_only": {
+   "type": "bool",
+   "default": false,
+   "label": "Only the biggest match of each thing (object_edit)",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "object_margin": {
+   "type": "enum",
+   "values": [
+    "tight",
+    "normal",
+    "loose"
+   ],
+   "default": "normal",
+   "label": "Edit-mask margin (object_edit)",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "placement": {
+   "type": "string",
+   "max_length": 20000,
+   "label": "Where to add the object (object_edit add)",
+   "description": "JSON list of keyframes {\"frame\":0,\"x\":0.4,\"y\":0.5,\"width\":0.2,\"height\":0.2}, fractions of the frame. One keyframe stays fixed on screen.",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "action": {
+   "type": "string",
+   "max_length": 300,
+   "label": "What the added object does (object_edit add)",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "paint": {
+   "type": "string",
+   "max_length": 524288,
+   "label": "Painted extra edit area (object_edit change)",
+   "description": "OpenJutsu paint keyframes JSON (advanced).",
+   "operations": [
+    "object_edit"
+   ]
+  },
+  "hat_fix": {
+   "type": "bool",
+   "default": false,
+   "label": "Also replace hats (about 45 s more per clip)",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "check_mask"
+   ]
+  },
+  "no_lip_sync": {
+   "type": "bool",
+   "default": false,
+   "label": "No lip-sync (for songs the people do not sing along to)",
+   "operations": [
+    "swap",
+    "advanced_swap"
+   ]
+  },
+  "per_person_pass": {
+   "type": "bool",
+   "default": false,
+   "label": "One pass per person (advanced_swap, exactly 2 pictures, about 2x time)",
+   "operations": [
+    "advanced_swap"
+   ]
+  },
+  "motion_reference": {
+   "type": "enum",
+   "values": [
+    512,
+    768
+   ],
+   "default": 512,
+   "label": "Motion reference size in px (768 is about a third slower)",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "clip_seconds": {
+   "type": "float",
+   "min": 2.5,
+   "max": 15,
+   "label": "Clip length in seconds (default 6)",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "seed": {
+   "type": "int",
+   "min": 0,
+   "max": 4294967295,
+   "label": "Seed",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "resolution": {
+   "type": "enum",
+   "values": [
+    "480p",
+    "576p",
+    "736p",
+    "768p"
+   ],
+   "default": "736p",
+   "label": "Short edge of the output",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "duration": {
+   "type": "float",
+   "min": 2.0,
+   "max": 15.0,
+   "label": "Seconds of the video to use (default: all)",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "start": {
+   "type": "float",
+   "min": 0,
+   "max": 3600,
+   "label": "Start offset in seconds",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "mask_margin": {
+   "type": "int",
+   "min": 0,
+   "max": 100,
+   "label": "Edit-mask grow in px at SAM's 1008 px canvas (swap/advanced: 20 tight, 40 normal, 60 loose; object_edit: 10/20/40)",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "accept_experimental": {
+   "type": "bool",
+   "default": false,
+   "label": "Run an operation that has no real-inference validation record yet",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  }
+ },
+ "runner": {
+  "type": "comfyui",
+  "builder": "openjutsu",
+  "workflows": "openjutsu"
+ },
+ "notes": "Operations: swap (simple, validated), advanced_swap, object_edit, check_mask; see operation_status for each one's evidence. Port of the 'simple swap' of D3voz/openjutsu (MIT, github.com/D3voz/openjutsu @ 7fe118b, workflows/simple.api.json pruned and patched as in lib/simple.ts, lib/model.ts and lib/comfy.ts with upstream's default settings: hat fix off, No lip-sync off, margin 40, motion reference 512, 6 steps, 6 s clips, euler). Replaces the main person of a video with the person in ONE reference picture; SAM 3.1 masks, MiniMax H3 reference-to-video, the source soundtrack is kept; longer videos are generated in overlapping clips by the Context-Loop nodes. Differences from upstream: H3 text encoder is the official INT8 file (upstream names an INT4 file); the graph is static (no per-request pruning). The 'prompt' input is NOT a free generation prompt: OpenJutsu builds the H3 prompt itself; the text fills the Swap Plan 'roles' field (who is replaced, for example 'the singer'; text after ' - ' only helps the shot describer). Output length is rounded down to H3's frame grid (17k+5 frames per clip), so up to about 0.67 s can be dropped from the end (measured: 72 -> 56 frames, 242 -> 226, 107 -> 107, 73 -> 73). Default masking (hat fix off) can leave parts of the original clothing, such as sleeves, in some frames; raise mask_margin to loosen the edit mask. ComfyUI keeps about 70 GiB resident after a job until the idle timer or POST /v1/models/<id>/unload; a second job queued meanwhile waits for the ledger's 120 s minimum residency. Same video, picture, prompt and seed resume from the clips already saved in ComfyUI/output (upstream behaviour): change the seed for a fresh run. Licence: MiniMax H3 Community License Agreement (copy in ~/sarness-comfyui/LICENSES/MiniMax-H3-Community-License.txt, sha256 59b99642...0f44). Verbatim from that file: \u201c\u201cApplicable Territory\u201d means worldwide, excluding the Excluded Territories.\u201d \u201c\u201cExcluded Territories\u201d means the European Union, the United Kingdom, the Republic of Korea and the United States of America.\u201d \u201cYou may not use, reproduce, modify, distribute, or display the MiniMax H3 Works or any of their Outputs or results outside the Applicable Territory. Any such use outside the Applicable Territory is not authorized by this Agreement.\u201d The licence also carries an Acceptable Use Policy and other conditions; read the full text before any use or distribution. Other licences: ComfyUI, Context-Loop, KJNodes, VideoHelperSuite are GPL-3.0; SAM 3.1 under the Meta SAM License; see ~/sarness-comfyui/LICENSES.md.",
+ "validated": {
+  "at": 1793706289,
+  "job": "j_9c379636f1e34b63a64e",
+  "engine": "engine-8742",
+  "result": {
+   "status": "completed",
+   "resolution_preset": "736p",
+   "profile_inputs": "prompt='the main person', default resolution, random seed (1635924513)",
+   "input": {
+    "file": "src_107f_1024x576.mp4",
+    "width": 1024,
+    "height": 576,
+    "fps": 24,
+    "frames": 107,
+    "duration_s": 4.458333,
+    "audio": "aac 48000 Hz stereo, mean -17.4 dB",
+    "origin": "AI-generated clip already on the box (engine output), not camera footage"
+   },
+   "output": {
+    "codec": "h264",
+    "width": 1312,
+    "height": 736,
+    "fps": 24.0,
+    "frames": 107,
+    "duration_s": 4.458333,
+    "audio": "aac 48000 Hz stereo, mean -17.4 dB (source soundtrack kept)",
+    "decodes_without_errors": true
+   },
+   "duration_ratio_vs_input": 1.0,
+   "elapsed_s": 370.4,
+   "ledger_actual_mb": 71066,
+   "other_jobs": [
+    {
+     "job": "j_07bf7f3ed8f34e8e88e8",
+     "note": "cold start 480p, 72-frame input -> 56-frame output (H3 17k+5 frame grid, 2.33 s), 149 s"
+    },
+    {
+     "job": "j_51540919a2654bfdb011",
+     "note": "480p, 73-frame input -> 73-frame output, 144 s"
+    },
+    {
+     "job": "j_bfee5b6aa7f24b1cbf2c",
+     "note": "480p, 242-frame (10.08 s) forward+reverse input, multi-clip chain -> 226 frames (9.42 s, -6.6%), 619 s"
+    }
+   ],
+   "limits": "AI-generated single-person clips only; no camera footage, no multi-person scenes, no hat/face-fix paths",
+   "ledger_actual_mb_after_10s_multiclip_job": 76700
+  }
+ },
+ "operation_status": {
+  "swap": {
+   "status": "ready",
+   "reason": null,
+   "validated": {
+    "at": 1793706289,
+    "job": "j_9c379636f1e34b63a64e",
+    "engine": "engine-8742",
+    "result": {
+     "status": "completed",
+     "resolution_preset": "736p",
+     "profile_inputs": "prompt='the main person', default resolution, random seed (1635924513)",
+     "input": {
+      "file": "src_107f_1024x576.mp4",
+      "width": 1024,
+      "height": 576,
+      "fps": 24,
+      "frames": 107,
+      "duration_s": 4.458333,
+      "audio": "aac 48000 Hz stereo, mean -17.4 dB",
+      "origin": "AI-generated clip already on the box (engine output), not camera footage"
+     },
+     "output": {
+      "codec": "h264",
+      "width": 1312,
+      "height": 736,
+      "fps": 24.0,
+      "frames": 107,
+      "duration_s": 4.458333,
+      "audio": "aac 48000 Hz stereo, mean -17.4 dB (source soundtrack kept)",
+      "decodes_without_errors": true
+     },
+     "duration_ratio_vs_input": 1.0,
+     "elapsed_s": 370.4,
+     "ledger_actual_mb": 71066,
+     "other_jobs": [
+      {
+       "job": "j_07bf7f3ed8f34e8e88e8",
+       "note": "cold start 480p, 72-frame input -> 56-frame output (H3 17k+5 frame grid, 2.33 s), 149 s"
+      },
+      {
+       "job": "j_51540919a2654bfdb011",
+       "note": "480p, 73-frame input -> 73-frame output, 144 s"
+      },
+      {
+       "job": "j_bfee5b6aa7f24b1cbf2c",
+       "note": "480p, 242-frame (10.08 s) forward+reverse input, multi-clip chain -> 226 frames (9.42 s, -6.6%), 619 s"
+      }
+     ],
+     "limits": "AI-generated single-person clips only; no camera footage, no multi-person scenes, no hat/face-fix paths",
+     "ledger_actual_mb_after_10s_multiclip_job": 76700
+    }
+   }
+  },
+  "advanced_swap": {
+   "status": "experimental",
+   "reason": "no real-inference validation record yet"
+  },
+  "object_edit": {
+   "status": "experimental",
+   "reason": "no real-inference validation record yet"
+  },
+  "check_mask": {
+   "status": "experimental",
+   "reason": "no real-inference validation record yet"
+  }
+ }
+}

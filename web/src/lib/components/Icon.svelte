@@ -20,7 +20,13 @@
     pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6', folder: 'M3 6h6l2 2h10v11H3z', sidebar: 'M3 4h18v16H3zM9 4v16',
     more: 'M5 12h.01M12 12h.01M19 12h.01', library: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', sliders: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
     upload: 'M12 16V4M7 9l5-5 5 5M5 20h14', workspaces: 'M3 7h7l2 2h9v10H3zM3 11h18', context: 'M5 5h14v4H5zM5 11h14v4H5zM5 17h9v3H5z', approve: 'M5 12l5 5 9-10M3 21h18', filter: 'M3 5h18l-7 8v6l-4 2v-8z', external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
-    star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z', arrowup: 'M12 19V5M5.5 11.5L12 5l6.5 6.5', pause: 'M8 5v14M16 5v14', play: 'M7 4l13 8-13 8z', work: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8', file: 'M6 3h9l4 4v14H6zM14 3v5h5', terminal: 'M3 5h18v14H3zM7 10l3 2-3 2M12 15h5', robot: 'M5 8h14v10H5zM12 4v4M9 13h.01M15 13h.01M3 12v3M21 12v3', network: 'M12 3.5a2 2 0 100 4 2 2 0 000-4zM5 16.5a2 2 0 100 4 2 2 0 000-4zM19 16.5a2 2 0 100 4 2 2 0 000-4zM12 7.5v4.5M12 12l-6 4.5M12 12l6 4.5'
+    star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z', arrowup: 'M12 19V5M5.5 11.5L12 5l6.5 6.5', pause: 'M8 5v14M16 5v14', play: 'M7 4l13 8-13 8z', work: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8', file: 'M6 3h9l4 4v14H6zM14 3v5h5', terminal: 'M3 5h18v14H3zM7 10l3 2-3 2M12 15h5', robot: 'M5 8h14v10H5zM12 4v4M9 13h.01M15 13h.01M3 12v3M21 12v3', network: 'M12 3.5a2 2 0 100 4 2 2 0 000-4zM5 16.5a2 2 0 100 4 2 2 0 000-4zM19 16.5a2 2 0 100 4 2 2 0 000-4zM12 7.5v4.5M12 12l-6 4.5M12 12l6 4.5',
+    crop: 'M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14', rotate: 'M20 11a8 8 0 10-2.3 5.7M20 4v7h-7', scissors: 'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM8.1 7.9L20 20M8.1 16.1L20 4',
+    volume: 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12', volumeoff: 'M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6',
+    fullscreen: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', exitfs: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
+    zoomin: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6M11 8v6', zoomout: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6',
+    replace: 'M4 8h13l-3-3M20 16H7l3 3', stepback: 'M6 5v14M18 6l-9 6 9 6z', stepfwd: 'M18 5v14M6 6l9 6-9 6z', expand: 'M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7',
+    film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4', flip: 'M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3'
   };
 </script>
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}><path d={P[name] ?? P.info} /></svg>

@@ -70,6 +70,10 @@ class Vault:
             raise ValueError("unrecognised ciphertext format")
         return AESGCM(self._key(purpose)).decrypt(blob[4:16], blob[16:], f"{purpose}:{bind}".encode())
 
+    def key_for(self, purpose: str) -> bytes:
+        """The 32-byte key for ``purpose`` (used by the chunked media store, which seals large files piece by piece)."""
+        return self._key(purpose)
+
     def mac(self, value: str, purpose: str) -> str:
         return hmac.new(self._key(purpose), value.encode(), hashlib.sha256).hexdigest()
 

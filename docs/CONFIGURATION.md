@@ -165,6 +165,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `media.default_image_size` | int | `0` | deployment, role, team | specific | `admin.settings.edit` |  |
 | `media.video_max_seconds` | int | `8` | deployment, role, team | min | `admin.quotas.edit` |  |
 | `media.profile_upload_max_mb` | int | `512` | deployment, role, team | min | `admin.quotas.edit` |  |
+| `media.upload_max_mb` | int | `512` | deployment, role, team | min | `admin.quotas.edit` |  |
 
 ## System
 
@@ -220,7 +221,7 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `work.cpus` | float | `2` | deployment | specific | `admin.quotas.edit` |  |
 | `work.pids` | int | `256` | deployment | specific | `admin.quotas.edit` |  |
 | `work.workspace_max_mb` | int | `2048` | deployment | specific | `admin.quotas.edit` |  |
-| `work.tool_timeout_s` | int | `300` | deployment | specific | `admin.quotas.edit` |  |
+| `work.tool_timeout_s` | int | `1800` | deployment | specific | `admin.quotas.edit` |  |
 | `work.output_max_chars` | int | `12000` | deployment | specific | `admin.quotas.edit` |  |
 | `work.idle_stop_minutes` | int | `30` | deployment | specific | `admin.quotas.edit` |  |
 | `work.max_steps` | int | `40` | deployment | specific | `admin.quotas.edit` |  |
@@ -234,6 +235,12 @@ Merge rules when a value is set at several scopes: **specific** = the most speci
 | `work.delegate_timeout_s` | int | `300` | deployment | specific | `admin.quotas.edit` |  |
 | `work.delegate_max_tokens` | int | `1024` | deployment | specific | `admin.quotas.edit` |  |
 | `work.engine_wait_s` | int | `1800` | deployment | specific | `admin.quotas.edit` |  |
+| `work.max_tool_calls` | int | `150` | deployment | specific | `admin.quotas.edit` |  |
+| `work.tool_budgets` | json | `{'generate_image': 12, 'generate_video': 4, 'delegate': 8,  | deployment | specific | `admin.quotas.edit` |  |
+| `work.default_model` | string | `qwen3-4b-instruct-2507` | deployment | specific | `admin.quotas.edit` |  |
+| `work.helper_only_models` | json | `['qwen3.5-0.8b']` | deployment | specific | `admin.quotas.edit` |  |
+| `work.helper_max_tokens` | int | `384` | deployment | specific | `admin.quotas.edit` |  |
+| `work.helper_timeout_s` | int | `90` | deployment | specific | `admin.quotas.edit` |  |
 
 ## System
 

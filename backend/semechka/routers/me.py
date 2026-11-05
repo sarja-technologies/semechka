@@ -108,6 +108,8 @@ def ui_config(ctx_s, st, p, *, preview=False, prefs: dict | None = None) -> dict
         "density": g("brand.density"),
         "composer": {"attachments": bool(g("chat.attachments") and p.can("chat.attach") and flags["file_upload"]),
                      "attachment_max_mb": g("privacy.attachment_max_mb"),
+                     "media_library": bool((g("chat.attachments") and p.can("chat.attach") and flags["file_upload"]) or any((ops.get(k) or {}).get("enabled") for k in ("image", "video"))),
+                     "media_upload_max_mb": g("media.upload_max_mb"),
                      "branching": g("chat.branching"), "export": g("chat.export") and p.can("chat.export"),
                      "max_chars": g("chat.max_input_chars"),
                      "ephemeral": bool(g("privacy.ephemeral_allowed") and p.can("chat.ephemeral")),

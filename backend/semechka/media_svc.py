@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from . import adapters, services
+from . import adapters, media_store, services
 from .adapters import AdapterError
 from .backends_svc import adapter_for
 from .media_models import MediaAsset, MediaJob
@@ -185,8 +185,19 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
         raise ParamError(f"This is not ready on the server yet: {prof.get('reason') or 'unknown reason'}")
     schema = prof.get("inputs_schema") or {}
     out: dict[str, Any] = {}
+    # Some profiles (OpenJutsu) have several operations and each input says which ones use it. An input that the chosen operation does not
+    # use is neither required nor sent; a file given for one is refused with a plain reason (the person decides what to remove).
+    op = inputs.get("operation", (schema.get("operation") or {}).get("default")) if "operation" in schema else None
+
+    def used(spec: dict) -> bool:
+        return not op or not spec.get("operations") or op in spec["operations"]
+
     for name, spec in schema.items():
         t = spec.get("type", "string")
+        if not used(spec) and name != "operation":
+            if t == "file" and files.get(name):
+                raise ParamError(f"{spec.get('label') or name} are not used by the '{op}' operation. Remove them or choose another operation.")
+            continue
         if t == "file":
             got = files.get(name) or []
             if spec.get("required") and not got:
@@ -220,6 +231,9 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
             if ("min" in spec and v < spec["min"]) or ("max" in spec and v > spec["max"]):
                 raise ParamError(f"'{name}' must be between {spec.get('min')} and {spec.get('max')}.")
             v = int(v) if t == "int" else float(v)
+        elif t == "bool":
+            if not isinstance(v, bool):
+                raise ParamError(f"'{name}' must be on or off.")
         elif t == "enum" and v not in spec.get("values", []):
             raise ParamError(f"'{name}' must be one of: {', '.join(map(str, spec.get('values', [])))}.")
         out[name] = v
@@ -230,9 +244,10 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
 
 
 async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, uploads: dict[str, list[tuple[Any, str, str]]], save: bool,
-                         expires_at: float | None, *, job_id: str | None = None, origin: str | None = None) -> str:
+                         expires_at: float | None, *, job_id: str | None = None, origin: str | None = None,
+                         sources: dict[str, list[str]] | None = None) -> str:
     """Hand source files and settings to the engine, which runs the profile as an ordinary durable job. Raises AdapterError and leaves
-    nothing behind. ``uploads`` maps an input name to [(file object or bytes, mime, filename)]."""
+    nothing behind. ``uploads`` maps an input name to [(file object or bytes, mime, filename)]; ``sources`` records which library assets they came from."""
     job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
     ad = adapter_for(b, st)
     spec = (profile_info(m) or {}).get("inputs_schema") or {}
@@ -241,11 +256,12 @@ async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, upl
         ids = [await ad.media_upload(fo, mime, fname) for fo, mime, fname in items]
         sent[name] = ids if (spec.get(name) or {}).get("multi") else ids[0]
     remote = await ad.media_submit_profile(m.real_id.split(":", 1)[1], sent, job_id, **({"title": origin + " " + m.real_id.split(":", 1)[1]} if origin else {}))
-    prompt = str(inputs.get("prompt") or "")
-    with st.db.session() as s:
+    # what is shown for the job: the prompt, or the main text the operation takes (first string input of the schema)
+    prompt = str(inputs.get("prompt") or next((v for k, v in inputs.items() if isinstance(v, str) and v and (spec.get(k) or {}).get("type") == "string"), ""))
+    with st.db.session(write=True) as s:
         s.add(MediaJob(id=job_id, user_id=user.id, kind="video", model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                        prompt_enc=st.vault.encrypt(prompt, "media") if save else None,
-                       params_enc=st.vault.encrypt(json.dumps({k: v for k, v in inputs.items() if k != "prompt"}), "media") if save else None,
+                       params_enc=st.vault.encrypt(json.dumps({**{k: v for k, v in inputs.items() if k != "prompt"}, **({"sources": sources} if sources else {})}), "media") if save else None,
                        status="queued", progress_text="Queued", started_at=None, expires_at=expires_at if save else None))
     return job_id
 
@@ -288,11 +304,19 @@ def write_asset(st, user_id: str, asset_id: str, data: bytes) -> None:
 
 
 def read_asset(st, a: MediaAsset) -> bytes:
-    return st.vault.decrypt_bytes(asset_path(st.cfg, a.user_id, a.id).read_bytes(), "asset", a.id)
+    """The whole file. Meant for pictures; large videos are streamed by range instead (media_lib.iter_asset)."""
+    p = asset_path(st.cfg, a.user_id, a.id)
+    if media_store.kind_of(p) == "chunked":
+        return media_store.read_all(st.vault.key_for("asset"), "asset", a.id, p, a.size)
+    return st.vault.decrypt_bytes(p.read_bytes(), "asset", a.id)
 
 
 def remove_asset_file(st, user_id: str, asset_id: str) -> None:
-    asset_path(st.cfg, user_id, asset_id).unlink(missing_ok=True)
+    """The asset's file and everything derived from it (preview picture, filmstrips, converted copy)."""
+    d = asset_path(st.cfg, user_id, asset_id).parent
+    if d.is_dir():
+        for f in d.glob(f"{asset_id}.*"):
+            f.unlink(missing_ok=True)
 
 
 # ---- serialisation ---------------------------------------------------------------------------------
@@ -336,7 +360,7 @@ def job_out(st, s, p, j: MediaJob, models: dict | None = None) -> dict:
 
 # ---- lifecycle -------------------------------------------------------------------------------------
 def _finish(st, job_id: str, status: str, error: str | None = None, text: str | None = None) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(MediaJob, job_id)
         if j is None or j.status not in ACTIVE:
             return
@@ -364,7 +388,7 @@ async def submit(st, user: User, kind: str, m: Model, b: Backend, params: dict, 
     real = m.real_id.split(":", 1)[1]
     remote = await ad.media_submit(kind, {**params, "model": real}, job_id, **({"title": f"{origin} {kind}"} if origin else {}))
     params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image")}
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = MediaJob(id=job_id, user_id=user.id, kind=kind, model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                      prompt_enc=st.vault.encrypt(params["prompt"], "media") if save else None,
                      params_enc=st.vault.encrypt(json.dumps({k: v for k, v in params.items() if k != "prompt"}), "media")
@@ -421,13 +445,13 @@ async def refresh(st, job_id: str) -> None:
             if time.time() - last_ok > UNREACHABLE_GIVE_UP_S:
                 _finish(st, job_id, "failed", f"The inference backend has not answered for {UNREACHABLE_GIVE_UP_S // 60} minutes.")
             else:
-                with st.db.session() as s:
+                with st.db.session(write=True) as s:
                     j = s.get(MediaJob, job_id)
                     if j:
                         j.progress_text = "Waiting for the inference backend" if e.kind == "unreachable" else str(e)[:300]
             return
         status = r["status"]
-        with st.db.session() as s:
+        with st.db.session(write=True) as s:
             j = s.get(MediaJob, job_id)
             j.last_ok = time.time()
             j.queue_position = r.get("queue_position")
@@ -468,7 +492,7 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
             for o in outputs:
                 await _discard(ad, o)
         else:
-            with st.db.session() as s:
+            with st.db.session(write=True) as s:
                 j = s.get(MediaJob, job_id)
                 j.progress_text = "Retrieving the result"
         return
@@ -477,15 +501,23 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
         with st.db.session() as s:
             u = s.get(User, user_id)
             days = st.settings.value_for(s, "privacy.chat_retention_days", services.load_principal(s, u)) if u else -1
-            expires = now + days * 86400 if days and days > 0 else None
-            for o, data, mime in fetched:
-                aid = "ma_" + uuid.uuid4().hex[:24]
-                write_asset(st, user_id, aid, data)
-                s.add(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
-                                 size=len(data), width=o.get("width"), height=o.get("height"),
-                                 duration=o.get("duration"), seed=o.get("seed"),
-                                 prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
-                                 expires_at=expires))
+        expires = now + days * 86400 if days and days > 0 else None
+        rows = []
+        for o, data, mime in fetched:  # files first (slow), the write lock only for the rows (fast)
+            aid = "ma_" + uuid.uuid4().hex[:24]
+            write_asset(st, user_id, aid, data)
+            rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
+                                   size=len(data), width=o.get("width"), height=o.get("height"),
+                                   duration=o.get("duration"), seed=o.get("seed"),
+                                   prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
+                                   expires_at=expires))
+        try:
+            with st.db.session(write=True) as s:
+                s.add_all(rows)
+        except BaseException:
+            for r in rows:
+                remove_asset_file(st, user_id, r.id)
+            raise
     else:
         purge_mem(st)
         if mem_bytes(st) + sum(len(d) for _, d, _ in fetched) > EPHEMERAL_CAP_BYTES:
@@ -513,7 +545,7 @@ async def _discard(ad, o) -> None:
 
 
 async def cancel(st, job_id: str) -> None:
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         j = s.get(MediaJob, job_id)
         if j is None or j.status not in ACTIVE:
             return
@@ -542,7 +574,7 @@ def sweep(st) -> dict:
     now = time.time()
     purge_mem(st)
     removed = orphans = 0
-    with st.db.session() as s:
+    with st.db.session(write=True) as s:
         for a in s.execute(select(MediaAsset).where(MediaAsset.expires_at != None, MediaAsset.expires_at < now)).scalars().all():  # noqa: E711
             remove_asset_file(st, a.user_id, a.id)
             s.delete(a)
@@ -572,7 +604,7 @@ def sweep(st) -> dict:
                 continue
             for f in udir.iterdir():
                 stale = f.suffix == ".tmp" and f.stat().st_mtime < now - 3600
-                if stale or (f.suffix == ".bin" and f.stem not in known and f.stat().st_mtime < now - 3600):
+                if stale or (f.suffix == ".bin" and f.name.split(".", 1)[0] not in known and f.stat().st_mtime < now - 3600):
                     f.unlink(missing_ok=True)
                     orphans += 1
             if udir.name not in users:
@@ -580,6 +612,8 @@ def sweep(st) -> dict:
                     f.unlink(missing_ok=True)
                     orphans += 1
                 udir.rmdir()
+    from . import media_lib
+    orphans += media_lib.sweep_scratch(st)
     return {"expired_assets": removed, "orphan_files": orphans}
 
 

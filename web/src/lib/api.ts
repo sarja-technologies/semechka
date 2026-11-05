@@ -19,6 +19,9 @@ function headers(method: string, extra: Record<string, string> = {}) {
   return h;
 }
 
+/** The CSRF and setup headers for a request made outside this module (an XMLHttpRequest that reports upload progress). */
+export const apiHeaders = (method: string) => headers(method);
+
 async function parse(r: Response) {
   const text = await r.text();
   let body: any = null;

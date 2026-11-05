@@ -9,6 +9,7 @@
   import AppHeader from '$lib/components/chat/AppHeader.svelte';
   import Sidebar from '$lib/components/chat/Sidebar.svelte';
   import Palette from '$lib/components/Palette.svelte';
+  import MediaViewer from '$lib/components/media/MediaViewer.svelte';
   let { children } = $props();
 
   const path = $derived(page.url.pathname);
@@ -82,6 +83,7 @@
   </div>
 {/if}
 <Palette />
+<MediaViewer />
 
 <style>
   /* the sidebar runs the full height; the page column carries its own slim top bar */
