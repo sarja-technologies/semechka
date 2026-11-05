@@ -170,7 +170,7 @@
   <div class="scrim" role="presentation" onclick={close}></div>
   <div class="ovl" role="dialog" aria-modal="true" aria-label={view === 'process' ? 'Job process' : 'ComfyUI graph'} tabindex="-1" bind:this={dlg} onkeydown={key}>
     <header><h3>{view === 'process' ? 'Process' : 'ComfyUI'}</h3><button type="button" class="btn ghost icon sm" onclick={close} aria-label="Close"><Icon name="x" size={16} /></button></header>
-    <div class="inner">{#if Viewer}<Viewer jobId={job} onclose={close} />{:else}<p class="st-note" role="status">This view is not part of this build.</p>{/if}</div>
+    <div class="inner">{#if Viewer}<Viewer jobId={job} mode="inline" onclose={close} />{:else}<p class="st-note" role="status">This view is not part of this build.</p>{/if}</div>
   </div>
 {/if}
 

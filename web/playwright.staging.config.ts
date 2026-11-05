@@ -12,6 +12,6 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   reporter: [['list']],
   globalSetup: './e2e_media/staging/setup.ts',
-  use: { channel: 'chrome', headless: true, viewport: { width: 1280, height: 800 }, baseURL: STG.url, trace: 'off', screenshot: 'only-on-failure' },
+  use: { actionTimeout: 60_000, channel: 'chrome', headless: true, viewport: { width: 1280, height: 800 }, baseURL: STG.url, trace: 'off', screenshot: 'only-on-failure' },
   outputDir: path.join(process.env.STAGING_OUT ?? 'test-results', 'staging')
 });

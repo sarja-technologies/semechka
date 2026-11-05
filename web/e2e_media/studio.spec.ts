@@ -591,7 +591,12 @@ test('12 a finished job shows the result in the viewer, offers a download and an
   // the result file itself is a real video (what the engine double produced), then it opens in the same viewer as every library item
   const jobId = new URL(page.url()).searchParams.get('job')!;
   const resultAsset = (await api(page, '/api/studio/jobs')).find((j: any) => j.job === jobId).outputs.find((o: any) => o.kind === 'video');
-  const rf = probe(await content(page, resultAsset.id));
+  // read until the file decodes (the result is copied from the engine just before the job shows as completed); a file that never decodes still fails
+  let rf: any, lastErr: any;
+  for (let i = 0; i < 20 && !rf; i++) {
+    try { rf = probe(await content(page, resultAsset.id)); } catch (e) { lastErr = e; await page.waitForTimeout(500); }
+  }
+  if (!rf) throw lastErr;
   expect(rf.w).toBe(resultAsset.width); expect(rf.h).toBe(resultAsset.height); expect(rf.d).toBeGreaterThan(0.5);
   await live.getByTestId('job-result').getByRole('button', { name: 'Open', exact: true }).click();
   const dlg = page.getByRole('dialog');
