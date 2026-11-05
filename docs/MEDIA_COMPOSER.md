@@ -57,7 +57,7 @@ speaks the Sarness job protocol with OpenJutsu's real input schema). Run: `cd we
 ## Not done / known limits
 
 * Chat models do not read videos: a video in a plain chat message stays in the tray, marked unused.
-* Results of generation are still fetched into memory (up to 200 MB) before being sealed; only uploads stream end to end.
+* Saved generation results now stream engine -> scratch file -> chunked sealed storage (cap 1 GiB, ranged playback); no-save results are held in memory and keep a 200 MB cap. Work Mode artifacts saved to the Library are still sealed from bytes.
 * Animated GIFs can be viewed but not edited; EXIF orientation is applied for JPEG; video rotation metadata is honoured.
 * Editing is on demand (not queued across restarts): a restart during an edit loses that edit; nothing partial is stored.
 
