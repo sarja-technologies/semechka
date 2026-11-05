@@ -10,7 +10,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "e2e": "playwright test",
     "contrast": "python3 ../scripts/contrast_check.py",
-    "test": "node --test \"src/lib/work/*.test.ts\""
+    "test": "node --test \"src/lib/work/*.test.ts\" \"src/lib/studio/inspector/*.test.ts\""
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

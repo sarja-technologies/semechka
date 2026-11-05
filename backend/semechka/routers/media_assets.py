@@ -109,7 +109,7 @@ async def upload(request: Request, name: str = "", ephemeral: bool = False, ctx:
 @router.get("/assets")
 def list_assets(kind: str | None = None, origin: str | None = None, limit: int = 60, before: float | None = None, ctx: Ctx = Depends(current)):
     """The person's library, newest first: generated results, uploads and edited copies. ``before`` is a created_at to continue from."""
-    if kind not in (None, "image", "video") or origin not in (None, "generated", "upload", "edit"):
+    if kind not in (None, "image", "video") or origin not in (None, "generated", *media_lib.ORIGINS):
         raise HTTPException(422, {"code": "invalid", "message": "Unknown filter."})
     if not (library_ok(ctx)):
         raise HTTPException(403, {"code": "forbidden", "message": "Pictures and videos are not available to you."})

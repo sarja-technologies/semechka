@@ -43,6 +43,8 @@ def operations(ctx_s, st, p, g, modes: dict) -> dict:
                   "reason": st_k["reason"] if not st_k["enabled"] else ("" if shown else "Hidden by your administrator.")}
     out["code"] = {"enabled": modes["code"]["enabled"], "reason": modes["code"]["reason"]}
     out["work"] = {"enabled": modes["work"]["enabled"], "reason": modes["work"]["reason"]}  # the Work navigation entry
+    from .. import studio_svc
+    out["openjutsu"] = studio_svc.availability(st, ctx_s, p, modes["video"])  # the OpenJutsu Studio navigation entry (an editing model the person may use)
     return out
 
 

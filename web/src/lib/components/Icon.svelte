@@ -26,7 +26,8 @@
     fullscreen: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', exitfs: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
     zoomin: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6M11 8v6', zoomout: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6',
     replace: 'M4 8h13l-3-3M20 16H7l3 3', stepback: 'M6 5v14M18 6l-9 6 9 6z', stepfwd: 'M18 5v14M6 6l9 6-9 6z', expand: 'M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7',
-    film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4', flip: 'M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3'
+    film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4', flip: 'M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
+    openjutsu: 'M4 6h11v12H4zM15 10l5-2.5v9L15 14M8 9.5l3 2.5-3 2.5'
   };
 </script>
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}><path d={P[name] ?? P.info} /></svg>

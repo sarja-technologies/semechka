@@ -5,8 +5,9 @@ import { BACKEND, PY, WEB } from './e2e/support/env';
 
 // Browser tests of the media composer: real Chrome, the real Semechka server, the real database and disk, real ffmpeg, and an inference-engine
 // double that speaks the Sarness job protocol with OpenJutsu's real input schema. Nothing about the media features is mocked.
-export const MP = { engine: 8841, app: 8842 };
-export const TMP = path.join(WEB, '.e2e-media-tmp');
+// The ports and scratch folder can be moved with environment variables, so several people (or agents) can run this suite side by side.
+export const MP = { engine: Number(process.env.MEDIA_E2E_ENGINE_PORT || 8841), app: Number(process.env.MEDIA_E2E_APP_PORT || 8842) };
+export const TMP = path.join(WEB, process.env.MEDIA_E2E_TMP || '.e2e-media-tmp');
 if (process.env.TEST_WORKER_INDEX === undefined) { rmSync(TMP, { recursive: true, force: true }); mkdirSync(path.join(TMP, 'data'), { recursive: true }); mkdirSync(path.join(TMP, 'auth'), { recursive: true }); }
 
 export default defineConfig({

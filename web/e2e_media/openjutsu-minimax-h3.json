@@ -53,9 +53,9 @@
    "type": "file",
    "kind": "image",
    "multi": true,
-   "max_files": 4,
+   "max_files": 64,
    "label": "Reference pictures",
-   "description": "swap: exactly one (the new person). advanced_swap: one per person to replace (1-4), in the order of 'roles'. object_edit: at most one (what it should look like). check_mask: none.",
+   "description": "swap: exactly one (the new person). advanced_swap: one per person to replace (1-4), in the order of 'roles'. object_edit: at most one (what it should look like). check_mask: none. More pictures than the operation uses are accepted: the first ones, in the given order, condition the run and the rest are recorded as unused.",
    "operations": [
     "swap",
     "advanced_swap",
@@ -302,6 +302,55 @@
     "object_edit",
     "check_mask"
    ]
+  },
+  "short_edge": {
+   "type": "int",
+   "min": 32,
+   "max": 4096,
+   "label": "Short edge in px (multiple of 32; replaces 'resolution')",
+   "description": "Refused above limits.resolutions.max_short_edge.",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit"
+   ]
+  },
+  "subject_box": {
+   "type": "json",
+   "label": "Subject box [x,y,w,h] as fractions of the first frame",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "subject_points": {
+   "type": "json",
+   "label": "Subject points [{x,y,positive}] as fractions of the first frame",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
+  },
+  "subject_kind": {
+   "type": "enum",
+   "values": [
+    "person",
+    "vehicle",
+    "animal",
+    "object",
+    "other"
+   ],
+   "label": "What kind of thing the subject is",
+   "operations": [
+    "swap",
+    "advanced_swap",
+    "object_edit",
+    "check_mask"
+   ]
   }
  },
  "runner": {
@@ -425,5 +474,290 @@
    "status": "experimental",
    "reason": "no real-inference validation record yet"
   }
+ },
+ "modes": [
+  {
+   "id": "subject_replacement",
+   "label": "Subject replacement",
+   "operation": "swap",
+   "fixed_inputs": {},
+   "subject_kinds": [
+    "person"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 1,
+     "active_max": 1
+    },
+    "subject_text": true
+   },
+   "status": "ready",
+   "reason": null,
+   "validated": {
+    "at": 1793706289,
+    "job": "j_9c379636f1e34b63a64e",
+    "engine": "engine-8742",
+    "result": {
+     "status": "completed",
+     "resolution_preset": "736p",
+     "profile_inputs": "prompt='the main person', default resolution, random seed (1635924513)",
+     "input": {
+      "file": "src_107f_1024x576.mp4",
+      "width": 1024,
+      "height": 576,
+      "fps": 24,
+      "frames": 107,
+      "duration_s": 4.458333,
+      "audio": "aac 48000 Hz stereo, mean -17.4 dB",
+      "origin": "AI-generated clip already on the box (engine output), not camera footage"
+     },
+     "output": {
+      "codec": "h264",
+      "width": 1312,
+      "height": 736,
+      "fps": 24.0,
+      "frames": 107,
+      "duration_s": 4.458333,
+      "audio": "aac 48000 Hz stereo, mean -17.4 dB (source soundtrack kept)",
+      "decodes_without_errors": true
+     },
+     "duration_ratio_vs_input": 1.0,
+     "elapsed_s": 370.4,
+     "ledger_actual_mb": 71066,
+     "other_jobs": [
+      {
+       "job": "j_07bf7f3ed8f34e8e88e8",
+       "note": "cold start 480p, 72-frame input -> 56-frame output (H3 17k+5 frame grid, 2.33 s), 149 s"
+      },
+      {
+       "job": "j_51540919a2654bfdb011",
+       "note": "480p, 73-frame input -> 73-frame output, 144 s"
+      },
+      {
+       "job": "j_bfee5b6aa7f24b1cbf2c",
+       "note": "480p, 242-frame (10.08 s) forward+reverse input, multi-clip chain -> 226 frames (9.42 s, -6.6%), 619 s"
+      }
+     ],
+     "limits": "AI-generated single-person clips only; no camera footage, no multi-person scenes, no hat/face-fix paths",
+     "ledger_actual_mb_after_10s_multiclip_job": 76700
+    }
+   }
+  },
+  {
+   "id": "character_replacement",
+   "label": "Character replacement",
+   "operation": "advanced_swap",
+   "fixed_inputs": {},
+   "subject_kinds": [
+    "person"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 1,
+     "active_max": 4
+    },
+    "subject_text": true
+   },
+   "status": "experimental",
+   "reason": "no real-inference validation record yet",
+   "validated": null
+  },
+  {
+   "id": "object_replacement",
+   "label": "Object replacement",
+   "operation": "object_edit",
+   "fixed_inputs": {
+    "object_mode": "change"
+   },
+   "subject_kinds": [
+    "object",
+    "animal",
+    "other"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 0,
+     "active_max": 1
+    },
+    "subject_text": true
+   },
+   "status": "experimental",
+   "reason": "no real-inference validation record yet",
+   "validated": null
+  },
+  {
+   "id": "vehicle_replacement",
+   "label": "Vehicle replacement",
+   "operation": "object_edit",
+   "fixed_inputs": {
+    "object_mode": "change"
+   },
+   "subject_kinds": [
+    "vehicle"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 0,
+     "active_max": 1
+    },
+    "subject_text": true
+   },
+   "status": "experimental",
+   "reason": "wired in the OpenJutsu graph; no real-inference validation for vehicles yet",
+   "validated": null
+  },
+  {
+   "id": "motion_transfer",
+   "label": "Motion transfer",
+   "operation": "swap",
+   "fixed_inputs": {},
+   "subject_kinds": [
+    "person"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 1,
+     "active_max": 1
+    },
+    "subject_text": false
+   },
+   "status": "unavailable",
+   "reason": "no motion-transfer graph is installed on this engine",
+   "validated": null
+  },
+  {
+   "id": "reference_to_video",
+   "label": "Reference to video",
+   "operation": "reference_video",
+   "fixed_inputs": {},
+   "subject_kinds": [],
+   "needs": {
+    "video": false,
+    "refs": {
+     "min": 1,
+     "active_max": 9
+    },
+    "subject_text": false
+   },
+   "status": "unavailable",
+   "reason": "the reference-to-video graph is not installed on this engine",
+   "validated": null,
+   "profile": "openjutsu-reference-video"
+  },
+  {
+   "id": "video_restyling",
+   "label": "Video restyling",
+   "operation": "object_edit",
+   "fixed_inputs": {
+    "object_mode": "background"
+   },
+   "subject_kinds": [
+    "other"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 0,
+     "active_max": 1
+    },
+    "subject_text": true
+   },
+   "status": "unavailable",
+   "reason": "restyling has not been wired or tested",
+   "validated": null
+  },
+  {
+   "id": "advanced_editing",
+   "label": "Advanced editing",
+   "operation": "object_edit",
+   "fixed_inputs": {},
+   "subject_kinds": [
+    "object",
+    "person",
+    "animal",
+    "other"
+   ],
+   "needs": {
+    "video": true,
+    "refs": {
+     "min": 0,
+     "active_max": 1
+    },
+    "subject_text": true
+   },
+   "status": "experimental",
+   "reason": "no real-inference validation record yet",
+   "validated": null
+  }
+ ],
+ "limits": {
+  "resolutions": {
+   "presets": [
+    "480p",
+    "576p",
+    "736p",
+    "768p"
+   ],
+   "max_short_edge": 768,
+   "step": 32,
+   "note": "H3 works in steps of 32 px; 768 is the largest short edge tested on this 121 GB machine"
+  },
+  "max_source_seconds": 30,
+  "fps": 24,
+  "memory": {
+   "measured": [
+    {
+     "short_edge": 736,
+     "peak_mb": 78848,
+     "job": "j_9c379636f1e34b63a64e",
+     "clip_seconds": 2.5
+    }
+   ],
+   "estimate_mb": 86016
+  },
+  "timing": {
+   "measured": [
+    {
+     "short_edge": 736,
+     "seconds": 370.4,
+     "job": "j_9c379636f1e34b63a64e",
+     "clip_seconds": 4.46
+    }
+   ]
+  }
+ },
+ "reference_policy": {
+  "swap": {
+   "min": 1,
+   "active_max": 1
+  },
+  "advanced_swap": {
+   "min": 1,
+   "active_max": 4
+  },
+  "object_edit": {
+   "min": 0,
+   "active_max": 1
+  },
+  "check_mask": {
+   "min": 0,
+   "active_max": 0
+  },
+  "reference_video": {
+   "min": 1,
+   "active_max": 9
+  }
+ },
+ "subject_selection": {
+  "text": true,
+  "box": true,
+  "points": false,
+  "mask_paint": false,
+  "note": "box/points start SAM from the first frame of the prepared clip"
  }
 }

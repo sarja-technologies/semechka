@@ -1,0 +1,39 @@
+/* Shared look of the Studio page. Class names start with st- . Colours are only the theme's own tokens, so light, dark and custom themes all work. */
+.st-h { display: grid; gap: 2px; margin-bottom: var(--s3); }
+.st-h h2 { font-size: 17px; }
+.st-h p { margin: 0; color: var(--fg-muted); font-size: 13px; max-width: 62ch; }
+.st-sec { display: grid; gap: var(--s2); padding: var(--s3) 0; border-top: 1px solid var(--border); }
+.st-sec:first-of-type { border-top: 0; padding-top: 0; }
+.st-sec > h3 { font-size: 13px; font-weight: 600; color: var(--fg); letter-spacing: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.st-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.st-seg > button { all: unset; box-sizing: border-box; min-height: 34px; padding: 0 12px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--fg-2); border: 1px solid var(--border); background: var(--card-bg);
+  display: inline-flex; align-items: center; gap: 6px; transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+.st-seg > button:hover:not(:disabled) { background: var(--hover); }
+.st-seg > button[aria-pressed='true'], .st-seg > button[aria-checked='true'], .st-seg > button[aria-selected='true'] { background: var(--selected); border-color: var(--border-strong); color: var(--fg); font-weight: 600; }
+.st-seg > button:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }
+.st-seg > button:disabled { opacity: .45; cursor: not-allowed; }
+@media (pointer: coarse) { .st-seg > button { min-height: 44px; } }
+.st-note { margin: 0; font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
+.st-note.warn { color: var(--warn); } .st-note.bad { color: var(--danger); } .st-note.ok { color: var(--success); }
+.st-field { display: grid; gap: 3px; font-size: 12px; color: var(--fg-muted); }
+.st-field > span { font-weight: 500; }
+.st-field .input { min-height: 34px; font-size: 13px; color: var(--fg); }
+.st-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.st-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap; background: var(--surface-2); color: var(--fg-2); border: 1px solid var(--border); }
+.st-badge.ok { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 30%, var(--border)); }
+.st-badge.warn { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, var(--border)); }
+.st-badge.bad { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.st-badge.info { background: var(--info-soft); color: var(--info); border-color: color-mix(in srgb, var(--info) 30%, var(--border)); }
+.st-foot { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; padding-top: var(--s3); margin-top: var(--s3); border-top: 1px solid var(--border); }
+.st-prog { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.st-prog > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .25s linear; }
+.st-prog.ind > i { width: 40%; animation: stslide 1.3s ease-in-out infinite; }
+@keyframes stslide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .st-prog.ind > i { animation: none; width: 100%; opacity: .5; } }
+.st-details { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-bg); }
+.st-details > summary { list-style: none; cursor: pointer; padding: 10px 12px; min-height: 40px; display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 13px; border-radius: var(--radius); }
+.st-details > summary::-webkit-details-marker { display: none; }
+.st-details > summary:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }
+.st-details > summary::after { content: ''; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--fg-muted); border-bottom: 1.5px solid var(--fg-muted); transform: rotate(45deg); transition: transform var(--fast) var(--ease); }
+.st-details[open] > summary::after { transform: rotate(-135deg); }
+.st-details > .st-in { padding: 2px 12px 12px; display: grid; gap: var(--s3); }

@@ -11,7 +11,7 @@ export type Asset = {
   height?: number | null;
   duration?: number | null;
   name?: string;
-  origin?: 'generated' | 'upload' | 'edit';
+  origin?: 'generated' | 'upload' | 'edit' | 'prepared' | 'export';
   parent?: string | null;
   edit?: { trim?: [number, number | null] | null; crop?: { x: number; y: number; w: number; h: number } | null; rotate?: number; flip?: boolean; mute?: boolean } | null;
   media?: { codec?: string | null; audio_codec?: string | null; audio?: boolean; fps?: number | null; playable?: boolean };

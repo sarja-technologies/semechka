@@ -1,17 +1,17 @@
 """The Sarness job-protocol double from the backend tests, served over HTTP for the browser tests, with the REAL OpenJutsu input schema
 (copied from the engine's profile definition) and extra routes the tests use to see exactly what the engine received.
 
-  GET  /__state    submissions and, for every upload, its size and sha256
-  POST /__reset    forget submissions and uploads
+  GET  /__state    submissions (the exact inputs posted to /v1/profiles/{id}/jobs, with the name/mime/size/sha256 of every file) and every upload
+  POST /__reset    forget submissions, uploads and scripted runs; restores the default control settings (clock "calls", step 1000: a job completes on its first poll)
+  and the OpenJutsu Studio controls, served by tests/fake_sarness.py (see STUDIO_HARNESS.md):
+  POST /__control/advance?n=1&job=   move the scripted runs forward n ticks      POST /__control/config   {clock, scenes, variant_next, ...}
+  GET  /__control/runs               tick / status of every scripted run
 """
 import hashlib
 import json
-import os
 import subprocess
 import tempfile
 from pathlib import Path
-
-from fastapi import Request
 
 from tests import fake_sarness as fs
 
@@ -29,9 +29,14 @@ fs.make_mp4 = lambda: RESULT
 
 def setup():
     fs.reset()
-    fs.STATE["profiles"] = [{"id": "openjutsu-minimax-h3", "name": DEF["name"], "category": "video", "family": "openjutsu", "official": True,
-                             "readiness": {"state": "ready", "ready": True, "reason": None}, "residency": {"state": "unloaded"}, "memory": {"estimate_mb": DEF["estimate_mb"]},
-                             "inputs_schema": DEF["inputs_schema"], "capabilities": {"operations": DEF["operations"]}}]
+    fs.STATE["profiles"] = [fs.openjutsu_entry(DEF)]
+    defaults()
+
+
+def defaults():
+    """Compatible with the older specs: a job runs its whole script on the first status poll (so it simply completes). A Studio test that wants to look at
+    the states POSTs /__control/config {"clock": "manual"} and steps with /__control/advance."""
+    fs.STATE.update(clock="calls", step=1000)
 
 
 setup()
@@ -40,13 +45,17 @@ setup()
 @fs.app.get("/__state")
 def state():
     return {"submissions": fs.STATE["profile_submissions"],
-            "uploads": {k: {"size": len(v), "sha256": hashlib.sha256(v).hexdigest()} for k, v in fs.STATE["uploads"].items()}}
+            "uploads": {k: {"size": len(v), "sha256": hashlib.sha256(v).hexdigest(), "name": (fs.STATE["upload_meta"].get(k) or {}).get("name"),
+                            "mime": (fs.STATE["upload_meta"].get(k) or {}).get("mime")} for k, v in fs.STATE["uploads"].items()},
+            "control": {k: fs.STATE[k] for k in fs._CTRL_KEYS}, "estimates": fs.STATE["estimates"]}
 
 
 @fs.app.post("/__reset")
 def reset():
-    fs.STATE["profile_submissions"].clear()
-    fs.STATE["uploads"].clear()
+    profiles = fs.STATE["profiles"]
+    fs.reset()
+    fs.STATE["profiles"] = profiles
+    defaults()
     return {"ok": True}
 
 

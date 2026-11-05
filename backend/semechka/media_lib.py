@@ -36,7 +36,7 @@ IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "ima
 VIDEO_EXT = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/x-matroska": "mkv", "video/x-msvideo": "avi"}
 SERVE_MIME = {**IMAGE_EXT, **VIDEO_EXT}
 EPHEMERAL_UPLOAD_MAX = 256 * 1024 * 1024
-ORIGINS = ("upload", "edit")
+ORIGINS = ("upload", "edit", "prepared", "export")  # prepared: made for an OpenJutsu Studio run; export: a result scaled to a requested size
 META_KEYS = ("origin", "name", "parent", "edit", "media")
 BROWSER_VIDEO = {"h264", "vp8", "vp9", "av1"}
 BROWSER_AUDIO = {None, "aac", "mp3", "opus", "vorbis", "flac"}
@@ -223,10 +223,11 @@ class Probe:
     acodec: str | None = None
     orientation: int = 1
     playable: bool = True
+    rotation: int = 0       # display rotation of a video in degrees (phone footage: 90 or 270); width and height are already the displayed size
 
     def media(self) -> dict:
         return {"codec": self.vcodec, "audio_codec": self.acodec, "audio": bool(self.acodec), "fps": self.fps, "demuxer": self.demuxer,
-                "orientation": self.orientation, "playable": self.playable}
+                "orientation": self.orientation, "playable": self.playable, "rotation": self.rotation}
 
 
 def _fps(s: str | None) -> float | None:
@@ -286,7 +287,7 @@ async def probe(path: Path, sn: Sniffed, head: bytes) -> Probe:
     if sn.kind == "video" and vc is None:
         raise MediaError(422, "unsupported_codec", "The video uses a codec this server cannot read.")
     return Probe(sn.kind, sn.mime, sn.demuxer, w, h, round(dur, 3) if dur else None, _fps(v.get("avg_frame_rate")) or _fps(v.get("r_frame_rate")),
-                 vc, acodec, orient, playable)
+                 vc, acodec, orient, playable, rot % 360 if sn.kind == "video" else 0)
 
 
 async def _capture(cmd: list[str], timeout: float) -> tuple[int, str]:
@@ -514,7 +515,7 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
         if thumb:
             await asyncio.to_thread(write_sidecar, st, user_id, aid, "thumb", thumb.read_bytes())
         with st.db.session(write=True) as s:
-            s.add(MediaAsset(id=aid, user_id=user_id, job_id=None, kind=pr.kind, model_id="edit" if origin == "edit" else "upload", mime=pr.mime,
+            s.add(MediaAsset(id=aid, user_id=user_id, job_id=None, kind=pr.kind, model_id=_MODEL_OF.get(origin, "upload"), mime=pr.mime,
                              size=size, width=pr.width, height=pr.height, duration=pr.duration, seed=None, prompt_enc="",
                              params_enc=st.vault.encrypt(json.dumps(meta), "media"), expires_at=expires_at))
             s.flush()
@@ -528,12 +529,15 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
     return out
 
 
+_MODEL_OF = {"edit": "edit", "prepared": "prepared", "export": "export"}  # MediaAsset.model_id of derived items (prepared ones are found by it)
+
+
 def mem_out(st, aid: str) -> dict:
     v = _mem(st)[aid]
     m = v["meta"]
     return {"id": aid, "kind": m["kind"], "mime": v["mime"], "size": len(v["data"]), "width": m["width"], "height": m["height"], "duration": m["duration"],
             "seed": None, "created_at": m["created_at"], "expires_at": v["expires"], "prompt": "", "params": {}, "saved": False,
-            "model_id": "edit" if m.get("origin") == "edit" else "upload", "origin": m.get("origin") or "upload", "name": m.get("name"),
+            "model_id": _MODEL_OF.get(m.get("origin"), "upload"), "origin": m.get("origin") or "upload", "name": m.get("name"),
             "parent": m.get("parent"), "edit": m.get("edit"), "media": m.get("media"), "has_thumb": bool(v.get("thumb")),
             "preview": preview_state(st, aid, m.get("media"), True)}
 
@@ -568,6 +572,10 @@ def asset_json(st, a: MediaAsset) -> dict:
         base["parent"] = meta.get("parent")
         base["edit"] = meta.get("edit")
         base["media"] = meta.get("media")
+        if meta.get("export"):
+            base["export"] = meta["export"]            # the generation it was scaled from, the size asked for, upscale | downscale
+        if meta.get("prep"):
+            base["prepared"] = {"key": meta["prep"].get("key"), "mode": meta["prep"].get("mode"), "source": meta["prep"].get("source")}
         base["has_thumb"] = asset_file(st, a.user_id, a.id, "thumb").exists()
         base["preview"] = preview_state(st, a.id, meta.get("media"))
     else:
@@ -706,6 +714,14 @@ class EditSpec:
     rotate: int = 0
     flip: bool = False
     mute: bool = False
+    # OpenJutsu Studio additions. All sizes are even pixel counts and come from studio_plan (validated numbers only; they are never taken from text).
+    stretch: tuple[int, int] | None = None     # after the crop: resize the whole picture to this size (distorts on purpose)
+    pad: dict | None = None                    # after the crop: black bars to this canvas {w, h, x, y} (the picture sits at x, y)
+    scale: tuple[int, int] | None = None       # last step: Lanczos resize to this size
+    stream_copy: bool = False                  # no re-encoding: cut/remux the existing streams (only valid for a trim, a mute or a container change)
+    force: bool = False                        # produce a file even when nothing is trimmed or cropped (container normalisation)
+    audio_copy: bool = False                   # keep the audio stream as it is (exports)
+    scale_first: bool = False                  # resize before padding (exports: fit inside the canvas, then centre on black)
 
 
 @dataclass
@@ -720,6 +736,8 @@ class EditTask:
     asset: dict | None = None
     created: float = field(default_factory=time.time)
     cancel: asyncio.Event = field(default_factory=asyncio.Event)
+    key: str | None = None    # cache key of a prepared asset being made (so a second request for the same thing joins this task)
+    mode: str | None = None   # copy | reencode
 
 
 def tasks(st) -> dict:
@@ -727,7 +745,8 @@ def tasks(st) -> dict:
 
 
 def task_out(t: EditTask) -> dict:
-    return {"id": t.id, "status": t.status, "progress": round(t.progress, 3), "error": t.error, "asset": t.asset, "source": t.source, "kind": t.kind}
+    return {"id": t.id, "status": t.status, "progress": round(t.progress, 3), "error": t.error, "asset": t.asset, "source": t.source, "kind": t.kind,
+            **({"mode": t.mode} if t.mode else {})}
 
 
 def check_spec(kind: str, spec: EditSpec, w: int, h: int, dur: float | None) -> EditSpec:
@@ -756,7 +775,8 @@ def check_spec(kind: str, spec: EditSpec, w: int, h: int, dur: float | None) -> 
             raise MediaError(422, "invalid", f"The selected part must be at least 0.1 s and lie within the {d:.1f} s video.")
         spec.start = None if s0 < 0.001 else round(s0, 3)
         spec.end = None if e0 >= d - 0.04 else round(e0, 3)
-    if (spec.crop is None and spec.rotate == 0 and not spec.flip and (kind == "image" or (spec.start is None and spec.end is None and not spec.mute))):
+    if (spec.crop is None and spec.rotate == 0 and not spec.flip and not (spec.force or spec.stretch or spec.pad or spec.scale)
+            and (kind == "image" or (spec.start is None and spec.end is None and not spec.mute))):
         raise MediaError(422, "nothing_to_do", "Nothing was changed. Trim, crop or rotate first.")
     return spec
 
@@ -773,6 +793,18 @@ def build_filters(kind: str, spec: EditSpec, p: Probe) -> str:
     if spec.crop:
         c = spec.crop
         f.append(f"crop={c['w']}:{c['h']}:{c['x']}:{c['y']}")
+    # (every number is forced through int() here: whatever built the spec, ffmpeg only ever sees digits)
+    if spec.scale and spec.scale_first:
+        f.append(f"scale={int(spec.scale[0])}:{int(spec.scale[1])}:flags=lanczos")
+    if spec.stretch:
+        f.append(f"scale={int(spec.stretch[0])}:{int(spec.stretch[1])}:flags=lanczos")
+    if spec.pad:
+        p = spec.pad
+        f.append(f"pad={int(p['w'])}:{int(p['h'])}:{int(p['x'])}:{int(p['y'])}:color=black")
+    if spec.scale and not spec.scale_first:
+        f.append(f"scale={int(spec.scale[0])}:{int(spec.scale[1])}:flags=lanczos")
+    if spec.stretch or spec.pad or spec.scale:
+        f.append("setsar=1")
     if kind == "video":
         f.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
         f.append("format=yuv420p")
@@ -780,12 +812,21 @@ def build_filters(kind: str, spec: EditSpec, p: Probe) -> str:
 
 
 def out_dims(spec: EditSpec, w: int, h: int) -> tuple[int, int]:
+    if spec.scale:
+        return spec.scale
+    if spec.pad:
+        return spec.pad["w"], spec.pad["h"]
+    if spec.stretch:
+        return spec.stretch
     if spec.crop:
         return spec.crop["w"], spec.crop["h"]
     return (h, w) if spec.rotate in (90, 270) else (w, h)
 
 
-async def start_edit(st, *, user_id: str, aid: str, spec: EditSpec, name: str | None, expires_at: float | None, ephemeral: bool, cap: int) -> EditTask:
+async def start_edit(st, *, user_id: str, aid: str, spec: EditSpec, name: str | None, expires_at: float | None, ephemeral: bool, cap: int,
+                     origin: str = "edit", extra_meta: dict | None = None, key: str | None = None) -> EditTask:
+    """Start an ffmpeg edit of a stored original into a new asset. ``origin`` marks the result (edit | prepared | export); ``extra_meta`` is kept
+    with it (encrypted); ``key`` is the cache key of a prepared asset (a second request for the same key joins the running task)."""
     with st.db.session() as s:
         src_obj = owned(st, s, user_id, aid)
         if src_obj is None:
@@ -801,15 +842,21 @@ async def start_edit(st, *, user_id: str, aid: str, spec: EditSpec, name: str | 
         raise MediaError(422, "unsupported_edit", "Animated GIFs cannot be edited here. Save a frame as PNG first.")
     ff, _ = need_ffmpeg()
     mine = [t for t in tasks(st).values() if t.user_id == user_id and t.status == "running"]
+    if key and (same := next((t for t in mine if t.key == key), None)):
+        return same
     if len(mine) >= 1:
         raise MediaError(429, "busy", "An edit is already running. Wait for it to finish or cancel it.")
     if len([t for t in tasks(st).values() if t.status == "running"]) >= 4:
         raise MediaError(429, "busy", "The server is busy editing other files. Try again in a minute.")
     spec = check_spec(info["kind"], spec, info["width"], info["height"], info["duration"])
-    t = EditTask(id="ed_" + uuid.uuid4().hex[:20], user_id=user_id, source=aid, kind=info["kind"])
+    t = EditTask(id="ed_" + uuid.uuid4().hex[:20], user_id=user_id, source=aid, kind=info["kind"], key=key,
+                 mode="copy" if spec.stream_copy else ("reencode" if info["kind"] == "video" else None))
     tasks(st)[t.id] = t
     _gc_tasks(st)
-    asyncio.get_running_loop().create_task(_run_edit(st, t, src_obj, info, spec, name, expires_at, ephemeral or isinstance(src_obj, str), ff, cap))
+    task = asyncio.get_running_loop().create_task(_run_edit(st, t, src_obj, info, spec, name, expires_at, ephemeral or isinstance(src_obj, str), ff, cap,
+                                                            origin, extra_meta or {}))
+    st.__dict__.setdefault("media_edit_tasks", set()).add(task)  # keep a reference so the task is not collected mid-run
+    task.add_done_callback(st.__dict__["media_edit_tasks"].discard)
     return t
 
 
@@ -819,7 +866,8 @@ def _gc_tasks(st) -> None:
         tasks(st).pop(k, None)
 
 
-async def _run_edit(st, t: EditTask, src, info: dict, spec: EditSpec, name: str | None, expires_at: float | None, ephemeral: bool, ff: str, cap: int) -> None:
+async def _run_edit(st, t: EditTask, src, info: dict, spec: EditSpec, name: str | None, expires_at: float | None, ephemeral: bool, ff: str, cap: int,
+                    origin: str = "edit", extra_meta: dict | None = None) -> None:
     kind = info["kind"]
     try:
         with scratch(st, ephemeral) as tmp, materialise(st, [src]) as [(fh, _m, _n, _k)]:
@@ -835,9 +883,16 @@ async def _run_edit(st, t: EditTask, src, info: dict, spec: EditSpec, name: str 
             if kind == "video":
                 seek = ["-ss", f"{spec.start:.3f}"] if spec.start is not None else []
                 length = (spec.end if spec.end is not None else info["duration"]) - (spec.start or 0)
-                cmd = [ff, *_inp(pr, path, *seek), "-t", f"{length:.3f}", "-map", "0:v:0", *([] if spec.mute else ["-map", "0:a:0?"]), *(["-an"] if spec.mute else []),
-                       "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
-                       "-map_metadata", "-1", "-progress", "pipe:1", "-nostats", "-y", str(out)]
+                keep_audio = not spec.mute and bool(media.get("audio", True))
+                audio = ["-an"] if not keep_audio else (["-c:a", "copy"] if spec.audio_copy else ["-c:a", "aac", "-b:a", "192k", "-af", "aresample=async=1:first_pts=0"])
+                if spec.stream_copy:  # no re-encoding at all: the packets are cut/remuxed as they are
+                    cmd = [ff, *_inp(pr, path, *seek), "-t", f"{length:.3f}", "-map", "0:v:0", *(["-map", "0:a:0?"] if keep_audio else []), "-c", "copy",
+                           *(["-an"] if not keep_audio else []), "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-map_metadata", "-1",
+                           "-progress", "pipe:1", "-nostats", "-y", str(out)]
+                else:
+                    cmd = [ff, *_inp(pr, path, *seek), "-t", f"{length:.3f}", "-map", "0:v:0", *(["-map", "0:a:0?"] if keep_audio else []),
+                           "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", *audio, "-movflags", "+faststart",
+                           "-map_metadata", "-1", "-progress", "pipe:1", "-nostats", "-y", str(out)]
             else:
                 q = ["-q:v", "2"] if ext == "jpg" else []
                 cmd = [ff, *_inp(pr, path), *(["-vf", vf] if vf else []), "-frames:v", "1", *q, "-map_metadata", "-1", "-y", str(out)]
@@ -871,8 +926,10 @@ async def _run_edit(st, t: EditTask, src, info: dict, spec: EditSpec, name: str 
             new_name = clean_name(name, kind) if name else _edited_name(info.get("name") or "", kind, ext)
             edit_meta = {"trim": [spec.start or 0, spec.end] if (spec.start is not None or spec.end is not None) else None, "crop": spec.crop,
                          "rotate": spec.rotate, "flip": spec.flip, "mute": spec.mute}
+            if origin != "edit":
+                edit_meta.update({"stretch": spec.stretch, "pad": spec.pad, "scale": spec.scale, "stream_copy": spec.stream_copy})
             asset = await _store(st, user_id=t.user_id, name=new_name, pr=npr, src=out, size=out.stat().st_size, thumb=thumb if has_thumb else None,
-                                 ephemeral=ephemeral, expires_at=expires_at, origin="edit", extra={"parent": info["id"], "edit": edit_meta})
+                                 ephemeral=ephemeral, expires_at=expires_at, origin=origin, extra={"parent": info["id"], "edit": edit_meta, **(extra_meta or {})})
             t.asset, t.progress, t.status = asset, 1.0, "completed"
     except MediaError as e:
         t.status, t.error = "failed", e.message

@@ -149,5 +149,67 @@ class SarnessMediaMixin:
             os.path.exists(dest) and os.unlink(dest)
             raise
 
+    # ---- OpenJutsu Studio: the live trace of a profile job (engine contract 2.2). Read-only. ----------------------------------------------------
+    async def _peek(self, path: str, *, timeout: float = 15, headers: dict | None = None):
+        """GET that hands back the response whatever its status (the caller decides what a 404 means); network trouble and a refused token raise."""
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                r = await c.get(self.base_url + path, headers={**_h(self.api_key), **(headers or {})})
+        except httpx.HTTPError as e:
+            raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
+        if r.status_code in (401, 403):
+            raise AdapterError("Engine rejected the API token.", kind="auth")
+        return r
+
+    async def _peek_json(self, path: str, *, timeout: float = 15):
+        """-> (status code, parsed JSON or None). 5xx raises as a hiccup (kind unreachable); 404 and other 4xx come back to the caller."""
+        r = await self._peek(path, timeout=timeout)
+        if r.status_code >= 500:
+            raise AdapterError(f"Backend error: HTTP {r.status_code}", kind="unreachable")
+        try:
+            return r.status_code, r.json()
+        except ValueError:
+            return r.status_code, None
+
+    async def media_inspect(self, remote_id: str, after: int = 0):
+        return await self._peek_json(f"/v1/jobs/{remote_id}/inspect?after={int(after)}")
+
+    async def media_graph(self, remote_id: str):
+        return await self._peek_json(f"/v1/jobs/{remote_id}/graph", timeout=30)
+
+    async def media_history(self, remote_id: str):
+        return await self._peek_json(f"/v1/jobs/{remote_id}/history", timeout=30)
+
+    async def media_preview(self, remote_id: str, max_bytes: int = 4 * 1024 * 1024):
+        """-> (status, jpeg bytes or None)."""
+        r = await self._peek(f"/v1/jobs/{remote_id}/preview")
+        if r.status_code >= 500:
+            raise AdapterError(f"Backend error: HTTP {r.status_code}", kind="unreachable")
+        if r.status_code != 200 or len(r.content) > max_bytes:
+            return r.status_code, None
+        return 200, r.content
+
+    async def media_segment_open(self, remote_id: str, n: int, range_header: str | None):
+        """Open (do not read) a completed segment of a profile job. -> (client, response) with the body unread: the caller streams it and then closes
+        both. Nothing is buffered here, and the Range header is passed through so the browser can seek."""
+        c = httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10))
+        try:
+            req = c.build_request("GET", f"{self.base_url}/v1/jobs/{remote_id}/segments/{int(n)}",
+                                  headers={**_h(self.api_key), **({"Range": range_header} if range_header else {})})
+            r = await c.send(req, stream=True)
+        except httpx.HTTPError as e:
+            await c.aclose()
+            raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
+        if r.status_code in (401, 403):
+            await r.aclose()
+            await c.aclose()
+            raise AdapterError("Engine rejected the API token.", kind="auth")
+        return c, r
+
+    async def media_estimate(self, profile_id: str, query: dict):
+        from urllib.parse import urlencode
+        q = urlencode({k: v for k, v in query.items() if v is not None})
+        return await self._peek_json(f"/v1/profiles/{profile_id}/estimate?{q}", timeout=8)
+
     async def media_discard(self, discard_id: str) -> None:
         await self._call("DELETE", f"/v1/generations/{discard_id}?permanent=true")

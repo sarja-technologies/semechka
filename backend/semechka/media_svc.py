@@ -61,6 +61,12 @@ def unavailable_reason(s, mode: str) -> str | None:
 
 
 # ---- parameters ------------------------------------------------------------------------------------
+def clean_text(v) -> str:
+    """An engine-supplied sentence, safe to show: server file paths removed, bounded length."""
+    from .adapters.sarness_media import clean_error
+    return clean_error(v) if v else ""
+
+
 def media_info(m: Model) -> dict:
     return (m.meta or {}).get("media") or {}
 
@@ -235,6 +241,14 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
         elif t == "bool":
             if not isinstance(v, bool):
                 raise ParamError(f"'{name}' must be on or off.")
+        elif t == "json":  # structured values (a box, a list of points): sent as native JSON
+            if isinstance(v, str):
+                try:
+                    v = json.loads(v)
+                except ValueError:
+                    raise ParamError(f"'{name}' must be valid JSON.") from None
+            if not isinstance(v, (list, dict)) or len(json.dumps(v)) > int(spec.get("max_length", 20000)):
+                raise ParamError(f"'{name}' must be a JSON list or object of reasonable size.")
         elif t == "enum" and v not in spec.get("values", []):
             raise ParamError(f"'{name}' must be one of: {', '.join(map(str, spec.get('values', [])))}.")
         out[name] = v
@@ -246,7 +260,7 @@ def validate_profile_inputs(m: Model, inputs: dict, files: dict[str, list[tuple[
 
 async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, uploads: dict[str, list[tuple[Any, str, str]]], save: bool,
                          expires_at: float | None, *, job_id: str | None = None, origin: str | None = None,
-                         sources: dict[str, list[str]] | None = None) -> str:
+                         sources: dict[str, list[str]] | None = None, extra_params: dict | None = None) -> str:
     """Hand source files and settings to the engine, which runs the profile as an ordinary durable job. Raises AdapterError and leaves
     nothing behind. ``uploads`` maps an input name to [(file object or bytes, mime, filename)]; ``sources`` records which library assets they came from."""
     job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
@@ -262,7 +276,8 @@ async def submit_profile(st, user: User, m: Model, b: Backend, inputs: dict, upl
     with st.db.session(write=True) as s:
         s.add(MediaJob(id=job_id, user_id=user.id, kind="video", model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                        prompt_enc=st.vault.encrypt(prompt, "media") if save else None,
-                       params_enc=st.vault.encrypt(json.dumps({**{k: v for k, v in inputs.items() if k != "prompt"}, **({"sources": sources} if sources else {})}), "media") if save else None,
+                       params_enc=st.vault.encrypt(json.dumps({**{k: v for k, v in inputs.items() if k != "prompt"}, **({"sources": sources} if sources else {}),
+                                                        **(extra_params or {})}), "media") if save else None,
                        status="queued", progress_text="Queued", started_at=None, expires_at=expires_at if save else None))
     return job_id
 

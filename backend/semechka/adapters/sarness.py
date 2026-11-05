@@ -193,7 +193,9 @@ def profile_meta(p: dict) -> dict:
                   "profile": {"id": p["id"], "family": p.get("family"), "ready": bool(r.get("ready")), "state": r.get("state"), "reason": r.get("reason"),
                               "official": p.get("official", True), "inputs_schema": p.get("inputs_schema") or {},
                               "operations": (p.get("capabilities") or {}).get("operations") or [],
-                              "estimate_mb": (p.get("memory") or {}).get("estimate_mb")}},
+                              "estimate_mb": (p.get("memory") or {}).get("estimate_mb"),
+                              # OpenJutsu Studio additions (engine contract 2.1): carried as the engine published them; absent on older engines
+                              **{k: _plain(p[k]) for k in ("modes", "limits", "reference_policy", "subject_selection", "operation_status") if p.get(k) not in (None, "", [], {})}}},
     })
 
 
@@ -355,7 +357,8 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
 
         def entry(m: dict) -> dict:
             keep = {k: _plain(m.get(k)) for k in ("name", "category", "family", "kinds", "installed", "managed", "official", "notes",
-                                                  "residency", "readiness", "workload", "memory", "capabilities", "inputs_schema")
+                                                  "residency", "readiness", "workload", "memory", "capabilities", "inputs_schema",
+                                                  "modes", "limits", "reference_policy", "subject_selection", "operation_status")
                     if m.get(k) not in (None, "", [], {})}
             return keep
         out: dict = {"models": {}, "profiles": {}, "external": {}}

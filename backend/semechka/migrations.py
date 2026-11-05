@@ -532,6 +532,11 @@ def apply(db: Database, data_dir: Path | None = None) -> list[str]:
     return ran
 
 
+# Additive tables created by `create_all` with no migration step: a new table changes nothing for an older program, which simply ignores it, so the schema
+# version is not raised (that would make the previous release refuse the data). `downgrade` still removes them.
+UNVERSIONED_TABLES = ["studio_projects"]  # 0.9.0 OpenJutsu Studio projects
+
+
 def downgrade(db: Database, target: int, data_dir: Path | None = None) -> list[str]:
     """Run `down` steps until the database is at `target`. The program must be the newer one (it knows the steps)."""
     if target < 1:
@@ -545,4 +550,7 @@ def downgrade(db: Database, target: int, data_dir: Path | None = None) -> list[s
             MIGRATIONS[v].down(conn, Ctx(data_dir))
             conn.execute(text("update meta set value=:v where key='schema_version'"), {"v": str(v - 1)})
             ran.append(f"{v} -> {v - 1}: undo {MIGRATIONS[v].description}")
+        if ran:  # tables added without a schema version (so an older program still opens the data) go when the database is rolled back
+            for tbl in UNVERSIONED_TABLES:
+                drop_table_if_present(conn, tbl)
     return ran

@@ -61,7 +61,7 @@
   <div class="track" bind:this={track} onpointerdown={trackDown} onpointermove={move} onpointerup={up} onpointercancel={up}>
     {#if !stripFailed}
       {#if !stripLoaded}<span class="sk" aria-hidden="true"></span>{/if}
-      <img class="strip" class:in={stripLoaded} src={stripUrl(asset, n, 56)} alt="" draggable="false" onload={() => (stripLoaded = true)} onerror={() => (stripFailed = true)} />
+      <img class="strip" class:ready={stripLoaded} src={stripUrl(asset, n, 56)} alt="" draggable="false" onload={() => (stripLoaded = true)} onerror={() => (stripFailed = true)} />
     {/if}
     <span class="dim l" style:width={pct(start)}></span>
     <span class="dim r" style:left={pct(end)} style:right="0"></span>
@@ -84,7 +84,7 @@
 <style>
   .tr { display: grid; gap: 8px; }
   .track { position: relative; height: 56px; border-radius: 8px; background: #17181a; overflow: visible; cursor: pointer; touch-action: none; user-select: none; }
-  .strip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 8px; opacity: 0; transition: opacity var(--medium) var(--ease); pointer-events: none; } .strip.in { opacity: 0.92; }
+  .strip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 8px; opacity: 0; transition: opacity var(--medium) var(--ease); pointer-events: none; } .strip.ready { opacity: 0.92; }
   .sk { position: absolute; inset: 0; border-radius: 8px; background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.07) 50%, transparent 80%); background-size: 200% 100%; pointer-events: none; }
   @media (prefers-reduced-motion: no-preference) { .sk { animation: shim 1.3s linear infinite; } @keyframes shim { from { background-position: 200% 0; } to { background-position: -200% 0; } } }
   .dim { position: absolute; top: 0; bottom: 0; background: rgba(8, 9, 10, 0.72); pointer-events: none; }
@@ -107,4 +107,6 @@
   .rs:hover:not(:disabled) { background: rgba(255,255,255,.08); color: var(--m-chrome-fg); } .rs:disabled { opacity: .4; cursor: default; } .rs:focus-visible { outline: 2px solid var(--m-ring); }
   .bad-note { margin: 0; color: #f0a19d; }
   @media (max-width: 560px) { .t.r { margin-left: 0; } .in { width: 76px; } }
+  /* fingers: a wider grip and bigger fields */
+  @media (pointer: coarse) { .h { width: 22px; margin-left: -11px; } .h i { width: 18px; } .h::before { inset: 0 -12px; } .in { min-height: 44px; } .rs { min-height: 44px; } }
 </style>

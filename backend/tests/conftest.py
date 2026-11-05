@@ -237,3 +237,13 @@ def fake_sandbox(monkeypatch):
     return calls
 
 
+
+
+# ---- OpenJutsu Studio: an install whose engine double publishes the full OpenJutsu profile ---------------------------------
+@pytest.fixture
+def sm(app, st, sarness_url):
+    """Signed-in owner, long-lived event loop (edits are background tasks), engine = the scripted OpenJutsu double."""
+    from .studio_helpers import boot, profile_entry
+    api = boot(app, st, sarness_url, [profile_entry()])
+    with api.c:
+        yield api
