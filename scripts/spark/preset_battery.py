@@ -5,7 +5,7 @@ heavy sharpening or any other sign of processing.  usage: preset_battery.py --ba
 import argparse, http.cookiejar, json, os, re, sys, time, urllib.request, urllib.error
 from struct import unpack
 ap = argparse.ArgumentParser(); ap.add_argument("--base", required=True); ap.add_argument("--creds", required=True); ap.add_argument("--user", required=True)
-ap.add_argument("--out", required=True); ap.add_argument("--only", choices=["qwen", "klein"]); A = ap.parse_args()
+ap.add_argument("--out", required=True); ap.add_argument("--only", choices=["qwen", "klein"]); ap.add_argument("--names", default="", help="comma list of battery names to run"); A = ap.parse_args()
 BASE = A.base.rstrip("/"); OUT = os.path.expanduser(A.out); os.makedirs(OUT, exist_ok=True)
 CREDS = dict(l.split("\t", 1) for l in open(os.path.expanduser(A.creds)).read().splitlines() if "\t" in l and not l.startswith("#"))
 jar = http.cookiejar.CookieJar(); op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar)); csrf = ""
@@ -33,7 +33,7 @@ BATTERY = [  # (name, words typed, scene chips)
 ]
 conv = call("POST", "/api/chat/conversations", {"model_id": call("GET", "/api/models/catalog?operation=text")["default"]}); cid = conv["id"]
 for key in ([A.only] if A.only else ["klein", "qwen"]):
-    for name, words, scenes in BATTERY:
+    for name, words, scenes in [b for b in BATTERY if not A.names or b[0] in A.names.split(",")]:
         t0 = time.time()
         r = call("POST", f"/api/chat/conversations/{cid}/generate", {"operation": "image", "content": words, "model_id": M[key]["id"], "preset": "iphone_photo", "scenes": scenes})
         jid = ((r.get("message") or {}).get("media") or {}).get("id")
