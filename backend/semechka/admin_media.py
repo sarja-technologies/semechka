@@ -369,6 +369,8 @@ def input_refs(params: dict, message_meta: dict | None) -> list[tuple[str, str]]
             add({"video": "source", "refs": "reference"}.get(k, str(k)[:24]), x)
     if message_meta:
         add("source", message_meta.get("source"))
+        for x in message_meta.get("refs") or []:          # the further pictures of a chat edit (the first picture is the source)
+            add("reference", x)
         for x in message_meta.get("attachments") or []:
             add("attachment", x)
     seen, out = set(), []
@@ -722,6 +724,9 @@ def message_context(st, s, owner_id: str, msgs: list[Message], admin_id: str) ->
         refs = [("attachment", x) for x in (meta.get("attachments") or []) if isinstance(x, str) and _ID.match(x)]
         if isinstance(meta.get("source"), str) and _ID.match(meta["source"]) and meta["source"] not in [i for _, i in refs]:
             refs.append(("source", meta["source"]))
+        for x in meta.get("refs") or []:
+            if isinstance(x, str) and _ID.match(x) and x not in [i for _, i in refs]:
+                refs.append(("reference", x))
         all_refs[m.id] = refs
     flat = [r for v in all_refs.values() for r in v]
     resolved = {(r["role"], r["id"]): r for r in resolve_refs(st, s, owner_id, list(dict.fromkeys(flat)), admin_id, now, thumbs=True)}

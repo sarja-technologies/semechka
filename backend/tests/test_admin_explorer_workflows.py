@@ -47,3 +47,10 @@ def test_a_real_imajutsu_edit_job_shows_its_source_references_parameters_and_res
     with st.db.session() as s:
         rows = s.execute(select(AuditEvent).where(AuditEvent.action == "media.admin.view")).scalars().all()
         assert len(rows) == 1 and src["id"] not in json.dumps(rows[0].detail) and "beach" not in json.dumps(rows[0].detail)
+
+
+def test_chat_edit_reference_pictures_are_listed_as_inputs_to_the_admin():
+    """A chat edit stores the first picture as ``source`` and the further ones as ``refs`` in the message meta: the explorer must list all of them."""
+    from semechka import admin_media as X
+    got = X.input_refs({}, {"source": "ma_aaaa1111", "refs": ["ma_bbbb2222", "ma_cccc3333"]})
+    assert got == [("source", "ma_aaaa1111"), ("reference", "ma_bbbb2222"), ("reference", "ma_cccc3333")]
