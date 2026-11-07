@@ -11,19 +11,34 @@
   import { opLabel } from '$lib/media/roles';
   import { openViewer } from '$lib/media/viewer.svelte';
 
-  let { tray, slots = [], verdict, operation = null, onreplace, useLabel = 'Use edited version', onadd, empty = [], onslot, dropHint = false }:
+  let { tray, slots = [], verdict, operation = null, onreplace, useLabel = 'Use edited version', onadd, empty = [], onslot, dropHint = false, compact = false, onmoved, tags = {} }:
     { tray: Tray; slots?: Slot[]; verdict?: Verdict; operation?: string | null; onreplace: (key: string) => void; useLabel?: string; onadd?: () => void;
       /** places that still want a file: shown as visible "add" cards so nobody has to guess where to put a source video or a reference picture */
-      empty?: Slot[]; onslot?: (s: Slot) => void; dropHint?: boolean } = $props();
+      empty?: Slot[]; onslot?: (s: Slot) => void; dropHint?: boolean;
+      /** the ordinary chat: small square thumbnails with a short label, the remove button always in view, a count and "Remove all" */
+      compact?: boolean;
+      /** the order changed (drag or Alt+arrows): the part each picture plays follows its place */
+      onmoved?: () => void;
+      /** a short caution per item that is still sent ("Names only") */
+      tags?: Record<string, string> } = $props();
 
   let over = $state<string | null>(null), dragKey = $state<string | null>(null), live = $state('');
   const stateOf = (it: TrayItem) => verdict?.state[it.key] ?? 'used';
   const optionsFor = (it: TrayItem) => slots.filter((s) => s.kind === it.kind);
   const asAsset = (it: TrayItem): Asset | null => it.asset ?? (it.legacy ? { id: it.legacy.id, kind: it.kind === 'video' ? 'video' : 'image', mime: it.legacy.mime, size: it.legacy.size, name: it.name, width: it.legacy.width, height: it.legacy.height,
     url: `/api/chat/attachments/${it.legacy.id}/content` } : null);
-  const ordinal = (it: TrayItem) => { const same = tray.items.filter((x) => x.role === it.role && stateOf(x) !== 'unused'); return same.length > 1 ? same.indexOf(it) + 1 : 0; };
+  const ordinal = (it: TrayItem) => {
+    if (compact) { const used = tray.items.filter((x) => x.kind === it.kind && stateOf(x) !== 'unused' && !x.error); return used.length > 1 && stateOf(it) !== 'unused' ? used.indexOf(it) + 1 : 0; }
+    const same = tray.items.filter((x) => x.role === it.role && stateOf(x) !== 'unused'); return same.length > 1 ? same.indexOf(it) + 1 : 0;
+  };
+  const count = $derived.by(() => { const n = tray.items.length, imgs = tray.items.filter((i) => i.kind === 'image').length; return `${n} ${imgs === n ? (n === 1 ? 'picture' : 'pictures') : (n === 1 ? 'file' : 'files')}`; });
+  const why = (it: TrayItem) => verdict?.why?.[it.key] ?? '';
+  const slotOf = (it: TrayItem) => slots.find((x) => x.input === it.role);
+  /** compact card label: the part it plays, or "Not used" */
+  const short = (it: TrayItem) => (stateOf(it) === 'unused' ? 'Not used' : tags[it.key] ?? slotOf(it)?.short ?? '');
   const caption = (it: TrayItem) => {
     const s = stateOf(it);
+    if (s === 'unused' && why(it)) return `Not used. ${why(it)}`;
     return s === 'unused' ? (operation ? `Not used by ${opLabel(operation).toLowerCase()}` : it.kind === 'video' ? 'Chat can’t read video' : 'Not used') : s === 'extra' ? 'Too many for this role' : s === 'unassigned' ? 'Choose a role' : '';
   };
 
@@ -50,17 +65,20 @@
   function ddrop(e: DragEvent, it: TrayItem) {
     if (!dragKey) return;
     e.preventDefault(); e.stopPropagation();
-    tray.reorder(dragKey, it.key); live = `Moved to position ${tray.items.findIndex((x) => x.key === dragKey) + 1}`; dragKey = over = null;
+    tray.reorder(dragKey, it.key); live = `Moved to position ${tray.items.findIndex((x) => x.key === dragKey) + 1}`; dragKey = over = null; onmoved?.();
   }
   function onkey(e: KeyboardEvent, it: TrayItem) {
     if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
-    e.preventDefault(); tray.move(it.key, e.key === 'ArrowLeft' ? -1 : 1);
+    e.preventDefault(); tray.move(it.key, e.key === 'ArrowLeft' ? -1 : 1); onmoved?.();
     live = `${it.name} moved to position ${tray.items.findIndex((x) => x.key === it.key) + 1} of ${tray.items.length}`;
   }
   function pick(it: TrayItem, e: Event) { tray.setRole(it.key, (e.currentTarget as HTMLSelectElement).value || null); }
 </script>
 
-<div class="tray" role="list" aria-label="Attached files">
+{#if compact && tray.items.length}
+  <div class="chead"><span class="cnt" data-testid="tray-count">{count}</span><button type="button" class="clr" onclick={() => tray.clear()}>Remove all</button></div>
+{/if}
+<div class="tray" class:compact role="list" aria-label="Attached files">
   {#each tray.items as it (it.key)}
     {@const st = stateOf(it)}
     {@const a = asAsset(it)}
@@ -80,9 +98,9 @@
           <MediaThumb kind={it.kind} src={up?.local} name={it.name} badge={false} />
           <div class="errbox" role="alert"><Icon name="warn" size={16} /><span>{it.error}</span></div>
         {:else if a && it.kind === 'video'}
-          <VideoPreview asset={a} onopen={() => open(it)} ratio="132 / 82" />
+          <VideoPreview asset={a} onopen={() => open(it)} ratio={compact ? '1 / 1' : '132 / 82'} />
         {:else if a && it.kind === 'image'}
-          <ImagePreview asset={a} onopen={() => open(it)} ratio="132 / 82" />
+          <ImagePreview asset={a} onopen={() => open(it)} ratio={compact ? '1 / 1' : '132 / 82'} />
         {:else}
           <span class="file"><Icon name="log" size={22} /></span>
         {/if}
@@ -99,7 +117,9 @@
         {#if ordinal(it)}<span class="ord" aria-hidden="true">{ordinal(it)}</span>{/if}
       </div>
       <div class="meta">
-        {#if slots.length && it.kind !== 'file' && !it.error && !(up && up.active)}
+        {#if compact}
+          <span class="cap" class:off={st === 'unused' || !!tags[it.key]} title={tags[it.key] ? `${tags[it.key]}: this model cannot read pictures` : caption(it) || it.name}>{short(it) || '\u00a0'}</span>
+        {:else if slots.length && it.kind !== 'file' && !it.error && !(up && up.active)}
           <span class="sel">
             <select aria-label={`Role of ${it.name}`} value={it.role ?? ''} onchange={(e) => pick(it, e)}>
               <option value="" disabled={!!optionsFor(it).length && !!it.role}>{optionsFor(it).length ? 'Not used' : 'Not used here'}</option>
@@ -110,7 +130,7 @@
         {:else}
           <span class="nm" title={it.name}>{it.name}</span>
         {/if}
-        <span class="sub" title={it.name}>{caption(it) || (a ? [fmtDims(a), fmtSize(a.size)].filter(Boolean).join(' · ') : fmtSize(it.size))}</span>
+        {#if !compact}<span class="sub" title={it.name}>{caption(it) || (a ? [fmtDims(a), fmtSize(a.size)].filter(Boolean).join(' · ') : fmtSize(it.size))}</span>{/if}
       </div>
     </article>
   {/each}
@@ -176,4 +196,16 @@
   .add:hover { background: var(--hover); color: var(--fg); } .add:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }
   @media (pointer: coarse) { .tools, .rm { opacity: 1; } .t, .rm { width: 28px; height: 28px; } .sel select { height: 30px; } }
   @media (max-width: 719px) { .card, .pic { width: 118px; } .pic { height: 74px; } .add { height: 74px; } }
+  .chead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 4px; font-size: 12px; color: var(--fg-muted); }
+  .cnt { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .clr { all: unset; cursor: pointer; font-size: 12px; color: var(--fg-muted); text-underline-offset: 2px; } .clr:hover { color: var(--fg); text-decoration: underline; } .clr:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }
+  .tray.compact { gap: 6px; padding-bottom: 4px; }
+  .compact .card { width: 76px; gap: 3px; } .compact .pic { width: 76px; height: 76px; border-radius: 9px; }
+  .compact .rm { opacity: 1; width: 20px; height: 20px; border-radius: 10px; right: 3px; top: 3px; } .compact .tools { left: 3px; top: 3px; }
+  .compact .t { width: 20px; height: 20px; } .compact .grip { display: none; }
+  .compact .ord { left: 3px; bottom: 3px; }
+  .cap { display: block; font-size: 11px; line-height: 1.2; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+  .cap.off { color: var(--warn); }
+  @media (pointer: coarse) { .compact .rm { width: 26px; height: 26px; border-radius: 13px; } .compact .t { width: 26px; height: 26px; } .clr { min-height: 32px; display: inline-flex; align-items: center; } }
+  @media (max-width: 719px) { .compact .card, .compact .pic { width: 68px; } .compact .pic { height: 68px; } }
 </style>

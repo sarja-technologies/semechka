@@ -1,90 +1,74 @@
 <script lang="ts">
-  // Governed access to someone else's conversations. Nothing is listed or shown until a reason is given; every list
-  // and every conversation opened is a separate audit record that the owner sees on their account page.
+  // Conversations & media: one governed explorer over everything people have said to and made with the models on this server.
+  // Nothing is listed until a reason is given; every list, every conversation, generation record, preview and download is a separate audit entry
+  // that the owner sees on their account page.
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { get, post } from '$lib/api';
+  import { goto } from '$app/navigation';
+  import { get } from '$lib/api';
   import { can } from '$lib/session.svelte';
   import Page from '$lib/components/admin/Page.svelte';
-  import { errMsg, fmtTime } from '$lib/components/admin/util';
-  import { loadUsers, type Opt } from '$lib/components/admin/lookup';
+  import AuditBanner from '$lib/components/admin/AuditBanner.svelte';
+  import ReasonDialog from '$lib/components/admin/ReasonDialog.svelte';
+  import ConversationExplorer from '$lib/components/admin/ConversationExplorer.svelte';
+  import MediaLibrary from '$lib/components/admin/MediaLibrary.svelte';
+  import FileViewer from '$lib/components/admin/FileViewer.svelte';
+  import MediaDrawer from '$lib/components/admin/MediaDrawer.svelte';
+  import { loadMeta, readJob, type Meta } from '$lib/admin/client';
+  import { forgetReason } from '$lib/admin/reason.svelte';
+  import { errMsg } from '$lib/components/admin/util';
+  import type { FileRef, Filters } from '$lib/admin/explorer';
 
-  let policy = $state<string | null>(null), users = $state<Opt[]>([]), who = $state(page.url.searchParams.get('user') ?? '');
-  let reason = $state(''), convs = $state<any[] | null>(null), open = $state<any>(null), err = $state(''), busy = $state(false);
-  onMount(async () => {
-    try { policy = (await get('/api/me/content-access')).policy; } catch { policy = null; }
-    loadUsers().then((u) => (users = u)).catch((e) => (err = errMsg(e)));
+  let policy = $state<string | null>(null), meta = $state<Meta | null>(null), err = $state('');
+  let tab = $state<'conversations' | 'media'>(page.url.searchParams.get('tab') === 'media' ? 'media' : 'conversations');
+  let scope = $state(''), file = $state<FileRef | null>(null), jobDetail = $state<any>(null), openId = $state('');
+  const user = page.url.searchParams.get('user') ?? '';
+  const initial: Filters = user ? { user_id: user } : {};
+  function setTab(t: 'conversations' | 'media') { tab = t; goto(`?tab=${t}`, { replaceState: true }); }
+  onMount(() => {
+    (async () => {
+      try { policy = (await get('/api/me/content-access')).policy; } catch { policy = null; }
+      if (policy === 'audited' && can('admin.content.read')) { try { meta = await loadMeta(); scope = meta.scope; } catch (e) { err = errMsg(e); } }
+    })();
+    return () => forgetReason();
   });
-  const ok = $derived(reason.trim().length >= 10);
-  const person = $derived(users.find((u) => u.id === who)?.label ?? '');
-  async function list() {
-    err = ''; busy = true; open = null;
-    try { convs = await post(`/api/admin/content/users/${who}/conversations`, { reason }); }
-    catch (e) { err = errMsg(e); convs = null; } finally { busy = false; }
-  }
-  async function read(id: string) {
-    err = ''; busy = true;
-    try { open = await post(`/api/admin/content/conversations/${id}`, { reason }); }
-    catch (e) { err = errMsg(e); } finally { busy = false; }
+  async function openJob(id: string) { err = ''; try { const d = await readJob(id); if (d) jobDetail = d; } catch (e) { err = errMsg(e); } }
+  function showConversation(id: string) { jobDetail = null; tab = 'conversations'; openId = ''; queueMicrotask(() => (openId = id)); }
+  const TABS = [['conversations', 'Conversations'], ['media', 'Media library']] as const;
+  function keys(e: KeyboardEvent) {
+    const i = TABS.findIndex(([k]) => k === tab);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); setTab(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length][0]); }
   }
 </script>
 
-<Page title="Conversation access" lead="Read another person's conversations only when there is a legitimate need, such as a legal request or a security incident. Each time you list or open their conversations, the access is recorded with your name and reason, and they can see it in their account.">
+<Page title="Conversations & media" lead="Read conversations and open generated pictures and videos from any model or workflow, only when there is a legitimate need such as a legal request or a security incident.">
   {#if !can('admin.content.read')}
     <div class="notice info"><div>This needs the “Read other people's conversations” permission, which no role includes by default and no wildcard grants.</div></div>
   {:else if policy === 'off'}
-    <div class="notice info"><div>Turned off by the privacy policy: no administrator can read conversations. An owner can change this in <a href="/admin/privacy">Privacy &amp; Retention</a>; the change itself is recorded.</div></div>
+    <div class="notice info"><div>Turned off by the privacy policy: no administrator can read conversations or open media. An owner can change this in <a href="/admin/privacy">Privacy &amp; Retention</a>; the change itself is recorded.</div></div>
+  {:else if policy === null}
+    <div class="notice warn" role="alert"><div>The privacy policy could not be read. Reload the page to try again.</div></div>
   {:else}
-    <section class="panel"><div class="panel-b stack">
-      <div class="two">
-        <div class="field"><label for="cw">Person</label>
-          <select id="cw" class="input" bind:value={who} onchange={() => { convs = null; open = null; }}><option value="">Choose…</option>{#each users as u (u.id)}<option value={u.id}>{u.label}</option>{/each}</select></div>
-        <div class="field"><label for="cr">Reason</label><input id="cr" class="input" maxlength="500" bind:value={reason} placeholder="e.g. Legal hold request 2026-114 from counsel" aria-describedby="crh" />
-          <span id="crh" class="hint">At least 10 characters. Recorded with every access and shown to the person.</span></div>
-      </div>
-      <div class="row"><button class="btn primary" disabled={!who || !ok || busy} onclick={list}>List their conversations</button>
-        {#if who && ok}<span class="small muted">This records one access: you listed {person}'s conversations.</span>{/if}</div>
-      {#if err}<div class="notice bad" role="alert"><div>{err}</div></div>{/if}
-    </div></section>
-
-    {#if convs}
-      <div class="cols">
-        <section class="panel"><div class="panel-h"><h3>Conversations ({convs.length})</h3></div>
-          <ul class="cl">
-            {#each convs as c (c.id)}
-              <li><button class="ci" class:on={open?.id === c.id} onclick={() => read(c.id)} disabled={busy}><span>{c.title || 'Untitled'}</span><span class="tiny muted">{c.mode} · {fmtTime(c.updated_at)}</span></button></li>
-            {:else}<li class="small muted pad">No saved conversations.</li>{/each}
-          </ul>
-          <p class="hint pad">Opening one records another access.</p>
-        </section>
-        <section class="panel" aria-live="polite">
-          {#if open}
-            <div class="panel-h"><h3>{open.title || 'Untitled'}</h3><span class="chip warn">Recorded access</span></div>
-            <div class="panel-b">
-              <p class="hint" style="margin-top:0">Owner: {open.owner.email}. Showing the current version of each reply{open.branches ? `; ${open.branches} earlier version${open.branches === 1 ? ' is' : 's are'} not shown` : ''}. Attachments are counted, not opened.</p>
-              <ol class="msgs">
-                {#each open.messages as m (m.id)}
-                  <li class={m.role}><div class="meta tiny muted">{m.role === 'user' ? 'Person' : m.model || 'Assistant'} · {fmtTime(m.created_at)}{m.attachments ? ` · ${m.attachments} attachment${m.attachments === 1 ? '' : 's'}` : ''}{m.status && m.status !== 'complete' ? ` · ${m.status}` : ''}</div><div class="body">{m.content}</div></li>
-                {/each}
-              </ol>
-            </div>
-          {:else}<div class="panel-b muted small">Choose a conversation to open it.</div>{/if}
-        </section>
-      </div>
-    {/if}
+    <AuditBanner {scope} />
+    {#if err}<div class="notice bad" role="alert"><div>{err}</div></div>{/if}
+    <div class="tabs" role="tablist" aria-label="Explorer sections" tabindex="-1" onkeydown={keys}>
+      {#each TABS as [k, label] (k)}<button role="tab" id={`tab-${k}`} aria-selected={tab === k} aria-controls={`pn-${k}`} tabindex={tab === k ? 0 : -1} class:on={tab === k} onclick={() => setTab(k)}>{label}</button>{/each}
+    </div>
+    <div role="tabpanel" id="pn-conversations" aria-labelledby="tab-conversations" hidden={tab !== 'conversations'}>
+      <ConversationExplorer {meta} {initial} {openId} onjob={openJob} onfile={(f) => (file = f)} onscope={(s) => (scope = s)} />
+    </div>
+    <div role="tabpanel" id="pn-media" aria-labelledby="tab-media" hidden={tab !== 'media'}>
+      {#if tab === 'media'}<MediaLibrary {meta} initial={tab === 'media' && user ? initial : {}} onfile={(f) => (file = f)} onconversation={showConversation} onscope={(s) => (scope = s)} />{/if}
+    </div>
+    <MediaDrawer detail={jobDetail} onclose={() => (jobDetail = null)} onfile={(f) => (file = f)} onconversation={showConversation} />
+    <FileViewer bind:file />
   {/if}
 </Page>
+<ReasonDialog />
 
 <style>
-  .two { display: grid; gap: 4px 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .cols { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr); gap: 16px; margin-top: 16px; align-items: start; }
-  .cl { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
-  .ci { all: unset; box-sizing: border-box; width: 100%; display: grid; gap: 2px; padding: 8px 16px; border-top: 1px solid var(--border); cursor: pointer; font-size: 14px; }
-  .ci:hover { background: var(--hover); } .ci.on { background: var(--selected); } .ci:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .pad { padding: 8px 16px; margin: 0; }
-  .msgs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-  .msgs li { border-left: 2px solid var(--border-strong); padding-left: 12px; }
-  .msgs li.user { border-color: var(--accent); }
-  .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-  @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: var(--s4); }
+  .tabs button { all: unset; box-sizing: border-box; cursor: pointer; padding: 0 16px; min-height: 40px; display: inline-flex; align-items: center; font-weight: 500; color: var(--fg-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button:hover { color: var(--fg); } .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
 </style>

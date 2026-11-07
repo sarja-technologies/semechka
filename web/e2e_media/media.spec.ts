@@ -351,7 +351,9 @@ test('17 pictures attached to an ordinary chat message use the same library path
   await page.goto('/chat?new=' + Date.now());
   await drop(page, composer(page), [F.b]);
   await waitReady(page, 1);
-  await expect(cards(page).first().getByRole('combobox')).toHaveValue('attach');
+  // the ordinary chat shows compact thumbnails (no role menu): the picture is attached and counted, not marked unused
+  await expect(page.getByTestId('tray-count')).toHaveText('1 picture');
+  await expect(cards(page).first()).not.toHaveClass(/unused/);
   await page.getByLabel('Message', { exact: true }).fill('what is in this picture?');
   await page.getByRole('button', { name: /^Send/ }).click();
   const user = page.locator('article.msg.user').last();

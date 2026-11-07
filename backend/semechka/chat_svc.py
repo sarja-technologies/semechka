@@ -302,4 +302,4 @@ def attachments_for(st, s, user_id: str, msgs: list[Message]) -> dict[str, dict]
 
 def public_meta(meta: dict | None) -> dict:
     m = meta or {}
-    return {k: m[k] for k in ("trimmed", "operation", "source", "error") if m.get(k) is not None}
+    return {k: m[k] for k in ("trimmed", "operation", "source", "refs", "preset", "error") if m.get(k) is not None}

@@ -67,7 +67,7 @@
           {/each}
         </div>
       {/if}
-      {#if m.content}<div class="bubble">{#if op === 'image' || op === 'video'}<span class="op tiny">{op === 'image' ? 'Picture' : 'Video'}</span>{/if}{m.content}</div>{/if}
+      {#if m.content}<div class="bubble">{#if op === 'image' || op === 'video'}<span class="op tiny">{op === 'image' ? (m.meta?.preset?.label ?? (m.meta?.preset ? 'iPhone Photo' : 'Picture')) : 'Video'}</span>{/if}{m.content}</div>{/if}
     {:else if media}
       <MediaCard job={m.media} kind={m.kind as 'image' | 'video'} onchange={(j) => act.mediaChanged(m, j)} onuse={act.useSource} />
       {#if m.status === 'error' && m.meta?.error}<div class="notice bad" role="alert"><div>{m.meta.error}</div></div>{/if}

@@ -77,6 +77,7 @@ Generated from `backend/semechka/perms.py`. Evaluation: a permission is allowed 
 | `admin.sso.manage` — Configure single sign-on providers | yes | yes | – | – | – | – | – | – | – |
 | `admin.orgs.manage` — Create and suspend organisations | yes | yes | – | – | – | – | – | – | – |
 | `admin.content.read` — Read other people's conversations | – | – | – | – | – | – | – | – | – |
+| `admin.content.instance` — Read content across every organisation of this instance | – | – | – | – | – | – | – | – | – |
 | **Work Mode** | | | | | | | | | |
 | `work.network` — Give Work Mode sessions internet access | yes | yes | – | – | – | – | – | – | – |
 | `work.skills.manage` — Manage organisation skills for Work Mode | yes | yes | – | – | – | – | – | – | – |

@@ -12,7 +12,7 @@ export default async function setup() {
     owner: { email: OWNER.email, password: OWNER.password, display_name: OWNER.name }, preset: 'business',
     settings: { 'modes.image.enabled': true, 'modes.video.enabled': true, 'privacy.chat_retention_days': 30, 'privacy.ephemeral_allowed': true, 'auth.mfa_policy': 'optional' },
     backend: { adapter: 'sarness', base_url: `http://127.0.0.1:${MP.engine}`, api_key: 'fake-sarness-token' },
-    enable_models: ['local:fake-chat', 'image:fake-turbo', 'video:fake-clip', 'video:openjutsu-minimax-h3'], smoke_model: 'local:fake-chat' } });
+    enable_models: ['local:fake-chat', 'image:fake-turbo', 'image:flux2-klein-4b', 'image:qwen-image-edit-2511', 'image:qwen-image-2512', 'image:z-image-turbo', 'image:qwen-image-2.1', 'image:sdxl-turbo', 'video:fake-clip', 'video:openjutsu-minimax-h3'], smoke_model: 'local:fake-chat' } });
   if (!r.ok()) throw new Error(`setup failed: ${r.status()} ${await r.text()}`);
   const me = await (await ctx.get('/api/me')).json();
   void me;

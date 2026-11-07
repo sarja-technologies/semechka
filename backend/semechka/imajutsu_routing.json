@@ -106,7 +106,7 @@
         "draft": 20,
         "high": 70
       },
-      "seconds_hint": "about 144 s (2.5 min) for 720x1280 at its own 50 steps (guidance 4)",
+      "seconds_hint": "about 86 s for 720x1280 at 30 steps (iPhone Photo); 145 s at its own 50 steps",
       "license": "Apache-2.0",
       "wording": "plain",
       "tier": "best",
@@ -119,7 +119,11 @@
         "candid",
         "screenshot"
       ],
-      "slow": true
+      "slow": true,
+      "preset_steps": {
+        "iphone_photo": 30
+      },
+      "preset_steps_evidence": "2026-11-07, 720x1280, 4 scenes, same seed: 30 steps is visually the same as the engine default 50 (86 s vs 145 s); 20 steps (58 s) shows softer faces and motion smear in low light, so 20 stays the draft count."
     },
     "qwen-image-edit-2511": {
       "native": {
@@ -191,7 +195,7 @@
         },
         {
           "engine_id": "qwen-image-2512",
-          "why": "Best realism (about 2.5 min per picture): real skin, natural expressions, accurate vehicles, believable unflattering mirror selfies and family scenes, when prompted in plain words. Recommended for final photos.",
+          "why": "Best realism (about 1.5 min per picture at 30 steps): real skin, natural expressions, accurate vehicles, believable unflattering mirror selfies and family scenes, when prompted in plain words. Recommended for final photos.",
           "evidence": [
             "docs/imajutsu-bench/run3: qwen-image-2512 (50 steps, guidance 4) gave the most convincing casual smartphone-style photos",
             "'snapshot' / 'candid phone' make it draw a selfie in the foreground, so the builder never writes them"

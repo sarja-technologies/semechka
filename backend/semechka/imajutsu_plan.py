@@ -183,11 +183,17 @@ def outpaint_geometry(spec: dict, source: dict) -> tuple[dict | None, str | None
     return {"pad": p, "canvas": {"width": cw, "height": ch}, "overlap": int(o.get("overlap") or 0)}, None
 
 
-def steps_for(quality: str, entry: dict | None, defaults: dict, limits: dict) -> int | None:
+def steps_for(quality: str, entry: dict | None, defaults: dict, limits: dict, preset: str | None = None) -> int | None:
     """The step count. ``standard`` is ALWAYS the engine's own default for the model (flux2-klein 4, z-image-turbo 9 ...), never a number of ours; draft and high come
     from the routing file or, failing that, half and double of it. None = the engine does not state a default: nothing is sent and the engine fills it in."""
     d = defaults.get("steps")
     if quality == "standard":
+        # a MEASURED exception, recorded in the routing file with its evidence (e.g. Qwen-Image-2512 at 30 steps looks the same as at its own 50 for photographs and
+        # takes 86 s instead of 145 s). Only for a named preset; the plain Generate Image mode keeps the engine's own default.
+        ps = ((entry or {}).get("preset_steps") or {}).get(preset or "")
+        if ps:
+            lo, hi = (limits.get("steps") or [1, 200])[:2]
+            return int(min(max(int(ps), lo), hi))
         return int(d) if d else None
     q = ((entry or {}).get("quality") or {}).get(quality)
     if q is None:
@@ -299,7 +305,7 @@ def plan(spec: dict, ctx: dict) -> dict:
     # ---- settings ------------------------------------------------------------------------------------------------------------------------------------------
     adv = spec.get("advanced") or {}
     defaults = model["defaults"]
-    pln["steps"] = int(adv["steps"]) if adv.get("steps") is not None else steps_for(spec["quality"], entry, defaults, limits)
+    pln["steps"] = int(adv["steps"]) if adv.get("steps") is not None else steps_for(spec["quality"], entry, defaults, limits, "iphone_photo" if mode == "iphone_photo" else None)
     slo, shi = (limits.get("steps") or [1, 200])[:2]
     if pln["steps"] is not None and not slo <= pln["steps"] <= shi:
         errors.append(f"steps must be between {slo} and {shi} for {model['alias']}.")

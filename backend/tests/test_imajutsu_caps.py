@@ -243,23 +243,23 @@ def test_video_and_image_projects_never_mix(app, st, sarness_url, tmp_path):
         assert api.get("/api/media/options", params={"kind": "image"}).status_code == 200
 
 
-def test_iphone_photo_has_three_tiers_and_fast_is_the_default(im):
+def test_iphone_photo_has_three_tiers_and_best_realism_is_the_default(im):
     c = caps(im)
     m = mode(c, "iphone_photo")
-    assert [(t["id"], t["alias"], t["status"], t["default"]) for t in m["tiers"]] == [("fast", "flux2-klein-4b", "ready", True), ("best", "qwen-image-2512", "ready", False),
+    assert [(t["id"], t["alias"], t["status"], t["default"]) for t in m["tiers"]] == [("fast", "flux2-klein-4b", "ready", False), ("best", "qwen-image-2512", "ready", True),
                                                                                      ("polished", "z-image-turbo", "ready", False)]
-    assert [t["label"] for t in m["tiers"]] == ["Fast", "Best realism", "Polished"] and m["default_tier"] == "fast" and m["recommended"]["alias"] == "flux2-klein-4b"
-    assert "2.5 min" in m["tiers"][1]["why"] and "144 s" in m["tiers"][1]["seconds_hint"] and "4 s" in m["tiers"][0]["seconds_hint"]
-    assert c["presets"][0]["tiers"] == m["tiers"] and c["presets"][0]["default_tier"] == "fast"
+    assert [t["label"] for t in m["tiers"]] == ["Fast", "Best realism", "Polished"] and m["default_tier"] == "best" and m["recommended"]["alias"] == "flux2-klein-4b"
+    assert "1.5 min" in m["tiers"][1]["why"] and "86 s" in m["tiers"][1]["seconds_hint"] and "4 s" in m["tiers"][0]["seconds_hint"]
+    assert c["presets"][0]["tiers"] == m["tiers"] and c["presets"][0]["default_tier"] == "best"
     # generate: klein, then z-image-turbo, then qwen-image-2512
     assert [x["engine_id"] for x in mode(c, "generate")["models"] if x["routed"]] == ["flux2-klein-4b", "z-image-turbo", "qwen-image-2512"]
     # the tier chooses the model; the plan carries the tier, the wording and the real default steps
-    for tier, alias, steps, guidance, secs in [(None, "flux2-klein-4b", 4, 1.0, 4.0), ("fast", "flux2-klein-4b", 4, 1.0, 4.0), ("best", "qwen-image-2512", 50, 4.0, 144.0),
+    for tier, alias, steps, guidance, secs in [(None, "qwen-image-2512", 30, 4.0, 86.4), ("fast", "flux2-klein-4b", 4, 1.0, 4.0), ("best", "qwen-image-2512", 30, 4.0, 86.4),
                                                 ("polished", "z-image-turbo", 9, 0.0, 12.0)]:
         p = mkproject(im, "iphone_photo", {"prompt": "my brother at a barbecue", "preset": {"id": "iphone_photo", "scenes": ["outdoor_day"], "finish": False, "tier": tier}})
         plan = im.post(f"/api/imajutsu/projects/{p['id']}/plan", json={}).json()["plan"]
-        assert plan["model"]["alias"] == alias and plan["steps"] == steps and plan["guidance"] == guidance and plan["estimate"]["seconds"] == {"estimate": secs, "basis": "measured"}, tier
-        assert plan["model"]["tier"] == (tier or "fast")
+        assert plan["model"]["alias"] == alias and plan["steps"] == steps and plan["guidance"] == guidance and plan["estimate"]["seconds"] == {"estimate": secs, "basis": "extrapolated" if steps == 30 else "measured"}, tier   # 30 steps is scaled from the measured 50-step run, and says so
+        assert plan["model"]["tier"] == (tier or "best")
         assert (alias == "flux2-klein-4b") == ("handheld phone photo" in plan["prompt"]["final"]) and (alias == "flux2-klein-4b" or plan["prompt"]["final"].startswith("A photograph of"))
     bad = im.put(f"/api/imajutsu/projects/{p['id']}", json={"spec": {"mode": "iphone_photo", "prompt": "x", "preset": {"id": "iphone_photo", "tier": "ultra"}}})
     assert bad.status_code == 422

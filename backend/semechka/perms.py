@@ -106,6 +106,9 @@ REGISTRY: list[Perm] = [
     _p("admin.content.read", "Read other people's conversations", "Administration",
        "Only when the privacy policy allows audited access. Every access needs a reason, is written to the audit log "
        "and is shown to the conversation's owner. Never included in any wildcard.", sensitive=True),
+    _p("admin.content.instance", "Read content across every organisation of this instance", "Administration",
+       "Widens admin.content.read from the administrator's own organisations to the whole instance (all organisations, and people "
+       "who belong to none). Has no effect without admin.content.read. Never included in any wildcard.", sensitive=True),
     # --- Work Mode -----------------------------------------------------------------------------------
     _p("work.network", "Give Work Mode sessions internet access", "Work Mode",
        "Lets a session's container reach the network (when the administrator allows it at all). A rootless container "

@@ -43,7 +43,7 @@ LOOK = {"sentence": "It looks like an unedited handheld phone photo: natural col
         "plain": "It looks like an unedited ordinary photograph: natural colour, mild noise in the dark areas, no filters, no text, no graphics."}
 TIERS = ("fast", "best", "polished")
 TIER_LABELS = {"fast": "Fast", "best": "Best realism", "polished": "Polished"}
-DEFAULT_TIER = "fast"
+DEFAULT_TIER = "best"
 
 # "Phone finish": a subtle photographic recipe (gentle S-curve, lifted shadows, restrained highlights, fine grain, light sharpening). Optional and switchable;
 # applied through the same adjust pipeline as any other adjustment, never mixed into the generation.

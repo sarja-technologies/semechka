@@ -14,6 +14,8 @@
   import MediaAttachmentTray from '$lib/components/media/MediaAttachmentTray.svelte';
   import MediaAssetPicker from '$lib/components/media/MediaAssetPicker.svelte';
   import AttachMenu from '$lib/components/media/AttachMenu.svelte';
+  import PresetOptions from './PresetOptions.svelte';
+  import { portraitSizes, tierOf, type PresetInfo } from '$lib/media/preset';
   import { trayFor, type AddContext } from '$lib/media/tray.svelte';
   import { autoAssign, currentOperation, evaluate, opLabel, plainSlots, profileSlots, type Slot } from '$lib/media/roles';
   import { isLibraryId, type Asset } from '$lib/media/assets';
@@ -171,24 +173,73 @@
   const seconds = $derived(op === 'video' && mp.fps ? mp.frames / mp.fps : 0);
   function mediaParams(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    if (mp.size) { const [w, h] = mp.size.split('x').map(Number); out.width = w; out.height = h; }
+    // iPhone Photo is always 9:16: its own size list (the server checks the shape and the model's limits again)
+    const size = presetOn ? preset.size : mp.size;
+    if (size) { const [w, h] = size.split('x').map(Number); out.width = w; out.height = h; }
     if (String(mp.seed).trim() !== '' && Number.isInteger(Number(mp.seed))) out.seed = Number(mp.seed);
-    if (mp.negative.trim() && mopt?.negative_prompt) out.negative_prompt = mp.negative.trim();
-    if (mp.steps && ui.composer.edit_params) out.steps = Number(mp.steps);
+    if (mp.negative.trim() && mopt?.negative_prompt && !presetOn) out.negative_prompt = mp.negative.trim();
+    if (mp.steps && ui.composer.edit_params && !presetOn) out.steps = Number(mp.steps);
     if (op === 'video' && mp.frames && mp.fps) { out.frames = mp.frames; out.fps = mp.fps; }
     return out;
   }
-  const needSource = $derived(op !== 'text' && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'txt2img' : x === 't2v' || x === 'ti2v')));
-  const cannotUseSource = $derived(op !== 'text' && hasImage && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'edit' || x === 'img2img' : x === 'i2v' || x === 'ti2v')));
+  // ---- the iPhone Photo option of the picture operation (state first: the slots below depend on it)
+  let presetInfo = $state<PresetInfo | null>(null);
+  let preset = $state<{ on: boolean; scenes: string[]; size: string; back: string }>({ on: false, scenes: [], size: '', back: '' });
+  const presetOn = $derived(preset.on && op === 'image' && !prof && !!presetInfo);
+  const needSource = $derived(op !== 'text' && !presetOn && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'txt2img' : x === 't2v' || x === 'ti2v')));
+  const cannotUseSource = $derived(op !== 'text' && !presetOn && hasImage && mopt && mopt.modes?.length && !mopt.modes.some((x: string) => (op === 'image' ? x === 'edit' || x === 'img2img' : x === 'i2v' || x === 'ti2v')));
 
-  const slots = $derived<Slot[]>(prof ? profileSlots(prof, operation) : plainSlots(op, { needSource: !!needSource, canUseSource: !cannotUseSource, vision: true }));
-  const verdict = $derived(evaluate(tray.items, slots, operation));
+  // What the chosen model really does with pictures. All of it comes from the engine's own capabilities (modes, number of pictures), never from a model name.
+  const alias = $derived<string>(model?.label ?? model?.alias ?? 'This model');
+  const sees = $derived(!model || (model.capabilities ?? []).includes('vision'));
+  const takes = $derived<number>(Number(mopt?.references) || 0);
+  // ---- the iPhone Photo option of the picture operation ----------------------------------------------------------
+  let presetTried = false, pendingPreset = $state(false);
+  $effect(() => {
+    if (op !== 'image' || presetInfo || presetTried) return;
+    presetTried = true;
+    get('/api/imajutsu/capabilities').then((c: any) => { const p = c?.presets?.find((x: any) => x.id === 'iphone_photo'); if (p) presetInfo = p; }).catch(() => {});
+  });
+  const sizeChoices = $derived(portraitSizes(mopt?.limits));
+  $effect(() => { if (presetOn && sizeChoices.length && !sizeChoices.some((s) => `${s.w}x${s.h}` === preset.size)) preset.size = `${sizeChoices[0].w}x${sizeChoices[0].h}`; });
+  const presetNoText = $derived(presetOn && !!mopt && !!mopt.modes?.length && !mopt.modes.includes('txt2img'));
+  const tier = $derived(tierOf(presetInfo, modelId));
+  /** Switch the preset on (choosing the model the routing table recommends for it) or off (the earlier model returns). */
+  export function setPreset(on: boolean) {
+    if (!presetInfo) { if (on) { pendingPreset = true; op = 'image'; } return; }
+    if (on === preset.on) return;
+    preset.on = on;
+    if (on) {
+      op = 'image';
+      preset.back = chosen.image ?? '';
+      // the model the routing table recommends for the preset (its default quality level); the quality choice in the options picks another
+      const pick = presetInfo.tiers.find((x) => x.default && x.status === 'ready') ?? presetInfo.tiers.find((x) => x.status === 'ready');
+      const rec = pick?.model_id ?? presetInfo.model_id;
+      if (rec && catalog('image')?.models?.some((m: any) => m.id === rec)) chosen.image = rec;
+    } else {
+      if (preset.back && tierOf(presetInfo, chosen.image) && catalog('image')?.models?.some((m: any) => m.id === preset.back)) chosen.image = preset.back;
+      preset.back = ''; setOpen = false;
+    }
+  }
+  $effect(() => { if (presetInfo && pendingPreset) { pendingPreset = false; untrack(() => setPreset(true)); } });
+
+  const slots = $derived<Slot[]>(prof ? profileSlots(prof, operation) : presetOn ? [] : plainSlots(op, { needSource: !!needSource, canUseSource: !cannotUseSource, vision: true, refs: takes, alias }));
+  const noSlotWhy = $derived<{ image?: string }>(prof ? {} : presetOn ? { image: 'iPhone Photo makes a new picture from words, so it does not use pictures.' }
+    : op === 'text' ? {} : op === 'image' ? { image: `${alias} makes pictures from words only; it cannot edit pictures.` } : { image: `${alias} cannot animate a picture.` });
+  /** a chat model that cannot see pictures still gets the message with its attachments, but only their names: said on each thumbnail */
+  const tags = $derived<Record<string, string>>(op === 'text' && !sees ? Object.fromEntries(tray.items.filter((i) => i.kind === 'image').map((i) => [i.key, 'Names only'])) : {});
+  const verdict = $derived(evaluate(tray.items, slots, operation, { noSlot: noSlotWhy }));
   const slotKey = $derived(JSON.stringify(slots.map((x) => [x.input, x.kind, x.max])));
   // roles follow the operation: files whose role the operation does not use are kept (and shown as unused), never dropped
   $effect(() => { void slotKey; void tray; untrack(() => { autoAssign(tray.items, slots); tray.save(); }); });
+  /** The order is the meaning (the first picture is the one to change, the rest are references): after a move, the roles the program chose follow it. */
+  function moved() { for (const it of tray.items) if (it.roleAuto) it.role = null; autoAssign(tray.items, slots); tray.save(); }
   /** Places that still want a file, shown as visible add cards (an editing operation's source video and reference pictures). */
   const emptySlots = $derived(slots.filter((sl) => tray.items.filter((i) => i.role === sl.input && verdict.state[i.key] === 'used').length < sl.max));
   const usedItems = $derived(tray.ready.filter((i) => verdict.state[i.key] === 'used'));
+  /** pictures attached that the chosen model cannot use at all, and pictures that will really be sent with a picture or video request */
+  const usedPics = $derived(tray.ready.filter((i) => i.kind === 'image').length);
+  const sentCount = $derived(op === 'text' || prof ? 0 : usedItems.filter((i) => i.kind === 'image' && (i.role === 'source' || (op === 'image' && i.role === 'ref'))).length);
   const attProblem = $derived(tray.busy ? 'Wait for the upload to finish.' : tray.failed ? 'Retry or remove the file that did not upload.' : verdict.problems[0] ?? '');
 
   // ---- the draft: what is being written survives moving to another page and a reload (per conversation, in this browser tab) -------------
@@ -201,6 +252,7 @@
         if (d.op && ops.some((o) => o.id === d.op)) op = d.op;
         if (typeof d.text === 'string' && !text) { text = d.text; autosize(); }
         if (d.model) wanted[d.op === 'image' || d.op === 'video' ? d.op : textOp] = d.model;
+        if (d.preset && d.op === 'image') { preset.scenes = Array.isArray(d.preset.scenes) ? d.preset.scenes : []; preset.size = d.preset.size ?? ''; preset.on = true; }
       }
     } catch { /* no saved draft */ }
     restored = true;
@@ -208,11 +260,11 @@
   restoreDraft();
   let saveT: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    const snapshot = JSON.stringify({ op, model: chosen[catOp] ?? null, text });
+    const snapshot = JSON.stringify({ op, model: chosen[catOp] ?? null, text, preset: presetOn ? { scenes: preset.scenes, size: preset.size } : null });
     const key = dkey;
     if (!restored) return;
     clearTimeout(saveT);
-    saveT = setTimeout(() => { try { if (op === 'text' && !text && !chosen[catOp]) sessionStorage.removeItem(key); else sessionStorage.setItem(key, snapshot); } catch { /* storage unavailable */ } }, 250);
+    saveT = setTimeout(() => { try { if (op === 'text' && !text && !chosen[catOp] && !preset.on) sessionStorage.removeItem(key); else sessionStorage.setItem(key, snapshot); } catch { /* storage unavailable */ } }, 250);
     return () => clearTimeout(saveT);
   });
 
@@ -222,7 +274,7 @@
   const promptRequired = $derived(!!textSpec?.required);
   const textTooLong = $derived(!!textSpec?.max_length && text.length > textSpec.max_length);
   const blocked = $derived(!modelId || tray.busy || tray.failed || tooLong || textTooLong || (op !== 'text' && (prof ? (!!pproblem || !!verdict.problems.length || (promptRequired && !text.trim()))
-    : (!text.trim() || (needSource && !hasImage) || !!cannotUseSource || (vmax && seconds > vmax + 1e-9) || !!verdict.problems.length))));
+    : (!text.trim() || (needSource && !hasImage) || presetNoText || (vmax && seconds > vmax + 1e-9) || !!verdict.problems.length))));
   const canSend = $derived(!busy && !blocked && (!!text.trim() || (op === 'text' && usedItems.length > 0) || (!!prof && usedItems.some((i) => i.kind === 'video'))));
   /** What the message carries, in the shape the thread sends. */
   const asAttachment = (i: (typeof tray.items)[number]): Attachment => i.legacy ?? { id: i.asset!.id, name: i.name, kind: i.kind === 'video' ? 'video' : 'image', mime: i.asset!.mime, size: i.asset!.size,
@@ -230,13 +282,16 @@
   function send() {
     if (!canSend) return;
     // only what the chosen operation uses goes with the message; the rest stays where it is until the operation changes back
-    const sent = usedItems.filter((i) => (op === 'text' ? i.kind !== 'video' : prof ? true : i.role === 'source'));
+    // in an ordinary picture request the picture to change comes first and the reference pictures follow in the order shown
+    const sent = usedItems.filter((i) => (op === 'text' ? i.kind !== 'video' : prof ? true : i.role === 'source' || (op === 'image' && i.role === 'ref')))
+      .sort((a, b) => (op === 'image' && !prof ? Number(b.role === 'source') - Number(a.role === 'source') : 0));
     const byRole: Record<string, string[]> = {};
     if (prof) for (const i of sent) if (i.asset && i.role) (byRole[i.role] ??= []).push(i.asset.id);
     const turn: Turn = { content: text.trim(), attachments: sent.map(asAttachment), operation: op, modelId,
       modelLabel: model?.label ?? model?.alias ?? 'Assistant', media: op !== 'text' ? mediaParams() : undefined,
       sourceId: op !== 'text' && !prof ? sent.find((i) => i.kind === 'image')?.asset?.id ?? sent.find((i) => i.kind === 'image')?.legacy?.id ?? null : null,
       label: prof ? `${operation ? opLabel(operation) : 'Edit'} · ${prof.name ?? model?.alias ?? 'editing'}` : undefined,
+      preset: presetOn ? { id: 'iphone_photo', scenes: [...preset.scenes] } : undefined,
       profile: prof ? { inputs: { ...pvals, ...(operation ? { operation } : {}) }, assets: byRole, textField: textField ?? undefined } : undefined };
     if (prof) pvals = {};
     if (turn.content) mine = [turn.content, ...mine.filter((x) => x !== turn.content)].slice(0, 50);
@@ -281,23 +336,15 @@
   const fresh = $derived(!thread.id && !thread.messages.length && !busy);
   const placeholder = $derived(!cat ? 'Message' : cat.error ? cat.error : !cat.models.length ? 'No model is available to you for this'
     : prof ? (textSpec ? (textSpec.label ?? 'Describe what you want').replace(/\s*\([^)]*\)\s*$/, '') : 'Attach a video, then send')
-    : op === 'image' ? (hasImage ? 'Describe the change to the picture' : 'Describe the picture') : op === 'video' ? (hasImage ? 'Describe the motion' : 'Describe the video')
+    : presetOn ? 'Describe the photo' : op === 'image' ? (hasImage ? 'Describe the change to the picture' : 'Describe the picture') : op === 'video' ? (hasImage ? 'Describe the motion' : 'Describe the video')
     : workspace === 'code' ? 'Ask about code, or paste some' : 'Message');
   const retention = $derived(ui.retention?.show && ui.retention.place === 'composer' ? (thread.ephemeral ? 'This conversation is not saved.' : ui.retention.text) : '');
 </script>
 
 <div class="cwrap">
-<MediaDropzone onfiles={addFiles} disabled={!canAttach && !canMedia} hint={prof ? 'Drop videos and reference pictures' : op === 'text' ? 'Drop pictures to attach them' : 'Drop pictures or videos'}
+<MediaDropzone onfiles={addFiles} disabled={!canAttach && !canMedia} hint={prof ? 'Drop videos and reference pictures' : op === 'text' ? 'Drop pictures to attach them' : op === 'image' ? (presetOn ? 'Drop pictures' : takes > 1 ? 'Drop pictures to edit or use as references' : 'Drop a picture to edit') : 'Drop pictures or videos'}
   sub={prof ? 'They are added to the tray above your message' : `Up to ${maxMb} MB each`}>
 <div class="composer" data-op={op}>
-  {#if op === 'text' && hasImage && model && !(model.capabilities ?? []).includes('vision')}
-    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model.label ?? model.alias} cannot read images. It will receive only the file names. Choose a model that can see pictures.</p>
-  {:else if op !== 'text' && !prof && needSource && !hasImage}
-    <p class="hint warnline" role="status"><Icon name="info" size={14} /> {model?.label} {op === 'image' ? 'edits pictures: attach the picture to change.' : 'animates a picture: attach the starting picture.'}</p>
-  {:else if !prof && cannotUseSource}
-    <p class="hint warnline" role="status"><Icon name="warn" size={14} /> {model?.label} {op === 'image' ? 'cannot edit pictures' : 'cannot animate a picture'}. Remove the picture or choose another model.</p>
-  {/if}
-
   <div class="box" data-focus-ring>
     {#if prof && opChoices.length}
       <div class="opsel" role="radiogroup" aria-label={`${prof.inputs_schema.operation.label ?? 'Operation'} (${prof.name ?? 'editing'})`}>
@@ -306,19 +353,33 @@
         {/each}
       </div>
     {/if}
-    {#if tray.items.length || (op !== 'text' && emptySlots.length)}
+    {#if tray.items.length || (prof && emptySlots.length)}
       <div class="trayrow">
-        <MediaAttachmentTray {tray} {slots} {verdict} {operation} onreplace={replace} onadd={canMedia ? () => (pickerOpen = true) : undefined} empty={op !== 'text' ? emptySlots : []} onslot={chooseFor}
-          useLabel={prof ? 'Use as source' : 'Use edited version'} />
+        <MediaAttachmentTray {tray} {slots} {verdict} {operation} onreplace={replace} onadd={prof && canMedia ? () => (pickerOpen = true) : undefined} empty={prof ? emptySlots : []} onslot={chooseFor}
+          useLabel={prof ? 'Use as source' : 'Use edited version'} compact={!prof} {tags} onmoved={prof ? undefined : moved} />
       </div>
     {/if}
     {#if attNote || tray.notes.length || attProblem || verdict.notes.length}
       <div class="tnotes" role="status" aria-live="polite">
         {#if attNote}<span class="bad"><Icon name="warn" size={13} /> {attNote}</span>{/if}
         {#each tray.notes as n}<span class="muted"><Icon name="info" size={13} /> {n}</span>{/each}
-        {#if tray.items.length && attProblem && op !== 'text'}<span class="warn"><Icon name="info" size={13} /> {attProblem}</span>{/if}
+        {#if tray.items.length && attProblem && (op !== 'text' || tray.busy || tray.failed)}<span class="warn"><Icon name="info" size={13} /> {attProblem}</span>{/if}
         {#each verdict.notes as n}<span class="muted"><Icon name="info" size={13} /> {n}</span>{/each}
       </div>
+    {/if}
+  {#if op === 'text' && hasImage && model && !sees}
+    <p class="hint capnote" role="status"><Icon name="warn" size={14} /> <span>{alias} cannot read pictures. It receives only the file {usedPics > 1 ? 'names' : 'name'} of the attached {usedPics > 1 ? 'pictures' : 'picture'}. Choose a model that can see pictures.</span></p>
+    {:else if presetOn && hasImage}
+    <p class="hint capnote" role="status"><Icon name="info" size={14} /> <span>iPhone Photo makes a new picture from words, so attached pictures are not used. Switch it off to edit or reference them.</span></p>
+    {:else if presetNoText}
+    <p class="hint capnote" role="status"><Icon name="warn" size={14} /> <span>{alias} edits pictures and cannot make a new one from words. Choose another quality or model for iPhone Photo.</span></p>
+    {:else if op !== 'text' && !prof && needSource && !hasImage}
+    <p class="hint capnote" role="status"><Icon name="info" size={14} /> <span>{alias} {op === 'image' ? 'edits pictures: attach the picture to change.' : 'animates a picture: attach the starting picture.'}
+      {#if canAttach || canMedia}<button type="button" class="linkish under" onclick={choose}>Add a picture</button>{/if}</span></p>
+    {:else if !prof && cannotUseSource}
+    <p class="hint capnote" role="status"><Icon name="warn" size={14} /> <span>{alias} {op === 'image' ? 'makes pictures from words only' : 'cannot animate a picture'}, so the attached {usedPics > 1 ? 'pictures are' : 'picture is'} not used. Choose a model that can {op === 'image' ? 'edit pictures' : 'animate'} or remove {usedPics > 1 ? 'them' : 'it'}.</span></p>
+    {:else if op === 'image' && !prof && hasImage && takes > 1 && sentCount === 1}
+    <p class="hint capnote soft" role="status"><Icon name="info" size={14} /> <span>{alias} edits the first picture. You can add up to {takes - 1} more as references and call them image 2, image 3 in your words.</span></p>
     {/if}
     <label class="sr-only" for="msg">Message</label>
     <textarea id="msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={() => { hist = -1; autosize(); }} {placeholder}
@@ -337,6 +398,10 @@
           {/each}
         </div>
       {/if}
+      {#if op === 'image' && !prof && presetInfo}
+        <button type="button" class="chipb" class:on={presetOn} aria-pressed={presetOn} disabled={busy} title={presetInfo.description} aria-label={`${presetInfo.label}, 9:16 phone photo look`}
+          onclick={() => setPreset(!preset.on)}><Icon name="phone" size={15} /><span class="ol">{presetInfo.label}</span></button>
+      {/if}
       {#if prof}
         <button type="button" class="round ghostr" class:on={profOpen} aria-expanded={profOpen} aria-controls="profile-settings" title="Settings for this operation" aria-label="Settings for this operation" onclick={() => (profOpen = !profOpen)}><Icon name="sliders" size={16} /></button>
       {:else if op !== 'text' && mopt}
@@ -349,14 +414,21 @@
       {#if busy}
         <button class="round send stop" onclick={onstop} aria-label="Stop (Esc)" title="Stop (Esc)"><Icon name="stop" size={14} /></button>
       {:else}
-        {@const verb = op === 'text' ? 'Send' : op === 'image' ? 'Make picture' : 'Make video'}
-        <button class="round send" onclick={send} disabled={!canSend} aria-label={`${verb} (${sendKeys})`} title={`${verb} (${sendKeys})`}>
-          <Icon name="arrowup" size={18} />
+        {@const verb = op === 'text' ? 'Send' : op === 'image' ? (presetOn ? 'Make iPhone Photo' : sentCount ? 'Edit picture' : 'Make picture') : sentCount && !prof ? 'Animate picture' : 'Make video'}
+        <button class="round send" class:wide={op !== 'text' && !prof} onclick={send} disabled={!canSend} aria-label={`${verb} (${sendKeys})`} title={`${verb} (${sendKeys})`}>
+          <Icon name="arrowup" size={18} />{#if op !== 'text' && !prof}<span class="sl">{presetOn ? 'Make photo' : verb}</span>{/if}
         </button>
       {/if}
     </div>
   </div>
 
+  {#if presetOn && presetInfo}
+    <div class="presetline" role="status">
+      <span class="sum"><Icon name="phone" size={13} /> <strong>{presetInfo.label}</strong> · 9:16 · {preset.size.replace('x', ' × ')}{tier ? ` · ${tier.label}` : ''} · {alias}</span>
+      <span class="acts"><button type="button" class="linkish under" onclick={() => (setOpen = !setOpen)} aria-expanded={setOpen} aria-controls="media-settings">{setOpen ? 'Hide options' : 'Options'}</button>
+        <button type="button" class="linkish under" onclick={() => setPreset(false)}>Turn off</button></span>
+    </div>
+  {/if}
   {#if prof}
     <div id="profile-settings" hidden={!profOpen}><ProfileForm profile={prof} {operation} exclude={textField} bind:values={pvals} bind:problem={pproblem} /></div>
     {#if !profOpen && pproblem && prof.ready}<p class="tiny err" role="status">{pproblem} <button type="button" class="linkish" onclick={() => (profOpen = true)}>Open settings</button></p>{/if}
@@ -364,7 +436,9 @@
   {/if}
   {#if setOpen && op !== 'text' && mopt && !prof}
     <div class="settings" id="media-settings">
-      {#if sizes.length}
+      {#if presetOn && presetInfo}
+        <PresetOptions info={presetInfo} modelId={modelId} sizes={sizeChoices} bind:size={preset.size} bind:scenes={preset.scenes} onpick={(id) => (chosen.image = id)} disabled={busy} />
+      {:else if sizes.length}
         <label class="fld"><span>Size</span><select class="input" bind:value={mp.size}>{#each sizes as s}<option value={s.v}>{s.label}</option>{/each}</select></label>
       {/if}
       {#if op === 'video'}
@@ -372,11 +446,11 @@
         <label class="fld"><span>Frames per second</span><input class="input" type="number" min={rng('fps')[0] ?? 1} max={rng('fps')[1] ?? 60} bind:value={mp.fps} /></label>
         <span class="tiny" class:err={vmax && seconds > vmax} style="align-self:end">{seconds ? `${Math.round(seconds * 10) / 10} s` : ''}{vmax ? ` (at most ${vmax} s)` : ''}</span>
       {/if}
-      {#if ui.composer.edit_params}
+      {#if ui.composer.edit_params && !presetOn}
         <label class="fld"><span>Steps</span><input class="input" type="number" min={rng('steps')[0] ?? 1} max={rng('steps')[1]} bind:value={mp.steps} /></label>
       {/if}
       <label class="fld"><span>Seed</span><input class="input" inputmode="numeric" placeholder="Random" bind:value={mp.seed} /></label>
-      {#if mopt.negative_prompt}<label class="fld wide"><span>Leave out</span><input class="input" placeholder="Things the result should not contain" bind:value={mp.negative} /></label>{/if}
+      {#if mopt.negative_prompt && !presetOn}<label class="fld wide"><span>Leave out</span><input class="input" placeholder="Things the result should not contain" bind:value={mp.negative} /></label>{/if}
       {#if mediaErr}<span class="err">{mediaErr}</span>{/if}
     </div>
   {/if}
@@ -430,7 +504,15 @@
   .trayrow { min-width: 0; margin: 2px -4px 0 -4px; padding: 0 4px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
   .tnotes { display: grid; gap: 2px; font-size: 12px; } .tnotes span { display: flex; gap: 6px; align-items: flex-start; } .tnotes .bad { color: var(--danger); } .tnotes .warn { color: var(--warn); } .tnotes .muted { color: var(--fg-muted); }
   .tnotes :global(svg) { flex: none; margin-top: 2px; }
-  .warnline { display: flex; gap: 6px; align-items: center; margin: 0; }
+  .capnote { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 12px; color: var(--fg-muted); } .capnote :global(svg) { flex: none; margin-top: 2px; }
+  .capnote span { min-width: 0; } .capnote:not(.soft) :global(svg) { color: var(--warn); }
+  .under { text-decoration: underline; }
+  .presetline { display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 0; padding: 0 4px; font-size: 12.5px; color: var(--fg-muted); }
+  .presetline strong { color: var(--fg); font-weight: 600; } .presetline .sum { display: block; min-width: 0; } .presetline .sum :global(svg) { vertical-align: -2px; margin-right: 3px; } .presetline .acts { display: inline-flex; gap: 12px; }
+  .chipb { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 13px; color: var(--fg-muted); cursor: pointer; border: 1px solid var(--border); flex: none; }
+  .chipb:hover:not(:disabled) { color: var(--fg); background: var(--hover); } .chipb.on { color: var(--fg); background: var(--m-ring-soft); border-color: var(--m-ring); }
+  .chipb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; } .chipb:disabled { cursor: default; opacity: 0.6; }
+  .send.wide { width: auto; padding: 0 12px 0 9px; gap: 6px; display: inline-flex; align-items: center; } .sl { font-size: 13px; font-weight: 500; white-space: nowrap; }
   .settings { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-bg); }
   .fld { display: grid; gap: 2px; font-size: 12px; color: var(--fg-muted); width: 130px; }
   .fld.wide { width: min(100%, 320px); }
@@ -440,14 +522,15 @@
   .linkish { all: unset; cursor: pointer; color: var(--fg-muted); text-underline-offset: 2px; }
   .linkish:hover { color: var(--fg); text-decoration: underline; } .linkish:focus-visible { outline: 2px solid var(--accent); }
   @media (max-width: 719px) {
-    .ol { display: none; } .opb { padding: 0 7px; }
+    .ol, .sl { display: none; } .opb { padding: 0 7px; } .chipb { padding: 0 7px; } .send.wide { width: 32px; padding: 0; display: inline-grid; }
     .bar { flex-wrap: nowrap; } .bar .spacer { display: none; } .composer .bar :global(.mc) { flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; } .composer .bar :global(.mc .trigger) { max-width: 100%; min-width: 0; }
     .opsel { flex-wrap: wrap; border-radius: 16px; }
     .foot :global(.ctx) { width: 100%; }
   }
+  @media (pointer: coarse) and (max-width: 719px) { .send.wide { width: 40px; } }
   @media (pointer: coarse) {
     textarea { min-height: 40px; padding: 8px 0; }
-    .round { width: 40px; height: 40px; } .opb { height: 40px; }
+    .round { width: 40px; height: 40px; } .opb, .chipb { height: 40px; }
     .linkish { display: inline-flex; align-items: center; min-height: 40px; }
   }
 </style>

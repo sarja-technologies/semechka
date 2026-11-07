@@ -5,6 +5,7 @@ import json
 import re
 import time
 import uuid
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -538,6 +539,9 @@ class GenIn(BaseModel):
     attachments: list[str] = Field(default_factory=list, max_length=10)  # ids from POST /attachments, or ma_ results
     media: dict | None = None  # image/video parameters (width, height, steps, frames, fps, seed, negative_prompt...)
     source_id: str | None = None  # image/video: the picture to edit or animate (an attachment or a generated image)
+    # image: the shared "iPhone Photo" preset (Imajutsu's prompt builder, 9:16, routed wording); the other attachments are reference pictures
+    preset: Literal["iphone_photo"] | None = None
+    scenes: list[str] = Field(default_factory=list, max_length=12)
     no_save_history: list[dict] | None = None  # ephemeral only: the client-held transcript
 
 
@@ -966,6 +970,9 @@ async def _generate_media(ctx: Ctx, c: Conversation, body: GenIn, regenerate: Me
         prompt = st.vault.decrypt(user_msg.content_enc, "content")
         old = s.get(MediaJob, (regenerate.meta or {}).get("job_id") or "")
         source_id = (regenerate.meta or {}).get("source")
+        ref_ids = list((regenerate.meta or {}).get("refs") or [])
+        preset = ((regenerate.meta or {}).get("preset") or {})
+        preset_id, scenes = body.preset or preset.get("id"), list(body.scenes or preset.get("scenes") or [])
         if body.media is not None:
             media_in = dict(body.media)
         else:  # the same request again, with a new random seed so it is another take, not the same picture
@@ -975,13 +982,21 @@ async def _generate_media(ctx: Ctx, c: Conversation, body: GenIn, regenerate: Me
     else:
         kind = body.operation
         prompt = _check_text(ctx, body.content).strip()
-        source_id = body.source_id or next((i for i in body.attachments if i.startswith(("at_", "ma_"))), None)
+        pics = [i for i in body.attachments if i.startswith(("at_", "ma_"))]
+        source_id = body.source_id or next(iter(pics), None)
+        # every other picture of the message goes along as a reference picture (kind image only; the model must take them)
+        ref_ids = [i for i in dict.fromkeys(pics) if i != source_id] if kind == "image" else []
+        preset_id, scenes = body.preset, list(body.scenes)
         media_in = dict(body.media or {})
         model_id = body.model_id
     _need_mode(ctx, kind)
     m, b = _resolve_model(ctx, model_id, None, kind)
     modes = _media_modes(m)
     src = None
+    refs: list[tuple[dict, bytes]] = []
+    if preset_id and (source_id or ref_ids):
+        raise HTTPException(422, {"code": "unsupported", "message": "iPhone Photo makes a new picture from words; it does not use attached pictures. "
+                                                                    "Remove them or switch the preset off."})
     if source_id:
         src = chat_svc.load_source(st, s, ctx.user.id, source_id)
         if src is None or src[0]["kind"] != "image":
@@ -991,12 +1006,27 @@ async def _generate_media(ctx: Ctx, c: Conversation, body: GenIn, regenerate: Me
             what = "edit pictures" if kind == "image" else "animate a picture"
             raise HTTPException(422, {"code": "unsupported", "message": f"{m.alias} cannot {what}. Choose a model that can, "
                                                                         "or remove the picture."})
+        if ref_ids:
+            cap = int(media_svc.media_info(m).get("references") or 0) if "edit" in modes else 1
+            if 1 + len(ref_ids) > max(1, cap):
+                raise HTTPException(422, {"code": "too_many_pictures", "message": f"{m.alias} takes {'one picture' if cap <= 1 else f'at most {cap} pictures'}; "
+                                                                                  f"{1 + len(ref_ids)} are attached. Remove {1 + len(ref_ids) - max(1, cap)} or choose another model."})
+            for rid in ref_ids:
+                got = chat_svc.load_source(st, s, ctx.user.id, rid)
+                if got is None or got[0]["kind"] != "image":
+                    raise HTTPException(404, {"code": "not_found", "message": "A reference image was not found."})
+                refs.append(got)
     elif modes and kind == "video" and not any(x in modes for x in ("t2v", "ti2v")):
         raise HTTPException(422, {"code": "unsupported", "message": f"{m.alias} needs a starting picture. Attach one."})
     elif modes and kind == "image" and not any(x in modes for x in ("txt2img",)):
         raise HTTPException(422, {"code": "unsupported", "message": f"{m.alias} edits pictures. Attach the picture to change."})
     media_routes.admit_job(ctx, True, kind)
-    params = media_routes.check_params(ctx, kind, m, {**media_in, "prompt": prompt})
+    preset_meta = None
+    if preset_id:  # the words go through the shared builder; the person's own words stay as the message
+        req, preset_meta = await media_routes.preset_params(ctx, kind, m, prompt, media_in, scenes, keep_size=regenerate is not None)
+    else:
+        req = {**media_in, "prompt": prompt}
+    params = media_routes.check_params(ctx, kind, m, req)
     if regenerate is not None:
         parent_id = regenerate.parent_id
         user_msg_id = parent_id
@@ -1009,11 +1039,17 @@ async def _generate_media(ctx: Ctx, c: Conversation, body: GenIn, regenerate: Me
         if source_id and source_id not in [a["id"] for a in atts]:
             atts += _claim(ctx, [source_id], c)
         um = _new_user_message(ctx, c, parent, prompt, [a["id"] for a in atts], kind)
+        if preset_meta:  # so editing the message later keeps the preset
+            um.meta = {**(um.meta or {}), "preset": {"id": preset_meta["id"], "scenes": preset_meta["scenes"]}}
         parent_id = user_msg_id = um.id
     job_id = media_svc.new_job_id()
     meta = {"job_id": job_id, "operation": kind}
     if source_id:
         meta["source"] = source_id
+    if ref_ids:
+        meta["refs"] = ref_ids
+    if preset_meta:
+        meta["preset"] = {"id": preset_meta["id"], "label": preset_meta["label"], "scenes": preset_meta["scenes"]}
     am = Message(conversation_id=c.id, parent_id=parent_id, role="assistant", kind=kind, model_id=m.id, status="pending",
                  content_enc=st.vault.encrypt(prompt, "content"), meta=meta)
     s.add(am)
@@ -1028,6 +1064,8 @@ async def _generate_media(ctx: Ctx, c: Conversation, body: GenIn, regenerate: Me
             ad = adapter_for(b, st)
             ref = await ad.media_upload(src[1], src[0]["mime"], "source." + src[0]["mime"].split("/")[-1])
             params["reference_image" if kind == "image" else "start_image"] = ref
+            if refs:  # the engine numbers the pictures in the order it receives them: the source first
+                params["extra_references"] = [await ad.media_upload(d[1], d[0]["mime"], f"reference-{n + 2}." + d[0]["mime"].split("/")[-1]) for n, d in enumerate(refs)]
         await media_svc.submit(st, ctx.user, kind, m, b, params, True, expires, job_id=job_id, conversation_id=c.id,
                                message_id=am_id)
     except AdapterError as e:

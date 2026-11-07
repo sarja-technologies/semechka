@@ -2,7 +2,11 @@
 // reference pictures), or the single source of a picture/video request. Slots come from what the engine published for the chosen
 // operation, never from a fixed list here; only the per-operation counts that the engine documents in prose are kept in a small table.
 
-export type Slot = { input: string; label: string; kind: 'video' | 'image'; multi: boolean; max: number; min: number; hint?: string };
+export type Slot = { input: string; label: string; kind: 'video' | 'image'; multi: boolean; max: number; min: number; hint?: string;
+  /** one or two words for a compact card ("To edit", "Reference") */
+  short?: string;
+  /** extra files beyond `max` are kept and shown as "not used", with this reason, instead of blocking the message (the ordinary chat; an editing profile blocks) */
+  soft?: boolean; softWhy?: string };
 export type Item = { key: string; kind: 'image' | 'video' | 'file'; name: string; role: string | null };
 
 type Schema = Record<string, any>;
@@ -41,11 +45,19 @@ export function profileSlots(profile: Profile, operation: string | null): Slot[]
   return out;
 }
 
-/** Slots for an ordinary picture or video request: one source picture at most. */
-export function plainSlots(op: 'text' | 'image' | 'video', opts: { needSource: boolean; canUseSource: boolean; vision: boolean }): Slot[] {
-  if (op === 'text') return opts.vision ? [{ input: 'attach', label: 'Attached picture', kind: 'image', multi: true, max: 10, min: 0 }] : [];
+/** Slots for an ordinary request. A picture request takes a source picture and, when the model reports room for more (``refs`` = how many pictures it takes in all),
+ *  reference pictures; a chat message takes pictures for a model that can see. Extra pictures are never dropped silently: they stay in the tray, marked "not used". */
+export function plainSlots(op: 'text' | 'image' | 'video', opts: { needSource: boolean; canUseSource: boolean; vision: boolean; refs?: number; alias?: string }): Slot[] {
+  const who = opts.alias || 'This model';
+  if (op === 'text') return opts.vision ? [{ input: 'attach', label: 'Attached picture', kind: 'image', multi: true, max: 10, min: 0, short: '', soft: true, softWhy: `${who} reads at most 10 pictures in one message.` }] : [];
   if (!opts.canUseSource && !opts.needSource) return [];
-  return [{ input: 'source', label: op === 'image' ? 'Picture to change' : 'First frame', kind: 'image', multi: false, max: 1, min: opts.needSource ? 1 : 0 }];
+  const cap = op === 'image' ? Math.max(1, opts.refs ?? 1) : 1;
+  const out: Slot[] = [{ input: 'source', label: op === 'image' ? 'Picture to change' : 'First frame', kind: 'image', multi: false, max: 1, min: opts.needSource ? 1 : 0,
+    short: op === 'image' ? 'To edit' : 'First frame', soft: true,
+    softWhy: cap > 1 ? '' : `${who} takes ${op === 'image' ? 'one picture' : 'one starting picture'}; this one comes after it.` }];
+  if (cap > 1) out.push({ input: 'ref', label: 'Reference picture', kind: 'image', multi: true, max: cap - 1, min: 0, short: 'Reference', soft: true,
+    softWhy: `${who} takes ${cap} pictures in all; this one comes after them.` });
+  return out;
 }
 
 export const slotFor = (slots: Slot[], item: Pick<Item, 'role'>) => slots.find((s) => s.input === item.role);
@@ -70,22 +82,34 @@ export type Verdict = {
   state: Record<string, 'used' | 'unused' | 'extra' | 'unassigned'>;
   problems: string[];
   notes: string[];
+  /** per item that is not used: the reason in plain words */
+  why: Record<string, string>;
 };
 
 /** Which items count, what is missing and what cannot go together, in plain words. */
-export function evaluate(items: Item[], slots: Slot[], operation: string | null): Verdict {
-  const state: Verdict['state'] = {}, problems: string[] = [], notes: string[] = [];
+export function evaluate(items: Item[], slots: Slot[], operation: string | null, why: { noSlot?: Partial<Record<'image' | 'video', string>> } = {}): Verdict {
+  const state: Verdict['state'] = {}, problems: string[] = [], notes: string[] = [], reason: Record<string, string> = {};
   const where = operation ? ` for ${opLabel(operation).toLowerCase()}` : '';
   for (const it of items) {
     if (it.kind === 'file') { state[it.key] = 'used'; continue; }
     const s = slotFor(slots, it);
     state[it.key] = s && s.kind === it.kind ? 'used' : !slots.some((x) => x.kind === it.kind) ? 'unused' : 'unassigned';
+    if (state[it.key] === 'unused' && why.noSlot?.[it.kind as 'image' | 'video']) reason[it.key] = why.noSlot[it.kind as 'image' | 'video']!;
   }
   const covered = new Set<string>();
   for (const s of slots) {
     // files marked for this slot, plus pictures or videos the program could not place because it is full: they are all "attached for it"
     const first = slots.find((x) => x.kind === s.kind) === s;
     const mine = items.filter((i) => i.kind === s.kind && (i.role === s.input && state[i.key] === 'used' || (first && state[i.key] === 'unassigned')));
+    if (s.soft) {
+      // a soft slot never blocks: what does not fit is kept in the tray, marked not used, with the reason
+      const over = mine.slice(s.max).filter((i) => i.role === s.input || state[i.key] === 'unassigned');
+      // a picture with no place left reports the reason of the last (fullest) slot of its kind: "takes 3 pictures in all", not "takes one"
+      const last = [...slots].reverse().find((x) => x.kind === s.kind && x.softWhy)?.softWhy || 'There is no room for it.';
+      for (const i of over) { state[i.key] = 'unused'; reason[i.key] = i.role === s.input && s.softWhy ? s.softWhy : last; }
+      if (over.length) notes.push(`${over.length === 1 ? `“${over[0].name}” is` : `${over.length} pictures are`} not used. ${reason[over[0].key]}`.trim());
+      mine.splice(s.max);
+    }
     mine.forEach((i, n) => { if (n >= s.max && i.role === s.input) state[i.key] = 'extra'; });
     const n = mine.length;
     const lc = s.label.toLowerCase();
@@ -95,7 +119,7 @@ export function evaluate(items: Item[], slots: Slot[], operation: string | null)
       mine.forEach((i) => covered.add(i.key));
     }
   }
-  const unused = items.filter((i) => state[i.key] === 'unused');
+  const unused = items.filter((i) => state[i.key] === 'unused' && !reason[i.key]);
   if (!operation && unused.some((i) => i.kind === 'video')) notes.push('Chat models do not read video. It stays here and is used when you switch to Video.');
   else if (unused.length) notes.push(`${unused.length === 1 ? `“${unused[0].name}” is` : `${unused.length} files are`} kept here but not used${operation ? ` by ${opLabel(operation).toLowerCase()}` : ''}.`);
   const un = items.filter((i) => state[i.key] === 'unassigned' && !covered.has(i.key));
@@ -103,5 +127,5 @@ export function evaluate(items: Item[], slots: Slot[], operation: string | null)
     const wantVideo = un.some((i) => i.kind === 'video') && !slots.some((s) => s.kind === 'video');
     notes.push(wantVideo ? 'This request cannot use a video.' : `Choose what ${un.length === 1 ? `“${un[0].name}”` : `the ${un.length} unassigned files`} should be used for.`);
   }
-  return { state, problems, notes };
+  return { state, problems, notes, why: reason };
 }

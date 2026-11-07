@@ -81,7 +81,7 @@ def test_generate_with_the_spec_in_the_request_saves_it(im):
 
 def test_iphone_photo_uses_the_preset_and_the_models_wording_rules(im):
     scenes = ["night", "flash", "selfie"]
-    p = mkproject(im, "iphone_photo", {"prompt": "my friend laughing at a bus stop", "preset": {"id": "iphone_photo", "scenes": scenes, "finish": True}})
+    p = mkproject(im, "iphone_photo", {"prompt": "my friend laughing at a bus stop", "preset": {"id": "iphone_photo", "scenes": scenes, "finish": True, "tier": "fast"}})
     d = generate(im, p["id"])
     sub = last_submission()
     assert sub["model"] == "flux2-klein-4b" and (sub["simple"]["width"], sub["simple"]["height"]) == (720, 1280) and len(d["jobs"]) == 1
@@ -456,6 +456,6 @@ def test_best_realism_tier_sends_qwen_its_plain_prompt_and_own_defaults(im):
     p = mkproject(im, "iphone_photo", {"prompt": "a family barbecue", "preset": {"id": "iphone_photo", "scenes": ["outdoor_day"], "finish": False, "tier": "best"}})
     generate(im, p["id"])
     sub = last_submission()
-    assert sub["model"] == "qwen-image-2512" and sub["simple"]["steps"] == 50 and sub["simple"]["guidance"] == 4.0 and (sub["simple"]["width"], sub["simple"]["height"]) == (720, 1280)
+    assert sub["model"] == "qwen-image-2512" and sub["simple"]["steps"] == 30 and sub["simple"]["guidance"] == 4.0 and (sub["simple"]["width"], sub["simple"]["height"]) == (720, 1280)
     pr = sub["simple"]["prompt"]
     assert pr.startswith("A photograph of a family barbecue.") and not any(w in pr.lower() for w in ("snapshot", "phone", "9:16", "selfie", "candid"))

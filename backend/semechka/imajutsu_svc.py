@@ -526,15 +526,16 @@ def choose_model(spec: dict, rows: list[tuple[Model, Backend, dict]], doc: dict)
         e = next((x for x in entries if x["engine_id"] == r[2]["engine_id"]), None)
         # a model chosen by hand that is not on the mode's list still gets the shared facts of the file (native sizes, wording rules), marked as not routed
         return {"row": r, "entry": e or {**routing.shared_facts(doc, r[2]["engine_id"]), "routed": False}, "recommended": bool(first and first[0][0].id == r[0].id)}
-    if mode == "iphone_photo" and (spec.get("preset") or {}).get("tier") and first is not None:
+    if mode == "iphone_photo" and first is not None:
         # a quality tier (fast | best | polished) picks the model of that tier; when that model is not usable the recommended one runs and the plan says so
-        want = spec["preset"]["tier"]
+        asked = (spec.get("preset") or {}).get("tier")
+        want = asked or presets.DEFAULT_TIER          # nothing chosen = the default tier (Best realism); only an explicit choice that cannot run gets a warning
         for e in entries:
             r = by_engine.get(e["engine_id"])
             if e.get("tier") == want and r is not None and operational(mode, r[2], e)[0]:
                 return {"row": r, "entry": e, "recommended": first[0][0].id == r[0].id}
         return {"row": first[0], "entry": first[1], "recommended": True,
-                "warnings": [f"{presets.TIER_LABELS[want]} needs a model that is not available to you; {first[0][2]['alias']} was used instead."]}
+                "warnings": [f"{presets.TIER_LABELS[want]} needs a model that is not available to you; {first[0][2]['alias']} was used instead."] if asked else []}
     if first is not None:
         return {"row": first[0], "entry": first[1], "recommended": True}
     if not rows:

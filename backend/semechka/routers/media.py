@@ -10,6 +10,8 @@ from starlette.datastructures import UploadFile as StarUploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from .. import imajutsu_presets as presets
+from .. import imajutsu_svc as isvc
 from .. import media_lib, media_svc, services
 from ..adapters import AdapterError
 from ..deps import Ctx, current
@@ -62,6 +64,7 @@ def options(kind: str, ctx: Ctx = Depends(current)):
         models.append({"id": m.id, "alias": m.alias, "pinned": m.pinned, "external": services.is_external(m, b),
                        "description": (m.meta or {}).get("description"), "negative_prompt": bool(info.get("negative_prompt")),
                        "modes": info.get("modes") or [], "audio": bool(info.get("audio")),
+                       "references": int(info.get("references") or 0),
                        "schedulers": info.get("schedulers") or [], "limits": info.get("limits") or {},
                        "defaults": media_svc.option_defaults(kind, m, size, vmax),
                        "loaded": (m.meta or {}).get("loaded"),
@@ -90,6 +93,8 @@ class JobIn(BaseModel):
     frames: int | None = None
     fps: int | None = None
     save: bool = True
+    preset: Literal["iphone_photo"] | None = None  # image only: the shared preset (prompt builder, 9:16, routed wording); see preset_params
+    scenes: list[str] = Field(default_factory=list, max_length=12)
 
 
 def admit_job(ctx: Ctx, save: bool, kind: str) -> bool:
@@ -105,6 +110,37 @@ def check_params(ctx: Ctx, kind: str, m: Model, body: dict) -> dict:
         return media_svc.validate_params(kind, m, body, _val(ctx, "media.video_max_seconds"))
     except media_svc.ParamError as e:
         raise HTTPException(422, {"code": "invalid", "message": str(e)}) from e
+
+
+async def preset_params(ctx: Ctx, kind: str, m: Model, prompt: str, media_in: dict, scenes: list[str] | None, *, keep_size: bool = False) -> tuple[dict, dict]:
+    """The iPhone Photo preset for a picture made from a chat (or the media API): the SAME builder, 9:16 size, steps and wording rules as Imajutsu (it runs
+    Imajutsu's plan for the model that was chosen), so there is one implementation. -> (the request for ``check_params``, what to remember about it: id, scenes,
+    label, size, model). ``keep_size``: a regenerate keeps the size of the first picture instead of insisting on one in ``media_in``."""
+    if kind != "image":
+        raise HTTPException(422, {"code": "invalid", "message": "iPhone Photo makes pictures, not videos."})
+    raw: dict = {"mode": "iphone_photo", "prompt": prompt, "negative": str(media_in.get("negative_prompt") or ""), "model": m.id,
+                 "preset": {"id": presets.PRESET_ID, "scenes": scenes or [], "finish": False, "tier": None}}
+    seed = media_in.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool) and seed >= 0:
+        raw["seed"] = seed
+    w, h = media_in.get("width"), media_in.get("height")
+    if isinstance(w, int) and isinstance(h, int) and not isinstance(w, bool) and not isinstance(h, bool) and w > 0 and h > 0:
+        if abs(w / h - 9 / 16) <= 0.015:
+            raw["size"] = {"native": {"width": w, "height": h}}
+        elif not keep_size:
+            raise HTTPException(422, {"code": "invalid", "message": f"iPhone Photo is 9:16 (for example 720×1280); {w}×{h} is another shape. Choose a 9:16 size or switch the preset off."})
+    try:
+        spec = isvc.normalize_spec(ctx.st, ctx.s, ctx.user.id, raw)
+        r = await isvc.build_plan(ctx.st, ctx.s, ctx.user, spec, estimate=False)
+    except isvc.ImajutsuError as e:
+        raise HTTPException(e.status, {"code": e.code, "message": e.message}) from e
+    pln = r["plan"]
+    if pln["errors"]:
+        raise HTTPException(422, {"code": "plan_errors", "message": " ".join(pln["errors"])})
+    body = {"prompt": pln["prompt"]["final"], "width": pln["work"]["width"], "height": pln["work"]["height"], "steps": pln["steps"], "guidance": pln["guidance"],
+            "seed": media_in.get("seed"), **({"negative_prompt": pln["prompt"]["negative"]} if pln["prompt"]["negative_sent"] else {})}
+    return body, {"id": presets.PRESET_ID, "label": presets.PRESET_LABEL, "scenes": list((pln["prompt"].get("preset") or {}).get("scenes") or []),
+                  "width": pln["work"]["width"], "height": pln["work"]["height"], "warnings": pln["warnings"]}
 
 
 def backend_error(e: AdapterError) -> HTTPException:
@@ -196,7 +232,10 @@ async def create_job(body: JobIn, ctx: Ctx = Depends(current)):
         raise HTTPException(422, {"code": "invalid", "message": "This is an editing profile; send it with its source files (profile-jobs)."})
     days = _val(ctx, "privacy.chat_retention_days")
     save = admit_job(ctx, body.save, body.kind)
-    params = check_params(ctx, body.kind, m, body.model_dump())
+    req = body.model_dump()
+    if body.preset:
+        req, _meta = await preset_params(ctx, body.kind, m, body.prompt, req, body.scenes)
+    params = check_params(ctx, body.kind, m, req)
     s.commit()  # release the request transaction before the service opens its own
     try:
         jid = await media_svc.submit(st, ctx.user, body.kind, m, b, params, save,

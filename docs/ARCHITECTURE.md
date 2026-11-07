@@ -52,7 +52,8 @@ secret setting values. Audit rows are hash-chained and contain no message text.
   shows. They are display only; permissions are checked independently on every request.
 - **Governed content access** (`routers/admin_content.py`): permission `admin.content.read` (in no role by default and
   never granted by a wildcard), plus the policy `privacy.admin_content_access`, plus a reason. Each list and each
-  open is an audit event the person sees at `GET /api/me/content-access`.
+  open is an audit event the person sees at `GET /api/me/content-access`. Since 0.9 the same gate backs a unified explorer over
+  every conversation and media item (`admin_media.py`, `routers/admin_media.py`; see `docs/ADMIN_VISIBILITY.md`).
 - **MFA policy** (`auth.mfa_policy`: off, optional, admins, roles or everyone), with one-time recovery codes. A person
   who must use MFA and has not set it up can reach only their account page. An administrator's reset of someone's
   second factor needs a reason and is audited.

@@ -8,7 +8,7 @@ export type Attachment = { id: string; name: string; kind: 'image' | 'text' | st
 export type Msg = {
   id: string; parent_id: string | null; role: 'user' | 'assistant' | string; kind: 'text' | 'image' | 'video' | string;
   content: string; status: string; created_at: number; model: string | null; model_id: string | null;
-  meta: { trimmed?: number; operation?: string; source?: string; error?: string };
+  meta: { trimmed?: number; operation?: string; source?: string; refs?: string[]; preset?: { id: string; label?: string; scenes?: string[] }; error?: string };
   tech: Record<string, any>; attachments?: Attachment[]; media?: any; sources?: any[];
   siblings?: { index: number; count: number; prev: string | null; next: string | null } | null;
   local?: boolean; // a no-save message held only in this tab
@@ -26,6 +26,8 @@ export type Live = {
 };
 export type Turn = { content: string; attachments: Attachment[]; operation: 'text' | 'image' | 'video'; modelId: string;
   modelLabel: string; media?: Record<string, unknown>; sourceId?: string | null;
+  /** The iPhone Photo preset of a picture request (the server builds the prompt, the 9:16 size and the wording for the model). */
+  preset?: { id: string; scenes: string[] };
   /** What the person sees in the conversation when the prompt is empty (an editing profile has no free prompt in most operations). */
   label?: string;
   /** An editing profile (e.g. OpenJutsu): its settings, and the library files for each input in order, sent as one multipart request. */
@@ -260,7 +262,7 @@ export class Thread {
         if (turn.sourceId || turn.attachments.length) throw new ApiError(422, { message: 'Editing or animating a picture needs a saved conversation. Remove the picture or start a saved conversation.' });
         const prompt = mode === 'regenerate' ? anchor!.content : turn.content;
         const model = mode === 'regenerate' ? anchor!.model_id! : turn.modelId;
-        const job = await post('/api/media/jobs', { kind, model_id: model, prompt, save: false, ...(turn.media ?? {}) });
+        const job = await post('/api/media/jobs', { kind, model_id: model, prompt, save: false, ...(turn.media ?? {}), ...(turn.preset ? { preset: turn.preset.id, scenes: turn.preset.scenes } : {}) });
         if (mine !== this.epoch) return;
         const kept = this.before(mode === 'send' ? null : anchor);
         const out = [...kept];
@@ -271,7 +273,7 @@ export class Thread {
         const id = await this.ensure(turn.modelId, ctx, onCreated);
         const body = mode === 'regenerate' ? { mode, parent_id: anchor!.id, model_id: turn.modelId || undefined, media: turn.media }
           : { mode: 'send', operation: kind, content: turn.content, model_id: turn.modelId, attachments: turn.attachments.map((a) => a.id),
-              source_id: turn.sourceId || undefined, media: turn.media, parent_id: mode === 'edit' ? anchor!.parent_id : this.last?.id ?? null };
+              source_id: turn.sourceId || undefined, media: turn.media, ...(turn.preset ? { preset: turn.preset.id, scenes: turn.preset.scenes } : {}), parent_id: mode === 'edit' ? anchor!.parent_id : this.last?.id ?? null };
         const r = await post(`/api/chat/conversations/${id}/generate`, body);
         if (mine !== this.epoch) return;
         this.replaceTail(this.before(mode === 'send' ? null : anchor), mode === 'regenerate' ? [r.message] : [r.user_message, r.message].filter(Boolean));

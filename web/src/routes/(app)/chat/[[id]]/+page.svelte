@@ -52,6 +52,7 @@
         assistantId = asst; collectionIds = []; selected = null;
         if (want) composer?.prefer(want, workspace === 'code' ? 'code' : 'text');
         const op = sp.get('op'); if (op) tick().then(() => composer?.setOp(op));
+        if (sp.get('preset') === 'iphone_photo') tick().then(() => composer?.setPreset(true));
         goto(base, { replace: true, reset: false });
         tick().then(() => composer?.focus());
       } else if (asst && !routeId) assistantId = asst;
@@ -75,7 +76,8 @@
       const cur = composer?.current();
       thread.edit(m, { content: text, attachments: (m.attachments ?? []).filter((a) => !a.missing), operation: op, modelId: composer?.modelFor(o) ?? '',
         modelLabel: catalog(o)?.models?.find((x: any) => x.id === composer?.modelFor(o))?.alias ?? cur?.modelLabel ?? 'Assistant',
-        sourceId: (m.attachments ?? []).find((a) => a.kind === 'image')?.id ?? null });
+        sourceId: (m.attachments ?? []).find((a) => a.kind === 'image')?.id ?? null,
+        preset: m.meta?.preset?.id ? { id: m.meta.preset.id, scenes: m.meta.preset.scenes ?? [] } : undefined });
     },
     regenerate(m) {
       const media = m.kind === 'image' || m.kind === 'video';

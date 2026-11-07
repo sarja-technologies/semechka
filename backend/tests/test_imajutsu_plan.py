@@ -279,7 +279,7 @@ def test_qwen_gets_plain_wording_a_photograph_of_and_no_selfie_unless_chosen():
     s = spec("iphone_photo", prompt="A man fixing a Hilux in a driveway", preset={"id": "iphone_photo", "scenes": ["outdoor_day", "casual"], "finish": False, "tier": None})
     p = run(s, QWEN, entry=e)
     f = p["prompt"]["final"]
-    assert f.startswith("A photograph of a man fixing a Hilux in a driveway.") and p["steps"] == 50 and p["guidance"] == 4.0
+    assert f.startswith("A photograph of a man fixing a Hilux in a driveway.") and p["steps"] == 30 and p["guidance"] == 4.0   # the measured iPhone Photo count, not the engine default 50
     for bad in ("snapshot", "phone", "9:16", "candid", "selfie", "exif", "mirror"):
         assert bad not in f.lower(), bad
     chosen = run({**s, "preset": {**s["preset"], "scenes": ["selfie", "mirror"]}}, QWEN, entry=e)["prompt"]["final"]
@@ -296,3 +296,13 @@ def test_zimage_wording_never_contains_phone():
     z = run(spec("iphone_photo", prompt="a red pickup", preset={"id": "iphone_photo", "scenes": list(presets.SCENES), "finish": False, "tier": None}), ZIMAGE,
             entry=R.entry_for(DOC, "iphone_photo", "z-image-turbo"))
     assert z["prompt"]["final"].startswith("A photograph of a red pickup.") and presets.forbidden_in(z["prompt"]["final"], AVOID) == []
+
+
+def test_qwen_iphone_photo_uses_the_measured_30_steps_but_plain_generate_keeps_the_engine_default():
+    e = R.entry_for(DOC, "iphone_photo", "qwen-image-2512")
+    assert e["preset_steps"] == {"iphone_photo": 30} and "86 s" in e["preset_steps_evidence"]
+    s = spec("iphone_photo", prompt="A man fixing a Hilux", preset={"id": "iphone_photo", "scenes": [], "finish": False, "tier": None})
+    assert run(s, QWEN, entry=e)["steps"] == 30
+    assert run({**s, "quality": "draft"}, QWEN, entry=e)["steps"] == 20 and run({**s, "quality": "high"}, QWEN, entry=e)["steps"] == 70
+    g = run(spec(prompt="a red bicycle"), QWEN, entry=R.entry_for(DOC, "generate", "qwen-image-2512"))
+    assert g["steps"] == 50

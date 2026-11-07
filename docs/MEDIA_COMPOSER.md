@@ -54,6 +54,21 @@ Everything is a `MediaAsset` (no schema change). Uploaded and edited items are m
 `backend/tests/test_media_library.py` (real ffmpeg, real files) and `web/e2e_media/media.spec.ts` (real Chrome, the real server, an engine double that
 speaks the Sarness job protocol with OpenJutsu's real input schema). Run: `cd web && npx vite build && npx playwright test -c playwright.media.config.ts`.
 
+## The ordinary chat: attachments and iPhone Photo
+
+* **One entry point, nothing permanent.** The composer shows a small "+" (upload or Library). Nothing else about attachments is on screen until something is attached: then a compact tray appears
+  (square thumbnails, a count, "Remove all", an always-visible remove button, drag or Alt+Arrow to reorder). Drag and drop anywhere over the window and paste of pictures (one or several; text paste is never intercepted)
+  work as before. The OpenJutsu editing profile keeps its labelled add cards; only plain chat/picture/video lose them.
+* **What a model does with pictures comes from the engine**: `GET /api/media/options` now lists `references` (how many pictures a model takes in all; `modes` says whether it edits). The first picture is the
+  one to change, the others are reference pictures (the engine numbers them image 1, 2, 3 in that order; reordering changes the roles the program chose). More pictures than the model takes are kept, marked "Not used"
+  with the reason, and said in one calm note, never dropped silently; a model that cannot edit marks them all. The server refuses a request that exceeds the model (`too_many_pictures`, 422). A chat model without vision
+  still gets the message and the attachments but only reads their names: the thumbnails say "Names only". The send button says what will happen ("Make picture", "Edit picture", "Animate picture", "Make iPhone Photo").
+* **iPhone Photo** is a chip next to the operation selector, shown only with Picture selected. It sets 9:16 (720 x 1280, a larger 9:16 where the model allows), picks the model the routing table recommends for the
+  preset (the Quality choice in the options picks another tier), and sends `preset: "iphone_photo"` (+ `scenes`) with the picture request. The server runs Imajutsu's own plan for it (`routers/media.preset_params` ->
+  `imajutsu_svc.build_plan`), so the prompt builder, the size, the steps and the wording rules per model are the same as on /imajutsu. The message keeps the person's own words; the preset is remembered on it (label, another take and
+  editing keep it). A preset request takes no pictures. Deep link: `/chat?op=image&preset=iphone_photo`.
+* Tests: `backend/tests/test_chat_attachments.py`, `web/src/lib/media/roles.test.ts` (`npm run test`), `web/e2e_media/chat-attachments.spec.ts` (screenshots in `web/e2e_media/screens/chat-*.png`).
+
 ## Not done / known limits
 
 * Chat models do not read videos: a video in a plain chat message stays in the tray, marked unused.

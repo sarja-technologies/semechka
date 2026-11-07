@@ -223,17 +223,28 @@ def usage(ctx: Ctx = Depends(current)):
                            "note": "Counts only requests where the backend reported token usage."} if ctx.principal.can("tech.usage.tokens") else None}
 
 
+CONTENT_ACCESS_ACTIONS = {
+    "content.list": ("listed your conversations", "listed conversations that included yours"),
+    "content.read": ("opened a conversation", "opened a conversation"),
+    "media.admin.list": ("listed your generated pictures and videos", "listed generated pictures and videos that included yours"),
+    "media.admin.view": ("opened one of your pictures, videos or generation records", "opened one of your pictures, videos or generation records"),
+    "media.admin.download": ("downloaded one of your pictures, videos or attachments", "downloaded one of your pictures, videos or attachments"),
+}
+
+
 @router.get("/me/content-access")
 def content_access(ctx: Ctx = Depends(current)):
-    """Every time an administrator listed or opened this person's conversations, with who and why."""
+    """Every time an administrator listed or opened this person's conversations or media, with who and why. Aggregate lists across several
+    people name every owner whose items were shown (detail.owners), so each of them sees the access."""
     from ..models import AuditEvent, User
-    rows = ctx.s.execute(select(AuditEvent).where(AuditEvent.action.in_(("content.list", "content.read")))
+    rows = ctx.s.execute(select(AuditEvent).where(AuditEvent.action.in_(tuple(CONTENT_ACCESS_ACTIONS)))
                          .order_by(AuditEvent.id.desc()).limit(5000)).scalars().all()
-    mine = [r for r in rows if (r.detail or {}).get("owner") == ctx.user.id]
+    mine = [r for r in rows if (r.detail or {}).get("owner") == ctx.user.id or ctx.user.id in ((r.detail or {}).get("owners") or [])]
     names = {u.id: u.display_name for u in ctx.s.execute(select(User).where(User.id.in_({r.actor for r in mine}))).scalars()}
     return {"policy": ctx.st.settings.deployment(ctx.s, "privacy.admin_content_access"),
-            "events": [{"ts": r.ts, "action": "listed your conversations" if r.action == "content.list" else "opened a conversation",
+            "events": [{"ts": r.ts, "action": CONTENT_ACCESS_ACTIONS[r.action][0 if (r.detail or {}).get("owner") == ctx.user.id else 1], "kind": r.action,
                         "conversation_id": r.target if r.action == "content.read" else None,
+                        "item": r.target if r.action in ("media.admin.view", "media.admin.download") else None,
                         "by": names.get(r.actor, "a deleted administrator"), "reason": (r.detail or {}).get("reason")}
                        for r in mine[:200]]}
 
