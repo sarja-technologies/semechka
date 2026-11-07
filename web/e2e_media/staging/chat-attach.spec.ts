@@ -34,6 +34,7 @@ test('a quiet + is the only way in: no permanent reference field in Picture or V
   await expect(page.getByRole('button', { name: 'Add pictures, videos or files' })).toBeVisible();
   await expect(tray(page)).toHaveCount(0);
   for (const op of ['Picture', 'Video']) {
+    if ((await page.getByRole('radio', { name: op }).count()) === 0) continue;    // an instance or a person without a video model has no Video operation
     await page.getByRole('radio', { name: op }).click();
     await expect(page.getByRole('button', { name: /^Add (picture to change|first frame|reference)/i })).toHaveCount(0);
     await expect(tray(page)).toHaveCount(0);

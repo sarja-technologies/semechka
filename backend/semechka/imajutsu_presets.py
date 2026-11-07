@@ -19,7 +19,7 @@ DEFAULT_COUNT = 1
 SCENES: dict[str, dict] = {
     "outdoor_day": {"label": "Outdoor day",
                     "sentence": "It is daytime outdoors with soft natural sunlight and slightly uneven exposure, like a quick handheld photo.",
-                    "plain": "It is daytime outdoors with soft natural sunlight and slightly uneven exposure, framed by hand."},
+                    "plain": "It is daytime outdoors with soft natural sunlight and slightly uneven exposure."},
     "indoor": {"label": "Indoor",
                "sentence": "It is indoors in ordinary room light with some window light, a little warm, with natural soft shadows.",
                "plain": "It is indoors in ordinary room light with some window light, a little warm, with natural soft shadows."},

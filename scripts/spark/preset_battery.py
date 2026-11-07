@@ -42,7 +42,10 @@ for key in ([A.only] if A.only else ["klein", "qwen"]):
             j = call("GET", f"/api/media/jobs/{jid}")
             if j.get("status") in ("completed", "failed", "cancelled") or time.time() - t0 > 1200: break
             time.sleep(3)
-        outs = j.get("outputs") or []; aid = outs[0].get("id") if outs and isinstance(outs[0], dict) else (outs[0] if outs else None)
+        for _ in range(20):          # the outputs can arrive a moment after the status says completed
+            if j.get("status") != "completed" or j.get("outputs") or j.get("assets"): break
+            time.sleep(2); j = call("GET", f"/api/media/jobs/{jid}")
+        outs = j.get("outputs") or j.get("assets") or []; aid = outs[0].get("id") if outs and isinstance(outs[0], dict) else (outs[0] if outs else None)
         if j.get("status") == "completed" and aid:
             d = call("GET", f"/api/media/assets/{aid}/content", raw=True); open(f"{OUT}/{key}-{name}.png", "wb").write(d)
             w, h = unpack(">II", d[16:24]); print(f"{key}/{name}: {w}x{h} in {time.time()-t0:.0f}s", flush=True)

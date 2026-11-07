@@ -277,3 +277,13 @@ def test_a_tier_whose_model_is_missing_falls_back_and_says_so(app, st, sarness_u
         p = mkproject(member, "iphone_photo", {"prompt": "a dog", "preset": {"id": "iphone_photo", "scenes": [], "finish": False, "tier": "best"}})
         plan = member.post(f"/api/imajutsu/projects/{p['id']}/plan", json={}).json()["plan"]
         assert plan["model"]["alias"] == "flux2-klein-4b" and any("Best realism needs a model that is not available" in w for w in plan["warnings"])
+
+
+def test_plain_scene_wording_never_invites_a_hand_phone_or_camera_into_the_frame():
+    """Measured on the GPU (Qwen-Image 2512, same seed, 2026-11-07): 'framed by hand' made it draw the photographer's arm and thumb in the foreground."""
+    from semechka import imajutsu_presets as P
+    for sid, sc in P.SCENES.items():
+        low = sc["plain"].lower()
+        for w in ("by hand", "handheld", "phone", "iphone", "snapshot", "camera app"):
+            assert w not in low, (sid, w)
+    assert "hand" not in P.LOOK["plain"].lower()
