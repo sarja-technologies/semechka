@@ -65,3 +65,11 @@ def test_a_chat_edit_job_is_labelled_edit_and_an_animation_animate_not_generate(
     assert X.classify_job(chat, None, {"reference_image": "up_1", "extra_references": ["up_2"]}) == ("chat_image", "edit")
     assert X.classify_job(NS(conversation_id="cv_1", kind="video"), None, {"start_image": "up_1"}) == ("chat_video", "animate")
     assert X.classify_job(NS(conversation_id=None, kind="image"), None, {"reference_image": "up_1"}) == ("image_generation", "edit")
+
+
+def test_a_chat_edit_is_read_from_its_message_because_the_engine_upload_ids_are_not_stored():
+    from types import SimpleNamespace as NS
+    from semechka import admin_media as X
+    assert X.classify_job(NS(conversation_id="cv_1", kind="image"), None, {"steps": 40}, {"source": "ma_1", "refs": ["ma_2"]}) == ("chat_image", "edit")
+    assert X.classify_job(NS(conversation_id="cv_1", kind="video"), None, {}, {"source": "ma_1"}) == ("chat_video", "animate")
+    assert X.classify_job(NS(conversation_id="cv_1", kind="image"), None, {}, {"operation": "image"}) == ("chat_image", "generate")

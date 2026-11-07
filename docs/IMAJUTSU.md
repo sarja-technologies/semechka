@@ -11,8 +11,11 @@ Read first: `docs/OPENJUTSU_STUDIO.md` (layers, rules, inspect contract), `docs/
   `qwen-image-2512` (Apache-2.0, 58 GB, txt2img/img2img/inpaint, 50 steps with true CFG: far too slow to be a default), `qwen-image-edit-2511` (Apache-2.0, edit with up to 3 references),
   `z-image-turbo` (Apache-2.0, 8 steps, ~76 s per 720x1280 image; BREAKS on phone-style wording: "phone snapshot" / "9:16" make it draw hands holding phones or poster graphics, plain prompts are good),
   `qwen-image-2.1` (non-commercial, txt2img only), `sdxl-turbo`. FLUX.2 klein 9B and FLUX.2 dev are gated on Hugging Face (login + licence) and no token is configured: not installable here.
-* iPhone-look generation: FLUX.2 klein 4B was clearly the most convincing and consistent (natural light, believable geometry, complex scenes, night, people), so it is the default for
-  **Generate Image** and **iPhone Photo**. The routing table (`backend/semechka/imajutsu_routing.json`, written by the lead from the benchmark) is DATA: models, evidence, reasons. Code never hard-codes a model name.
+* iPhone-look generation: **Best realism** (Qwen-Image 2512 at 30 steps, plain wording) is the default of **iPhone Photo** in Imajutsu and in the chat since 0.10.0; **Fast**
+  (FLUX.2 klein 4B, about 4 s) and **Polished** (Z-Image Turbo) are one click away under *Quality*. On the 2026-11-07 runs (720x1280, same seeds, four scenes) Qwen gave the most convincing skin,
+  light and unflattering casual scenes, and 30 steps looked the same as its own 50 (86 s instead of 145 s; 20 steps showed softer faces, so 20 stays the draft count). Klein stays the default of
+  **Generate Image** and of the edit-class modes that take several pictures. The page, the plan and the chat all name the same model: the mode's recommendation is the model of the default tier.
+  The routing table (`backend/semechka/imajutsu_routing.json`) is DATA: models, evidence, reasons, per-preset steps (`preset_steps`). Code never hard-codes a model name.
 * Cost model on the GB10 (unified memory): time is roughly linear in pixels x steps x parameters; 720x1280 is the practical native size for 9:16; larger outputs are produced by a separate scaling step, labelled as scaling.
 
 ## Modes (labels exactly as shown in the UI)

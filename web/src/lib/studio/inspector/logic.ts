@@ -184,6 +184,7 @@ export function sceneHeadline(d: InspectSummary | null | undefined): string {
   if (!sc) return 'Scenes are not reported for this job';
   const total = sc.total, cur = sc.current, done = sc.completed ?? sc.segments?.filter((s) => s.state === 'saved').length ?? 0;
   const ph = phaseOf(d);
+  if ((ph === 'completed' || ph === 'finishing') && !total && !done) return 'Finished';   // a picture job has no scenes: do not say "0 scenes saved"
   if (ph === 'completed' || ph === 'finishing') return total != null ? `All ${total} scenes saved` : `${done} scenes saved`;
   if (cur != null) return total != null ? `Scene ${cur} of ${total}` : `Scene ${cur}, total not known yet`;
   if (done > 0) return total != null ? `${done} of ${total} scenes saved` : `${done} scenes saved, total not known yet`;

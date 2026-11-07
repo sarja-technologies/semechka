@@ -38,11 +38,11 @@ async function addRefs(page: Page, files: string[]) {
   await page.getByTestId('ref-file').setInputFiles(files);
   await expect(page.getByTestId('ref-gallery').locator('li[data-ref-index]')).toHaveCount(before + files.length, { timeout: 60_000 });
 }
-async function chooseModel(page: Page, alias: string) {
+async function chooseModel(page: Page, alias: RegExp) {
   await page.getByTestId('advanced-toggle').check();
   const det = page.getByTestId('panel-model').locator('details').first();
   if (!(await det.evaluate((e: HTMLDetailsElement) => e.open))) await page.getByTestId('panel-model').getByText(/^All models/).click();
-  await page.getByTestId('panel-model').getByRole('radio', { name: new RegExp(alias) }).check();
+  await page.getByTestId('panel-model').getByRole('radio', { name: alias }).check();
   await settle(page);
 }
 /** Press Generate; wait for the run to finish on the real GPU; save the result and return its size, the job and the seconds it took. */
@@ -95,7 +95,7 @@ test('Edit Image (Qwen-Image-Edit 2511): an instruction edit of one picture', as
   await addSource(page, F('klein.png'));
   await page.getByTestId('prompt-input').fill('Change the colour of the top the person is wearing to bright red. Keep everything else exactly as it is.');
   await settle(page);
-  await expect(page.getByTestId('model-name')).toContainText(/qwen-image-edit/i);
+  await expect(page.getByTestId('model-name')).toContainText(/qwen-image[ -]?edit/i);
   const r = await run(page, 'edit');
   expect(r.w).toBeGreaterThan(300);
 });
@@ -139,7 +139,7 @@ test('Replace Subject with two reference pictures (FLUX.2 klein)', async ({ page
   await addSource(page, F('qwen.png'));
   await page.getByTestId('prompt-input').fill('Replace the main person with the person from the reference pictures');
   await addRefs(page, [F('klein.png'), F('edit.png')]);
-  await chooseModel(page, 'flux2-klein-4b');
+  await chooseModel(page, /klein/i);
   await expect(page.getByTestId('badge-used')).toHaveCount(2);
   const r = await run(page, 'replace');
   expect(r.w).toBeGreaterThan(300);

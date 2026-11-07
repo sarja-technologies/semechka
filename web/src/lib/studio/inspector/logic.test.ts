@@ -290,3 +290,8 @@ test('a cancelled job (stage "failed") is shown as cancelled, never as failed or
   const cells = sceneCells({ ...d, scenes: { total: 3, completed: 1, current: 2, segments: [{ index: 1, state: 'saved' }] } });
   assert.deepEqual(cells.map((c) => c.state), ['saved', 'interrupted', 'pending']);
 });
+
+test('a finished picture job (no scenes at all) says Finished, never "0 scenes saved"', () => {
+  const d: any = { status: 'completed', trace_available: false, scenes: { total: null, completed: 0, current: null, segments: [] }, progress: null };
+  assert.equal(sceneHeadline(d), 'Finished');
+});

@@ -309,16 +309,17 @@ def attachment_summary(st, a: ChatAttachment, admin_id: str, now: float, *, thum
 
 
 # ---- classification -----------------------------------------------------------------------------------
-def _plain_operation(params: dict) -> str:
-    """What a plain (non-workflow) job did, from what it was given: a source picture means an edit (image) or an animation (video)."""
-    if params.get("reference_image") or params.get("extra_references"):
-        return "edit"
+def _plain_operation(params: dict, meta: dict | None = None, kind: str = "image") -> str:
+    """What a plain (non-workflow) job did, from what it was given: a source picture means an edit (image) or an animation (video).
+    The engine's own upload ids are not kept in the stored parameters, so a chat job is read from its message too (``source``)."""
+    if params.get("reference_image") or params.get("extra_references") or (meta or {}).get("source"):
+        return "animate" if kind == "video" else "edit"
     if params.get("start_image"):
         return "animate"
     return "generate"
 
 
-def classify_job(j: MediaJob, model: Model | None, params: dict) -> tuple[str, str]:
+def classify_job(j: MediaJob, model: Model | None, params: dict, meta: dict | None = None) -> tuple[str, str]:
     """-> (workflow, operation)."""
     if isinstance(params.get("imajutsu"), dict):
         return "imajutsu", str(params["imajutsu"].get("operation") or params["imajutsu"].get("engine_mode") or "generate")
@@ -327,8 +328,8 @@ def classify_job(j: MediaJob, model: Model | None, params: dict) -> tuple[str, s
     if _has_profile(model):
         return "openjutsu", str(params.get("operation") or "run")
     if j.conversation_id:
-        return f"chat_{j.kind}", _plain_operation(params)
-    return f"{j.kind}_generation", str(params.get("operation") or _plain_operation(params))
+        return f"chat_{j.kind}", _plain_operation(params, meta, j.kind)
+    return f"{j.kind}_generation", str(params.get("operation") or _plain_operation(params, meta, j.kind))
 
 
 def display_status(row, now: float, active: tuple = media_svc.ACTIVE) -> str:
@@ -412,7 +413,7 @@ def resolve_refs(st, s, owner_id: str, refs: list[tuple[str, str]], admin_id: st
 # ---- jobs ---------------------------------------------------------------------------------------------
 def _job_entry(st, j: MediaJob, ctx_maps: dict, outputs: list[dict], now: float, params: dict) -> dict:
     model = ctx_maps["models"].get(j.model_id)
-    wf, op = classify_job(j, model, params)
+    wf, op = classify_job(j, model, params, ctx_maps.get("msgmeta", {}).get(j.message_id))
     status = display_status(j, now)
     end = j.finished_at or now
     elapsed = max(0.0, end - (j.started_at or j.created_at)) if j.status not in media_svc.ACTIVE or j.started_at else None
@@ -436,6 +437,8 @@ def job_entries(st, s, jobs: list[MediaJob], admin_id: str, *, thumbs: bool = Tr
         return []
     now = time.time()
     maps = _maps(s, {j.user_id for j in jobs})
+    mids = [j.message_id for j in jobs if j.message_id]
+    maps["msgmeta"] = {m.id: m.meta or {} for m in s.execute(select(Message).where(Message.id.in_(mids))).scalars()} if mids else {}
     outs: dict[str, list[dict]] = {}
     if with_outputs:
         for a in s.execute(select(MediaAsset).where(MediaAsset.job_id.in_([j.id for j in jobs])).order_by(MediaAsset.created_at)).scalars():

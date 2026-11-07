@@ -3,6 +3,7 @@
 
     ~/semechka-deploy/<name>/app/venv/bin/python -I model_enable.py --data ~/semechka-deploy/<name>/data \
         --model video:openjutsu-minimax-h3 --roles owner,platform_admin --modes video [--dry-run]
+    (also image models, e.g. --model image:qwen-image-2512 --roles member,owner --modes image; the proof uses the first mode named)
 
 1. discovers the backend's models (adds this one, disabled, with no grants, as for any new model)
 2. enables it and allows exactly the named roles for exactly the named modes (existing rules for this model are kept)
@@ -86,14 +87,14 @@ def main() -> int:
     with st.db.session() as s:
         for rid in sorted(have):
             p = services.principal_for_role(s, rid)
-            can = any(mm.id == mid for mm, _ in services.accessible_models(s, p, st, "video"))
+            can = any(mm.id == mid for mm, _ in services.accessible_models(s, p, st, modes[0]))
             via_all = p.can("models.use_all")          # a built-in permission: such a role may use ANY enabled model, granted or not
             want = rid in roles or via_all
             flag = "OK" + (" (granted)" if rid in roles else " (built-in models.use_all, not a grant made here)" if via_all else "")
             if can != want:
                 flag = "UNEXPECTED"
             ok &= can == want
-            print(f"  view-as {rid:20} can use in Video: {str(can):5}  {flag}")
+            print(f"  view-as {rid:20} can use in {modes[0]}: {str(can):5}  {flag}")
         print("audit chain verifies:", audit.verify_chain(s).get("ok"))
     after = fingerprint(data / "semechka.db", a.model)
     same = all(after[k] == before[k] for k in before)
