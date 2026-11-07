@@ -188,7 +188,7 @@
       "models": [
         {
           "engine_id": "flux2-klein-4b",
-          "why": "Fast (about 4 s): the most convincing casual phone look in the corrected benchmark, wide-angle, good night and neon scenes, strong prompt adherence. The default, so the page stays responsive while you iterate.",
+          "why": "Fast (about 4 s): the most convincing casual phone look in the corrected benchmark, wide-angle, good night and neon scenes, strong prompt adherence. One click away (Fast) for quick iterations; the default tier is Best realism.",
           "evidence": [
             "docs/imajutsu-bench/run3 (each model at its own defaults): FLUX.2 klein 4B is the fast option with a convincing phone look"
           ]
@@ -210,7 +210,7 @@
           ]
         }
       ],
-      "default_tier": "fast"
+      "default_tier": "best"
     },
     "edit": {
       "models": [

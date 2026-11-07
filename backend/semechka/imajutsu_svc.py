@@ -533,7 +533,7 @@ def choose_model(spec: dict, rows: list[tuple[Model, Backend, dict]], doc: dict)
         for e in entries:
             r = by_engine.get(e["engine_id"])
             if e.get("tier") == want and r is not None and operational(mode, r[2], e)[0]:
-                return {"row": r, "entry": e, "recommended": first[0][0].id == r[0].id}
+                return {"row": r, "entry": e, "recommended": want == presets.DEFAULT_TIER}
         return {"row": first[0], "entry": first[1], "recommended": True,
                 "warnings": [f"{presets.TIER_LABELS[want]} needs a model that is not available to you; {first[0][2]['alias']} was used instead."] if asked else []}
     if first is not None:
@@ -600,6 +600,10 @@ def capabilities(st, s, principal) -> dict:
               "why": r["why"], "seconds_hint": r["seconds_hint"], "default": r["tier"] == presets.DEFAULT_TIER}
              for r in iphone.get("models", []) if r.get("routed") and r.get("tier")]
     iphone["tiers"], iphone["default_tier"] = tiers, presets.DEFAULT_TIER
+    # the recommendation of the mode IS the model of the default tier (Best realism), so the page, the plan and the chat all name the same model
+    dflt = next((r for r in iphone.get("models", []) if r.get("routed") and r.get("tier") == presets.DEFAULT_TIER and r.get("model_id") and r.get("status") in ("ready", "available", "experimental")), None)
+    if dflt is not None:
+        iphone["recommended"] = {"model_id": dflt["model_id"], "alias": dflt["alias"], "why": dflt["why"], "evidence": dflt["evidence"]}
     return {"modes": modes, "presets": [presets.info((iphone.get("recommended") or {}).get("model_id"), tiers)], "aspects": aspects_list(),
             "roles": [{"id": r} for r in plan_mod.ROLES], "qualities": list(plan_mod.QUALITY),
             "limits": {"max_pictures": MAX_REFS, "max_count": MAX_COUNT, "reference_max_edge": REF_MAX_EDGE, "preview_edge": adjust.PREVIEW_EDGE,

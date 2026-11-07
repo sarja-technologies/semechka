@@ -16,7 +16,7 @@
   {#if cur}
     <div class="cur" data-testid="model-current">
       <div class="top"><strong data-testid="model-name">{modelName(cur)}</strong>
-        {#if !manual}<span class="st-badge ok">Recommended</span>{:else}<span class="st-badge info">Chosen by you</span>{/if}
+        {#if manual}<span class="st-badge info">Chosen by you</span>{:else if cur.model_id === rec?.model_id}<span class="st-badge ok">Recommended</span>{:else}<span class="st-badge info">Your quality choice</span>{/if}
         {#if cur.status === 'experimental'}<span class="st-badge warn">Experimental</span>{/if}
         {#if cur.slow}<span class="st-badge warn">Slow</span>{/if}
         {#if refs(cur)}<span class="tiny muted">{refs(cur)}</span>{/if}</div>

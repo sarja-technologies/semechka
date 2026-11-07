@@ -94,7 +94,13 @@ export class Imajutsu {
   get mode() { return entryOfKey(this.caps, this.spec.mode); }
   get needs() { return needsOf(this.spec.mode, this.mode); }
   /** the model that runs: the one chosen by hand, else the recommended one */
-  get modelId(): string | null { return this.spec.model ?? this.mode?.recommended?.model_id ?? null; }
+  get modelId(): string | null { return this.spec.model ?? this.tierModel ?? this.mode?.recommended?.model_id ?? null; }
+  /** iPhone Photo: the quality tier (Fast, Best realism, Polished) picks the model; nothing chosen = the default tier, which the server also recommends */
+  get tierId(): string | null { return this.spec.mode === 'iphone_photo' ? this.spec.preset.tier ?? this.mode?.default_tier ?? null : null; }
+  get tierModel(): string | null {
+    const t = this.mode?.tiers?.find((x) => x.id === this.tierId);
+    return t && t.model_id && runnable(t.status) ? t.model_id : null;
+  }
   get entry() { return modelEntry(this.mode, this.modelId); }
   get source(): Asset | null { return this.spec.source_asset ? this.assets[this.spec.source_asset] ?? null : null; }
   get roles() { return rolesFor(this.caps); }
@@ -321,6 +327,8 @@ export class Imajutsu {
   }
 
   chooseModel(id: string | null) { this.edit((s) => { s.model = id; }); }
+  /** iPhone Photo quality: Fast | Best realism | Polished. A tier replaces a model chosen by hand. */
+  chooseTier(id: string) { this.edit((s) => { s.preset.tier = id; s.model = null; }); }
   toggleChip(id: string) { this.edit((s) => { s.preset.scenes = s.preset.scenes.includes(id) ? s.preset.scenes.filter((x) => x !== id) : [...s.preset.scenes, id]; }); }
 
   // ---- pictures -----------------------------------------------------------------------------------------------------------------

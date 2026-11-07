@@ -54,3 +54,14 @@ def test_chat_edit_reference_pictures_are_listed_as_inputs_to_the_admin():
     from semechka import admin_media as X
     got = X.input_refs({}, {"source": "ma_aaaa1111", "refs": ["ma_bbbb2222", "ma_cccc3333"]})
     assert got == [("source", "ma_aaaa1111"), ("reference", "ma_bbbb2222"), ("reference", "ma_cccc3333")]
+
+
+def test_a_chat_edit_job_is_labelled_edit_and_an_animation_animate_not_generate():
+    from types import SimpleNamespace as NS
+    from semechka import admin_media as X
+    chat = NS(conversation_id="cv_1", kind="image")
+    assert X.classify_job(chat, None, {"prompt": "x"}) == ("chat_image", "generate")
+    assert X.classify_job(chat, None, {"reference_image": "up_1"}) == ("chat_image", "edit")
+    assert X.classify_job(chat, None, {"reference_image": "up_1", "extra_references": ["up_2"]}) == ("chat_image", "edit")
+    assert X.classify_job(NS(conversation_id="cv_1", kind="video"), None, {"start_image": "up_1"}) == ("chat_video", "animate")
+    assert X.classify_job(NS(conversation_id=None, kind="image"), None, {"reference_image": "up_1"}) == ("image_generation", "edit")

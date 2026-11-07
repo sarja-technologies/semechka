@@ -1,0 +1,31 @@
+// Screenshots of the administrator explorer on STAGING (synthetic data), driven like a person: reason prompt, conversations, one opened
+// conversation with its media, the media library and a generation record. usage: node shots-admin-staging.mjs <email> <password> <outdir>
+import { chromium } from '@playwright/test';
+import path from 'node:path';
+const [, , email, pw, out] = process.argv;
+const base = process.env.STAGING_URL ?? 'http://192.168.20.193:8790';
+const REASON = 'Release acceptance check of the admin explorer on staging';
+const b = await chromium.launch({ channel: 'chrome' });
+const p = await (await b.newContext({ viewport: { width: 1360, height: 900 } })).newPage(); p.setDefaultTimeout(30000);
+const shot = (n) => p.screenshot({ path: path.join(out, `admin-${n}.png`) });
+const search = () => p.getByRole('search').getByRole('button', { name: 'Search', exact: true }).click();
+const record = async () => { await p.getByLabel('Reason for access').fill(REASON); await p.getByRole('button', { name: 'Record and continue' }).click(); };
+await p.goto(base + '/login'); await p.locator('input[type=email], input[name=email]').first().fill(email); await p.locator('input[type=password]').first().fill(pw);
+await p.keyboard.press('Enter'); await p.waitForTimeout(2500);
+await p.goto(base + '/admin/content'); await p.waitForTimeout(1500); await shot('01-before');
+await search(); await record(); await p.waitForTimeout(2500); await shot('02-conversations');
+const list = p.getByRole('region', { name: 'Conversations' });
+const first = list.getByRole('button').first();
+console.log('conversations listed:', await list.getByRole('listitem').count());
+await first.click(); await p.getByRole('dialog', { name: 'Open this conversation' }).getByRole('button', { name: 'Record and continue' }).click().catch(async () => { await record(); });
+await p.waitForTimeout(3500); await shot('03-conversation-open');
+await p.goto(base + '/admin/content?tab=media'); await p.waitForTimeout(1200);
+await search(); await record(); await p.waitForTimeout(3500); await shot('04-media-library');
+const grid = p.getByRole('list', { name: 'Media library' });
+console.log('media listed:', await grid.getByRole('listitem').count());
+await p.locator('#pn-media').getByLabel('Workflow').selectOption({ index: 1 }).catch(() => {});
+await search().catch(() => {}); await p.waitForTimeout(2500); await shot('05-media-filtered');
+await p.getByRole('button', { name: 'Reset filters' }).click().catch(() => {}); await search().catch(() => {}); await p.waitForTimeout(2000);
+await grid.getByRole('button').first().click(); await p.getByRole('dialog', { name: 'Open this generation' }).getByRole('button', { name: 'Record and continue' }).click().catch(() => {});
+await p.waitForTimeout(3500); await shot('06-generation-record');
+await b.close();

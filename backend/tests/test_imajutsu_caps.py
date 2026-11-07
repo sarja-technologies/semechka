@@ -72,7 +72,8 @@ def test_every_mode_lists_every_model_with_the_truth(im):
 
 def test_recommended_is_the_first_operational_model_of_the_routing_file(im):
     c = caps(im)
-    want = {"generate": "flux2-klein-4b", "iphone_photo": "flux2-klein-4b", "edit": "qwen-image-edit-2511", "replace_subject": "qwen-image-edit-2511", "inpaint": "flux2-klein-4b",
+    want = {"generate": "flux2-klein-4b", "iphone_photo": "qwen-image-2512",  # iPhone Photo: the model of the default tier (Best realism)
+             "edit": "qwen-image-edit-2511", "replace_subject": "qwen-image-edit-2511", "inpaint": "flux2-klein-4b",
             "outpaint": "flux2-klein-4b", "reference": "flux2-klein-4b", "restyle": "z-image-turbo", "advanced": "flux2-klein-4b"}
     for mid, eid in want.items():
         rec = mode(c, mid)["recommended"]
@@ -90,7 +91,7 @@ def test_limits_per_model_are_the_engines(im):
     assert rows(c, "edit")["qwen-image-edit-2511"]["limits"]["references"] == 3 and rows(c, "restyle")["z-image-turbo"]["limits"]["references"] == 0
     assert rows(c, "generate")["sdxl-turbo"]["limits"]["multiple"] == 8 and rows(c, "generate")["sdxl-turbo"]["limits"]["schedulers"]
     assert [a["id"] for a in c["aspects"]] == ["9:16", "16:9", "4:5", "3:4", "1:1", "custom", "source"]
-    assert c["presets"][0]["id"] == "iphone_photo" and c["presets"][0]["aspect"] == "9:16" and c["presets"][0]["model_id"] == model_id(im, "flux2-klein-4b")
+    assert c["presets"][0]["id"] == "iphone_photo" and c["presets"][0]["aspect"] == "9:16" and c["presets"][0]["model_id"] == model_id(im, "qwen-image-2512")
     assert {x["id"] for x in c["presets"][0]["scene_chips"]} == {"outdoor_day", "indoor", "night", "flash", "selfie", "mirror", "casual"}
     assert c["limits"]["max_pictures"] == 200 and c["limits"]["max_count"] == 4 and c["roles"] == [{"id": r} for r in ("identity", "appearance", "composition", "lighting", "style")]
     assert c["routing"]["source"] == "packaged" and c["routing"]["problem"] is None
@@ -129,7 +130,8 @@ def test_reordering_the_routing_file_changes_the_recommendation(im, st):
     (st.cfg.data_dir / R.OVERRIDE_NAME).write_text(json.dumps(doc))
     c = caps(im)
     assert mode(c, "edit")["recommended"]["alias"] == "flux2-klein-4b" and [m["engine_id"] for m in mode(c, "edit")["models"] if m["routed"]] == ["flux2-klein-4b", "qwen-image-edit-2511"]
-    assert mode(c, "iphone_photo")["recommended"]["alias"] == "z-image-turbo" and c["routing"]["source"] == "data_dir"
+    # iPhone Photo is recommended by its default TIER (Best realism), not by position in the file: reordering does not change it
+    assert mode(c, "iphone_photo")["recommended"]["alias"] == "qwen-image-2512" and c["routing"]["source"] == "data_dir"
     # a plan picks it up too: no model is named anywhere in the code
     src = up(im, png_of(gradient(120, 160)), "s.png")
     p = mkproject(im, "edit", {"prompt": "make it warmer", "source_asset": src["id"], "aspect": {"id": "source"}})
@@ -248,7 +250,7 @@ def test_iphone_photo_has_three_tiers_and_best_realism_is_the_default(im):
     m = mode(c, "iphone_photo")
     assert [(t["id"], t["alias"], t["status"], t["default"]) for t in m["tiers"]] == [("fast", "flux2-klein-4b", "ready", False), ("best", "qwen-image-2512", "ready", True),
                                                                                      ("polished", "z-image-turbo", "ready", False)]
-    assert [t["label"] for t in m["tiers"]] == ["Fast", "Best realism", "Polished"] and m["default_tier"] == "best" and m["recommended"]["alias"] == "flux2-klein-4b"
+    assert [t["label"] for t in m["tiers"]] == ["Fast", "Best realism", "Polished"] and m["default_tier"] == "best" and m["recommended"]["alias"] == "qwen-image-2512"
     assert "1.5 min" in m["tiers"][1]["why"] and "86 s" in m["tiers"][1]["seconds_hint"] and "4 s" in m["tiers"][0]["seconds_hint"]
     assert c["presets"][0]["tiers"] == m["tiers"] and c["presets"][0]["default_tier"] == "best"
     # generate: klein, then z-image-turbo, then qwen-image-2512

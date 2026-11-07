@@ -84,14 +84,21 @@ def main() -> int:
 
     print("== baseline (the copy of production's real configuration)")
     st = adm.req("GET", "/api/admin/cloud/status")[1]
-    check("production baseline: workspaces off, agents off, sandbox off, rollout everyone",
-          not st["workspaces_enabled"] and not st["sandbox"]["agents_enabled"] and not st["sandbox"]["enabled"] and st["rollout"] == "everyone",
-          (st["workspaces_enabled"], st["sandbox"], st["rollout"]))
-    check("baseline: no Workspaces entry for anyone", "workspaces" not in adm.pages() and "workspaces" not in mem.pages())
+    # The baseline is whatever production really has today (the copy is taken from it), not a state frozen when this script was written:
+    # CMSIT-AI has since had its cloud doors fenced to admins and been renamed from "CMSIT AI". What must hold is that the sandbox is
+    # not on, that nobody outside the fence can see a cloud door, and that the copy carries production's own branding.
+    fenced = st["rollout"] == "admins" or not st["workspaces_enabled"]
+    check("production baseline: sandbox off, cloud doors fenced to admins (or off)",
+          not st["sandbox"]["enabled"] and st["rollout"] in ("admins", "everyone"), (st["workspaces_enabled"], st["sandbox"], st["rollout"]))
+    check("baseline: an ordinary member has no Workspaces entry", not (fenced and "workspaces" in mem.pages()))
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     brand = con.execute("select value from setting_values where key='brand.tab_title'").fetchone()
     con.close()
-    check("baseline: production's branding is present in the copy", bool(brand) and json.loads(brand[0])["v"] == "CMSIT AI", brand)
+    live_db = os.path.expanduser("~/semechka-deploy/roasted/data/semechka.db")
+    lc = sqlite3.connect(f"file:{live_db}?mode=ro", uri=True)
+    live_brand = lc.execute("select value from setting_values where key='brand.tab_title'").fetchone()
+    lc.close()
+    check("baseline: production's branding is present in the copy", bool(brand) and bool(live_brand) and json.loads(brand[0])["v"] == json.loads(live_brand[0])["v"], brand)
 
     print("== apply: fence first, then workspaces and agents (rollout.py apply)")
     check("rollout.py status works", rollout("status") == 0)

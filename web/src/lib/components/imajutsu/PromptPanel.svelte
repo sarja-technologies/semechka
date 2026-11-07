@@ -3,6 +3,7 @@
   // prompt the server built is always shown here, read-only, so nothing the model receives is hidden.
   import PanelCard from './PanelCard.svelte';
   import { SCENES } from '$lib/imajutsu/spec';
+  import { runnable } from '$lib/imajutsu/caps';
   import type { Imajutsu } from '$lib/imajutsu/store.svelte';
   let { s, n = 0 }: { s: Imajutsu; n?: number } = $props();
   const key = $derived(s.key), sp = $derived(s.spec);
@@ -28,6 +29,16 @@
       <div class="st-seg" role="group" aria-labelledby="scene-h" data-testid="scene-chips">
         {#each scenes as c (c.id)}<button type="button" aria-pressed={sp.preset.scenes.includes(c.id)} onclick={() => s.toggleChip(c.id)}>{c.label}</button>{/each}
       </div>
+      {#if s.mode?.tiers?.length}
+        <h3 id="tier-h">Quality</h3>
+        <div class="st-seg" role="radiogroup" aria-labelledby="tier-h" data-testid="tier-chips">
+          {#each s.mode.tiers as t (t.id)}
+            <button type="button" role="radio" aria-checked={s.tierId === t.id} disabled={!t.model_id || !runnable(t.status)} title={t.model_id && runnable(t.status) ? (t.why ?? '') : (t.reason ?? 'Not available.')} data-tier={t.id}
+              onclick={() => s.chooseTier(t.id)}>{t.label}</button>
+          {/each}
+        </div>
+        {#if s.tierId}{@const cur = s.mode.tiers.find((x) => x.id === s.tierId)}{#if cur?.seconds_hint}<p class="st-note" data-testid="tier-hint">{cur.alias ?? ''} · {cur.seconds_hint}</p>{/if}{/if}
+      {/if}
       <p class="st-note">You do not need to write phone words. The app writes a natural description of the light and framing for the model you chose, and shows it below.</p>
       <label class="fin"><input type="checkbox" checked={sp.preset.finish} onchange={(e) => s.edit((x) => { x.preset.finish = e.currentTarget.checked; })} data-testid="phone-finish" />
         <span><strong>{fin?.label ?? 'Phone finish'}</strong> <span class="st-note">{fin?.note ?? 'A subtle photographic touch (gentle contrast curve, fine grain, light sharpening). It is not AI, it is made as a separate copy, and you can switch it off.'}</span></span></label>

@@ -309,6 +309,15 @@ def attachment_summary(st, a: ChatAttachment, admin_id: str, now: float, *, thum
 
 
 # ---- classification -----------------------------------------------------------------------------------
+def _plain_operation(params: dict) -> str:
+    """What a plain (non-workflow) job did, from what it was given: a source picture means an edit (image) or an animation (video)."""
+    if params.get("reference_image") or params.get("extra_references"):
+        return "edit"
+    if params.get("start_image"):
+        return "animate"
+    return "generate"
+
+
 def classify_job(j: MediaJob, model: Model | None, params: dict) -> tuple[str, str]:
     """-> (workflow, operation)."""
     if isinstance(params.get("imajutsu"), dict):
@@ -318,8 +327,8 @@ def classify_job(j: MediaJob, model: Model | None, params: dict) -> tuple[str, s
     if _has_profile(model):
         return "openjutsu", str(params.get("operation") or "run")
     if j.conversation_id:
-        return f"chat_{j.kind}", "generate"
-    return f"{j.kind}_generation", str(params.get("operation") or "generate")
+        return f"chat_{j.kind}", _plain_operation(params)
+    return f"{j.kind}_generation", str(params.get("operation") or _plain_operation(params))
 
 
 def display_status(row, now: float, active: tuple = media_svc.ACTIVE) -> str:

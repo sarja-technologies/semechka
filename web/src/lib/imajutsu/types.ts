@@ -36,7 +36,7 @@ export type Spec = {
   mode: string;
   prompt: string;
   negative: string;
-  preset: { id: string | null; scenes: string[]; finish: boolean };
+  preset: { id: string | null; scenes: string[]; finish: boolean; tier?: string | null };
   aspect: { id: string; w: number | null; h: number | null };
   size: { native: Size | null; output: Size | null };
   quality: string;
@@ -81,8 +81,9 @@ export type ModelEntry = {
   seconds_hint?: string | null; routed?: boolean; needs?: any; [k: string]: any;
 };
 export type ModeNeeds = { source?: boolean; mask?: boolean; prompt?: boolean; references_min?: number; references_ok?: boolean };
+export type TierEntry = { id: string; label: string; model_id: string | null; alias?: string; status: Status; reason?: string; why?: string; seconds_hint?: string | null; default?: boolean };
 export type ModeEntry = {
-  id: string; label: string; engine_mode?: string | null; status: Status; reason?: string;
+  id: string; label: string; tiers?: TierEntry[]; default_tier?: string; engine_mode?: string | null; status: Status; reason?: string;
   recommended?: { model_id: string; alias?: string; why?: string; evidence?: string[] } | null; models: ModelEntry[]; needs?: ModeNeeds;
   scaling?: { method?: string; label?: string; ai?: boolean }; refine?: { available: boolean; models: ModelEntry[]; recommended?: { model_id: string; why?: string } | null };
   [k: string]: any;

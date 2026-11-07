@@ -137,17 +137,53 @@ test('2 iPhone Photo: 9:16 by default, the plan shows the 720x1280 native size, 
   await expect(page.getByTestId('final-prompt')).toContainText('It is night');
   expect(before.prompt.final).toContain('It is night');
   const flash = await planAfter(page, () => page.getByTestId('scene-chips').getByRole('button', { name: 'Flash' }).click());
-  await expect(page.getByTestId('final-prompt')).toContainText('direct on-camera flash');
+  // the default is Best realism (Qwen-Image 2512), which gets plain wording: no phone, selfie, snapshot or 9:16 words anywhere in the prompt
+  await expect(page.getByTestId('final-prompt')).toContainText('The light is a direct flash');
+  for (const w of ['phone', 'iphone', 'snapshot', 'selfie', '9:16']) expect(flash.prompt.final.toLowerCase(), w).not.toContain(w);
   expect(flash.prompt.final).toContain('street market');
   await expect.poll(async () => (await spec(page)).preset.scenes).toEqual(['night', 'flash']);
   await expect(page.getByTestId('final-prompt')).toHaveText(flash.prompt.final);
+  // Fast (FLUX.2 klein) takes natural wording about the camera
+  await planAfter(page, () => page.getByTestId('tier-chips').getByRole('radio', { name: 'Fast' }).click());
+  await expect(page.getByTestId('final-prompt')).toContainText('direct on-camera flash');
   await expect(panel(page, 'prompt')).toContainText('You do not need to write phone words');
   await shot(page, '02-iphone');
+});
+
+test('2b iPhone Photo opens on Best realism: Qwen-Image 2512 at the measured 30 steps, plain wording; the Quality control switches tier and the page, the plan and the engine agree', async ({ page }) => {
+  await open(page, 'iPhone Photo');
+  const tiers = page.getByTestId('tier-chips');
+  await expect(tiers.getByRole('radio')).toHaveCount(3);
+  await expect(tiers.getByRole('radio', { name: 'Best realism' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('model-name')).toContainText('qwen-image-2512');
+  await expect(page.getByTestId('tier-hint')).toContainText('86 s');
+  await page.getByTestId('prompt-input').fill('A family barbecue in the back garden');
+  await settle(page);
+  const plan = (await (await page.request.post(`/api/imajutsu/projects/${pid(page)}/plan`, { data: {}, headers: { 'x-csrf-token': await csrf(page) } })).json()).plan;
+  expect(plan.model.alias).toBe('qwen-image-2512'); expect(plan.steps).toBe(30);
+  await generate(page);
+  const sub = (await subs(page)).at(-1);
+  expect(sub.model).toBe('qwen-image-2512');
+  expect(sub.simple.steps).toBe(30);
+  expect([sub.simple.width, sub.simple.height]).toEqual([720, 1280]);
+  for (const w of ['phone', 'iphone', 'smartphone', 'snapshot', '9:16', 'selfie', 'screenshot']) expect(sub.simple.prompt.toLowerCase(), w).not.toContain(w);
+  await tiers.getByRole('radio', { name: 'Polished' }).click();
+  await expect(page.getByTestId('model-name')).toContainText('z-image-turbo');
+  await settle(page);
+  expect((await spec(page)).preset.tier).toBe('polished');
+  await shot(page, '02b-iphone-quality');
 });
 
 test('3 Generate sends exactly what the engine records: multiples of 16, the prompt shown on screen, a seed; the z-image variant gets no phone words', async ({ page }) => {
   await open(page, 'iPhone Photo');
   await page.getByTestId('prompt-input').fill('A friend laughing at a night market');
+  // the page opens on Best realism (Qwen-Image 2512, plain wording, 30 steps); Fast is one click and runs FLUX.2 klein at its own 4 steps
+  const tiers = page.getByTestId('tier-chips');
+  await expect(tiers.getByRole('radio', { name: 'Best realism' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('model-name')).toContainText('qwen-image-2512');
+  await tiers.getByRole('radio', { name: 'Fast' }).click();
+  await expect(tiers.getByRole('radio', { name: 'Fast' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('model-name')).toContainText('flux2-klein-4b');
   await page.getByTestId('scene-chips').getByRole('button', { name: 'Selfie' }).click();
   await page.getByTestId('scene-chips').getByRole('button', { name: 'Night' }).click();
   await settle(page);
