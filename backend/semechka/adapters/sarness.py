@@ -178,6 +178,8 @@ def media_meta(cm: dict, im: dict, repo: str | None) -> dict:
         "media": {"kind": kind, "modes": caps.get("modes") or cm.get("modes"),
                   "negative_prompt": bool(caps.get("negative_prompt")),
                   "schedulers": caps.get("schedulers") or [], "audio": bool(caps.get("audio")),
+                  # how many pictures an image model takes as conditioning (edit models: the source counts as one); absent = it takes none
+                  **({"references": int(caps["references"])} if isinstance(caps.get("references"), int) and not isinstance(caps.get("references"), bool) and caps["references"] > 0 else {}),
                   "defaults": im.get("defaults") or {}, "limits": im.get("limits") or {}},
     })
 
@@ -292,6 +294,15 @@ class SarnessAdapter(SarnessMediaMixin, Adapter):
                 reg = await self._json(c, "/v1/registry") or {}
         except httpx.HTTPError:
             reg = {}
+        # The registry may state an image model's reference limit when /v1/models does not
+        reg_caps = {m.get("id"): m.get("capabilities") or {} for m in reg.get("models") or [] if isinstance(m, dict)}
+        for dm in out:
+            media = (dm.meta or {}).get("media") if isinstance(dm.meta, dict) else None
+            mid = dm.real_id.split(":", 1)[1] if ":" in dm.real_id else dm.real_id
+            rc = reg_caps.get(mid) or {}
+            if media and media.get("kind") == "image" and "references" not in media and isinstance(rc.get("references"), int) \
+                    and not isinstance(rc.get("references"), bool) and rc["references"] > 0:
+                media["references"] = int(rc["references"])
         for pr in reg.get("profiles") or []:
             if isinstance(pr, dict) and pr.get("id"):
                 kind = pr.get("category") or "video"

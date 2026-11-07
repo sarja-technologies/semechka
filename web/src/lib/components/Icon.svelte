@@ -27,7 +27,10 @@
     zoomin: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6M11 8v6', zoomout: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6',
     replace: 'M4 8h13l-3-3M20 16H7l3 3', stepback: 'M6 5v14M18 6l-9 6 9 6z', stepfwd: 'M18 5v14M6 6l9 6-9 6z', expand: 'M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7',
     film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4', flip: 'M12 3v18M8 7L3 12l5 5zM16 7l5 5-5 5z', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
-    openjutsu: 'M4 6h11v12H4zM15 10l5-2.5v9L15 14M8 9.5l3 2.5-3 2.5'
+    openjutsu: 'M4 6h11v12H4zM15 10l5-2.5v9L15 14M8 9.5l3 2.5-3 2.5',
+    imajutsu: 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M17.5 8.5h.01M9 9.5l1-2 1 2 2 1-2 1-1 2-1-2-2-1z',
+    eraser: 'M8 20h12M5.5 15.5l9-9a2 2 0 012.8 0l1.7 1.7a2 2 0 010 2.8L11 19H8l-2.5-2.5a1.4 1.4 0 010-1z', boxsel: 'M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M10 5h4M10 19h4M4 10v4M20 10v4',
+    move: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3', redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3', compare: 'M12 3v18M4 6h5v12H4zM15 6h5v12h-5z', brush: 'M14 4l6 6-8 8H6v-6zM4 20h5'
   };
 </script>
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}><path d={P[name] ?? P.info} /></svg>

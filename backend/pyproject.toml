@@ -38,7 +38,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.setuptools.package-data]
-semechka = ["web/**/*", "theme/*.json"]
+semechka = ["web/**/*", "theme/*.json", "imajutsu_routing.json"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's idiom is `x = Depends(...)` in a signature; these calls are not mutable defaults.

@@ -1,9 +1,10 @@
 <script lang="ts">
   // Files on their way to the server: real progress, cancel, and retry when something failed.
   import Icon from '$lib/components/Icon.svelte';
-  import type { Studio } from '$lib/studio/store.svelte';
-  let { s, kind = 'video' }: { s: Studio; kind?: 'video' | 'image' } = $props();
-  const rows = $derived(s.uploads.filter((u) => (kind === 'video') === /^video\//.test(u.file.type) || (kind === 'video') === /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(u.file.name)));
+  import type { Upload } from '$lib/media/upload.svelte';
+  // `s` is any page store that keeps `uploads` (OpenJutsu Studio's, Imajutsu's). `kind: 'any'` or an explicit `uploads` list shows exactly what the caller passes.
+  let { s, kind = 'video', uploads }: { s: { uploads: Upload[]; retryUpload: (u: Upload) => void; dismissUpload: (u: Upload) => void }; kind?: 'video' | 'image' | 'any'; uploads?: Upload[] } = $props();
+  const rows = $derived(uploads ?? (kind === 'any' ? s.uploads : s.uploads.filter((u) => (kind === 'video') === /^video\//.test(u.file.type) || (kind === 'video') === /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(u.file.name))));
 </script>
 {#if rows.length}
   <ul class="up" aria-label="Uploads">

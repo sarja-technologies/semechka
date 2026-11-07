@@ -52,10 +52,18 @@ def _spec_from(ctx: Ctx, p: StudioProject, body_spec):
 
 
 def _own_job_info(ctx: Ctx, jid: str):
-    _gated(ctx)
+    """The caller's job (video or image: Imajutsu's jobs are inspected here too), behind the mode gate of ITS kind; anyone else's id is a plain 404."""
     ji = studio_inspect.load_job(ctx.st, jid, ctx.user.id)
     if ji is None:
+        try:
+            _gated(ctx)
+        except HTTPException:
+            _gate(ctx, "image")          # an Imajutsu-only person: the id is simply not theirs. (Someone with neither mode gets the video gate's answer.)
         raise HTTPException(404, NOT_FOUND)
+    if ji.kind == "image":
+        _gate(ctx, "image")
+    else:
+        _gated(ctx)
     return ji
 
 
@@ -108,8 +116,8 @@ async def create_project(body: ProjectIn, ctx: Ctx = Depends(current)):
 @router.get("/projects")
 async def list_projects(limit: int = 100, ctx: Ctx = Depends(current)):
     _editing_gate(ctx)
-    rows = ctx.s.execute(select(StudioProject).where(StudioProject.user_id == ctx.user.id).order_by(StudioProject.updated_at.desc())
-                         .limit(max(1, min(limit, 200)))).scalars().all()
+    rows = ctx.s.execute(select(StudioProject).where(StudioProject.user_id == ctx.user.id).order_by(StudioProject.updated_at.desc())).scalars().all()
+    rows = [p for p in rows if studio_svc.project_kind(ctx.st, p) == "video"][:max(1, min(limit, 200))]      # Imajutsu's image projects live in the same table
     return [await studio_svc.project_json(ctx.st, ctx.s, ctx.user, p, summary=True) for p in rows]
 
 
@@ -270,6 +278,8 @@ async def _engine_json(ctx: Ctx, jid: str, which: str, missing_code: str):
     ji = _own_job_info(ctx, jid)
     ctx.s.commit()
     ad = studio_inspect.adapter(ctx.st, ji)
+    if ji.kind == "image" and which == "media_history":
+        missing_code = "no_graph"          # a native workflow job has no ComfyUI history; its graph is the workflow
     if ad is None or not ji.remote:
         raise HTTPException(404, {"code": missing_code, "message": "The engine has no record of this."})
     try:
@@ -280,7 +290,10 @@ async def _engine_json(ctx: Ctx, jid: str, which: str, missing_code: str):
         raise HTTPException(404, {"code": missing_code, "message": "The engine has no record of this."})
     if code != 200 or d is None:
         raise HTTPException(502, {"code": "engine_error", "message": "The engine could not answer."})
-    return JSONResponse(studio_inspect.scrub(d), headers={"Cache-Control": "private, no-store"})
+    d = studio_inspect.scrub(d)
+    if which == "media_graph" and isinstance(d, dict):
+        d["graph_kind"] = studio_inspect.graph_kind(d)
+    return JSONResponse(d, headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/jobs/{jid}/graph")

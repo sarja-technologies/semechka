@@ -247,3 +247,13 @@ def sm(app, st, sarness_url):
     api = boot(app, st, sarness_url, [profile_entry()])
     with api.c:
         yield api
+
+
+# ---- Imajutsu: an install whose engine double publishes the native image models (flux2-klein-4b, qwen-image-edit-2511, ...) -------------------------------
+@pytest.fixture
+def im(app, st, sarness_url):
+    """Signed-in owner, long-lived event loop (edits are background tasks), engine = the scripted image double with every Imajutsu model enabled."""
+    from .imajutsu_helpers import boot_images
+    api = boot_images(app, st, sarness_url)
+    with api.c:
+        yield api

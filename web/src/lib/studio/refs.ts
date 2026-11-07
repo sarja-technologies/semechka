@@ -1,32 +1,33 @@
 // Which reference pictures really condition the result. The person marks pictures Active; the operation takes only so many, in order. A picture is
 // "used" only when it is active AND within that limit; everything else is kept in the project and said, plainly, not to influence the result.
-import type { RefItem } from './types';
+type Pickable = { active: boolean };
 
 export type RefState = { used: boolean; /** 1-based place among the used pictures (the order they are sent), 0 when not used */ order: number; note: string };
 
 const pics = (n: number) => `${n} picture${n === 1 ? '' : 's'}`;
 
-export function refStates(refs: RefItem[], max: number): RefState[] {
+/** `who` names what has the limit in the notes ("this operation takes 3 pictures", "this model takes 3 pictures"). */
+export function refStates(refs: Pickable[], max: number, who = 'operation'): RefState[] {
   let used = 0;
   const out: RefState[] = refs.map((r) => {
     if (r.active && used < max) { used++; return { used: true, order: used, note: '' }; }
     return { used: false, order: 0, note: '' };
   });
   return refs.map((r, i) => out[i].used ? out[i] : { ...out[i], note: r.active
-    ? `Not used: this operation takes ${pics(max)}`
-    : used >= max ? `Not used: this operation takes ${pics(max)}` : 'Not used' });
+    ? `Not used: this ${who} takes ${pics(max)}`
+    : used >= max ? `Not used: this ${who} takes ${pics(max)}` : 'Not used' });
 }
 
-export const usedCount = (refs: RefItem[], max: number) => refStates(refs, max).filter((s) => s.used).length;
+export const usedCount = (refs: Pickable[], max: number) => refStates(refs, max).filter((s) => s.used).length;
 
 /** Keep the person's choices, but never leave more pictures marked active than the operation takes (the later ones are switched off, in plain view). */
-export function fitActive(refs: RefItem[], max: number): RefItem[] {
+export function fitActive<T extends Pickable>(refs: T[], max: number): T[] {
   let n = 0;
   return refs.map((r) => (r.active && n++ >= max ? { ...r, active: false } : r));
 }
 
 /** The first `max` pictures become active, all others not. */
-export function autoFill(refs: RefItem[], max: number): RefItem[] {
+export function autoFill<T extends Pickable>(refs: T[], max: number): T[] {
   return refs.map((r, i) => ({ ...r, active: i < max }));
 }
 

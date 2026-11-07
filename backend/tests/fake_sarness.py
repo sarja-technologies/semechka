@@ -27,6 +27,8 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
+from . import fake_image as fi
+
 TOKEN = "fake-sarness-token"
 MARKER = b"SECRET-PIXELS-7731"
 
@@ -46,7 +48,9 @@ def reset():
                  registry=False, not_ready={}, free_mb=100000, holders=[], chat_script=[], chat_log=[], chat_fail={}, resource_hits=0,
                  # OpenJutsu Studio: scripted profile runs (see the "scripted OpenJutsu runs" section)
                  runs={}, upload_meta={}, clock="calls", tick_s=1.0, step=1000, scenes=None, variant_next=None, inspect_down=False, forget_traces=False,
-                 forget_history=False, break_agree=False, estimates=[], inspect_calls=0)
+                 forget_history=False, break_agree=False, estimates=[], inspect_calls=0,
+                 # Imajutsu: the native image models (opt-in: use_imajutsu()), the exact image submissions and the estimate controls
+                 imajutsu=False, image_submissions=[], model_estimates=[], no_estimate=False, refs_registry_only=False)
 
 
 reset()
@@ -95,6 +99,15 @@ MODELS = [
 ]
 
 
+def all_models() -> list[dict]:
+    """The installed models: the classic test models, plus the native image models of Imajutsu once ``use_imajutsu()`` was called."""
+    return MODELS + (fi.IMAGE_MODELS if STATE["imajutsu"] else [])
+
+
+def use_imajutsu(on: bool = True) -> None:
+    STATE["imajutsu"] = on
+
+
 @app.get("/v1/health")
 def health():
     return {"status": "ok", "service": "sarness-engine", "api_version": "1.1", "engine_version": "0.4.0-fake"}
@@ -137,7 +150,7 @@ def _legacy():
 def capabilities():
     _legacy()
     rows = []
-    for m in MODELS:
+    for m in all_models():
         llm = m["category"] == "llm"
         rows.append({"id": m["id"], "name": m["name"], "category": m["category"], "family": m.get("family"),
                      "runtime": "llama.cpp" if llm else "diffusers",
@@ -286,7 +299,22 @@ async def completions(request: Request):
 
 @app.get("/v1/models", dependencies=[Depends(auth)])
 def models():
-    return MODELS
+    out = [{k: v for k, v in m.items() if k != "scripted"} for m in all_models()]
+    if STATE["refs_registry_only"]:        # an engine that states the reference limit in /v1/registry only
+        out = [{**m, "capabilities": {k: v for k, v in (m.get("capabilities") or {}).items() if k != "references"}} for m in out]
+    return out
+
+
+@app.get("/v1/models/{model_id}/estimate", dependencies=[Depends(auth)])
+def model_estimate(model_id: str, width: int | None = None, height: int | None = None, steps: int | None = None, mode: str | None = None, pictures: int | None = None):
+    """The engine's own recorded timings per model (Imajutsu): ``basis`` measured | extrapolated | none."""
+    m = fi.BY_ID.get(model_id)
+    if not m or not STATE["imajutsu"] or STATE["no_estimate"]:
+        raise HTTPException(404, "no estimate for this model")
+    STATE["model_estimates"].append({"model": model_id, "width": width, "height": height, "steps": steps, "mode": mode, "pictures": pictures})
+    if not (width and height):
+        raise HTTPException(422, "width and height are required")
+    return fi.estimate(model_id, width, height, steps or 30)          # like the real engine: no steps in the query = 30, what a job without steps used to run
 
 
 @app.post("/v1/uploads", dependencies=[Depends(auth)])
@@ -296,7 +324,8 @@ async def upload(request: Request):
     data = await f.read()
     uid = f"up_{len(STATE['uploads']) + 1:04d}"
     STATE["uploads"][uid] = data
-    STATE["upload_meta"][uid] = {"name": f.filename, "mime": f.content_type, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    STATE["upload_meta"][uid] = {"name": f.filename, "mime": f.content_type, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                                 **(fi.probe_image(data) or {})}
     return {"id": uid, "name": f.filename, "size": len(data)}
 
 
@@ -308,13 +337,31 @@ async def submit(request: Request):
         raise HTTPException(400, "kind must be 'image' or 'video'")
     if key and key in STATE["by_key"]:
         return STATE["jobs"][STATE["by_key"][key]]
-    if not any(m["id"] == simple.get("model") and m["category"] == kind for m in MODELS):
+    model = next((m for m in all_models() if m["id"] == simple.get("model") and m["category"] == kind), None)
+    if model is None:
         raise HTTPException(422, "unknown model")
+    scripted_mode = pics = None
+    if model.get("scripted"):
+        try:
+            scripted_mode, pics = fi.check_submission(simple, model, STATE["upload_meta"])
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
     STATE["n"] += 1
     jid = f"j_{STATE['n']:04d}"
     STATE["jobs"][jid] = {"id": jid, "kind": kind, "status": "queued", "progress": 0.0, "progress_text": "Queued",
                           "simple": simple, "polls": 0, "error": None, "generations": [], "title": body.get("title")}
     STATE["submissions"].append({"kind": kind, **simple})
+    if model.get("scripted"):
+        meta = lambda u: {"upload": u, **{k: v for k, v in (STATE["upload_meta"].get(u) or {}).items()}}  # noqa: E731
+        STATE["image_submissions"].append({"job": jid, "model": model["id"], "engine_mode": scripted_mode, "simple": json.loads(json.dumps(simple)),
+                                           "client_key": key, "title": body.get("title"), "pictures": [meta(u) for u in pics],
+                                           "mask": meta(simple["mask_image"]) if simple.get("mask_image") else None})
+        text = str(simple.get("prompt") or "")
+        fail = (STATE["variant_next"] or ("fail" if "boom" in text else "ok")) == "fail"
+        STATE["variant_next"] = None
+        run = fi.make_run(jid, simple, model, scripted_mode, pics, STATE["upload_meta"], fail=fail)
+        run["wall0"] = time.time()
+        STATE["runs"][jid] = run
     if key:
         STATE["by_key"][key] = jid
     return STATE["jobs"][jid]
@@ -349,7 +396,7 @@ def registry():
         raise HTTPException(404, "not found")                       # an engine that predates the registry
     models = []
     if STATE["registry"]:
-        for m in MODELS:
+        for m in all_models():
             if m["category"] not in ("image", "video", "llm") or not m.get("supported", True):
                 continue
             llm = m["category"] == "llm"
@@ -360,7 +407,8 @@ def registry():
                            "readiness": {"state": "not_ready" if why else "ready", "ready": not why, "reason": why},
                            "workload": {"state": "idle", "active_jobs": []},
                            "memory": {"estimate_mb": m.get("vram_mb"), "actual_mb": None, "reserved_mb": None},
-                           "capabilities": {"modes": (m.get("capabilities") or {}).get("modes") or [], "vision": bool((m.get("capabilities") or {}).get("vision"))}})
+                           "capabilities": {"modes": (m.get("capabilities") or {}).get("modes") or [], "vision": bool((m.get("capabilities") or {}).get("vision")),
+                                             **({"references": m["capabilities"]["references"]} if (m.get("capabilities") or {}).get("references") else {})}})
     return {"schema": "sarness.registry/1", "models": models, "profiles": STATE["profiles"] or [], "external": []}
 
 
@@ -738,7 +786,13 @@ def _segment_bytes(run: dict, k: int) -> bytes:
 
 
 def _fold(run: dict) -> dict:
-    """The inspect document at the run's current tick."""
+    """The inspect document at the run's current tick (native image runs: the workflow document of fake_image)."""
+    if run.get("kind") == "image":
+        return fi.fold(run, _now_tick(run), run["cancelled"], STATE)
+    return _fold_video(run)
+
+
+def _fold_video(run: dict) -> dict:
     t = _now_tick(run)
     cancel = run["cancelled"]
     evs = [e for e in run["events"] if e["tick"] <= t and (cancel is None or e["tick"] <= cancel)]
@@ -823,7 +877,15 @@ def _sync_job(j: dict, run: dict) -> None:
     d = _fold(run)
     j.update(status=d["status"], progress=d["progress"]["fraction"] or 0.0, progress_text=d["stage_label"],
              error={"message": d["error"]["message"]} if d["error"] else None)
-    if d["status"] == "completed" and not j["generations"]:
+    if d["status"] == "completed" and not j["generations"] and run.get("kind") == "image":
+        w, h = run["size"]
+        seed = int(run["simple"].get("seed") if run["simple"].get("seed") not in (None, -1) else 4242)
+        fid = f"f_{j['id']}"
+        STATE["files"][fid] = fi.result_png(w, h, seed)
+        j["generations"] = [{"id": f"g_{j['id']}", "job_id": j["id"], "file_id": fid, "url": f"/v1/files/{fid}", "type": "image", "width": w, "height": h,
+                             "seed": seed, "duration": None, "fps": None, "frames": None}]
+        j["progress"] = 1.0
+    elif d["status"] == "completed" and not j["generations"]:
         pw, ph = run["processing"]
         fid = f"f_{j['id']}"
         STATE["files"][fid] = media_file(pw, ph, 1.0, 8, True)
@@ -855,6 +917,8 @@ def inspect_job(jid: str, after: int = 0):
 
 
 def _graph(run: dict) -> dict:
+    if run.get("kind") == "image":
+        return fi.graph(run)
     nodes = {}
     for nid, ct, title, _ in run["nodes"]:
         inp: dict = {}
@@ -880,6 +944,8 @@ def job_graph(jid: str):
 @app.get("/v1/jobs/{jid}/history", dependencies=[Depends(auth)])
 def job_history(jid: str):
     run = _run_for(jid)
+    if run.get("kind") == "image":
+        raise HTTPException(404, {"code": "no_graph", "message": "native workflow jobs have no ComfyUI history"})
     if STATE["forget_history"]:
         raise HTTPException(404, {"code": "no_history", "message": "ComfyUI no longer has this prompt"})
     d = _fold(run)
@@ -905,6 +971,8 @@ def _ranged(data: bytes, request: Request, mime: str) -> Response:
 @app.get("/v1/jobs/{jid}/segments/{n}", dependencies=[Depends(auth)])
 def job_segment(jid: str, n: int, request: Request):
     run = _run_for(jid)
+    if run.get("kind") == "image":
+        raise HTTPException(404, {"code": "not_saved", "message": "an image job has no segments"})
     if not any(s["index"] == n for s in _fold(run)["scenes"]["segments"]):
         raise HTTPException(404, {"code": "not_saved", "message": f"segment {n} is not saved yet"})
     return _ranged(_segment_bytes(run, n), request, "video/mp4")
@@ -913,6 +981,12 @@ def job_segment(jid: str, n: int, request: Request):
 @app.get("/v1/jobs/{jid}/preview", dependencies=[Depends(auth)])
 def job_preview(jid: str):
     run = _run_for(jid)
+    if run.get("kind") == "image":
+        d = _fold(run)
+        if not d["has_preview"]:
+            raise HTTPException(404, {"code": "no_preview", "message": "no preview yet"})
+        w, h = run["size"]
+        return Response(fi.preview_jpeg(w, h, (d["sampling"] or {}).get("step") or run["steps"], run["steps"]), media_type="image/jpeg")
     segs = _fold(run)["scenes"]["segments"]
     if not segs:
         raise HTTPException(404, {"code": "no_preview", "message": "no preview yet"})
@@ -958,7 +1032,7 @@ async def control_config(request: Request):
 
 @app.get("/__control/runs")
 def control_runs():
-    return {jid: {"tick": r["tick"], "last_tick": r["last_tick"], "variant": r["variant"], "scenes": r["scenes"], "operation": r["operation"],
+    return {jid: {"tick": r["tick"], "last_tick": r["last_tick"], "variant": r["variant"], "scenes": r.get("scenes"), "operation": r["operation"],
                   "status": _fold(r)["status"]} for jid, r in STATE["runs"].items()}
 
 

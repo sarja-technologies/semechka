@@ -1,0 +1,412 @@
+{
+  "version": 1,
+  "updated": "2026-11-07",
+  "notes": "Which engine model Imajutsu uses for each mode, in order of preference. This file is DATA: reorder the lists, edit the reasons, add a model. Code never names a model. The first model in a list that is installed, allowed for the person, and really offers the engine mode (the engine registry's capabilities.modes) is the recommended one. Facts measured on the DGX Spark (docs/imajutsu-bench/), corrected run at each model's OWN default steps and guidance (720x1280, 9:16, 7 scene types). 'quality' lists the draft and high step counts; the standard count is always the engine's own default for the model. 'wording' says how the prompt builder writes for a model: 'natural' = natural sentences ('handheld phone photo' is fine), 'plain' = 'A photograph of ...' plus plain light and framing sentences and none of the model's avoid_words.",
+  "pixels": 921600,
+  "avoid_words": [
+    "phone",
+    "iphone",
+    "smartphone",
+    "snapshot",
+    "9:16",
+    "selfie",
+    "screenshot",
+    "camera app"
+  ],
+  "models": {
+    "flux2-klein-4b": {
+      "native": {
+        "9:16": [
+          720,
+          1280
+        ],
+        "16:9": [
+          1280,
+          720
+        ],
+        "1:1": [
+          960,
+          960
+        ],
+        "4:5": [
+          832,
+          1040
+        ],
+        "3:4": [
+          816,
+          1088
+        ]
+      },
+      "quality": {
+        "draft": 2,
+        "high": 8
+      },
+      "seconds_hint": "about 4 s for 720x1280 at its own 4 steps (guidance 1.0)",
+      "license": "Apache-2.0",
+      "wording": "natural",
+      "tier": "fast"
+    },
+    "z-image-turbo": {
+      "native": {
+        "9:16": [
+          720,
+          1280
+        ],
+        "16:9": [
+          1280,
+          720
+        ],
+        "1:1": [
+          960,
+          960
+        ],
+        "4:5": [
+          832,
+          1040
+        ],
+        "3:4": [
+          816,
+          1088
+        ]
+      },
+      "quality": {
+        "draft": 4,
+        "high": 14
+      },
+      "avoid_phone_words": true,
+      "seconds_hint": "about 12 s for 720x1280 at its own 9 steps (guidance 0)",
+      "license": "Apache-2.0",
+      "wording": "plain",
+      "tier": "polished"
+    },
+    "qwen-image-2512": {
+      "native": {
+        "9:16": [
+          720,
+          1280
+        ],
+        "16:9": [
+          1280,
+          720
+        ],
+        "1:1": [
+          960,
+          960
+        ],
+        "4:5": [
+          832,
+          1040
+        ],
+        "3:4": [
+          816,
+          1088
+        ]
+      },
+      "quality": {
+        "draft": 20,
+        "high": 70
+      },
+      "seconds_hint": "about 144 s (2.5 min) for 720x1280 at its own 50 steps (guidance 4)",
+      "license": "Apache-2.0",
+      "wording": "plain",
+      "tier": "best",
+      "avoid_words": [
+        "snapshot",
+        "phone",
+        "iphone",
+        "smartphone",
+        "9:16",
+        "candid",
+        "screenshot"
+      ],
+      "slow": true
+    },
+    "qwen-image-edit-2511": {
+      "native": {
+        "9:16": [
+          720,
+          1280
+        ],
+        "16:9": [
+          1280,
+          720
+        ],
+        "1:1": [
+          960,
+          960
+        ],
+        "4:5": [
+          832,
+          1040
+        ],
+        "3:4": [
+          816,
+          1088
+        ]
+      },
+      "quality": {
+        "draft": 20,
+        "high": 60
+      },
+      "slow": true,
+      "license": "Apache-2.0"
+    }
+  },
+  "modes": {
+    "generate": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "The most convincing casual phone-style generator in the benchmark, including selfies, mirror shots and night scenes (natural light, believable geometry), and fast: about 4 s for a 720x1280 picture at its own 4 steps and guidance 1.0.",
+          "evidence": [
+            "docs/imajutsu-bench/ (re-run at default steps 4 / guidance 1.0): FLUX.2 klein 4B ranked first for casual photographic prompts",
+            "docs/IMAJUTSU.md: iPhone-look generation"
+          ]
+        },
+        {
+          "engine_id": "z-image-turbo",
+          "why": "Polished, slightly glamorous pictures and very good vehicle geometry with plain descriptive prompts; about 12 s for 720x1280 at its own 9 steps and guidance 0.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ (re-run at default steps): still draws a hand holding a phone when the prompt says 'phone'; no longer produces poster graphics"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "why": "Highest realism of the installed models for plain prompts, but 50 steps take about 2.5 minutes per picture.",
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06: minutes per image on the GB10; results still being judged"
+          ]
+        }
+      ]
+    },
+    "iphone_photo": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast (about 4 s): the most convincing casual phone look in the corrected benchmark, wide-angle, good night and neon scenes, strong prompt adherence. The default, so the page stays responsive while you iterate.",
+          "evidence": [
+            "docs/imajutsu-bench/run3 (each model at its own defaults): FLUX.2 klein 4B is the fast option with a convincing phone look"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "why": "Best realism (about 2.5 min per picture): real skin, natural expressions, accurate vehicles, believable unflattering mirror selfies and family scenes, when prompted in plain words. Recommended for final photos.",
+          "evidence": [
+            "docs/imajutsu-bench/run3: qwen-image-2512 (50 steps, guidance 4) gave the most convincing casual smartphone-style photos",
+            "'snapshot' / 'candid phone' make it draw a selfie in the foreground, so the builder never writes them"
+          ]
+        },
+        {
+          "engine_id": "z-image-turbo",
+          "why": "Polished and slightly glamorous (about 12 s), excellent vehicle geometry. It needs plain wording: the prompt must not say 'phone', or it draws a hand holding one.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/run3: z-image-turbo (9 steps, guidance 0) draws a hand holding a phone when the prompt says 'phone'"
+          ]
+        }
+      ],
+      "default_tier": "fast"
+    },
+    "edit": {
+      "models": [
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "why": "A dedicated instruction-editing model: it takes the picture and up to two more, and follows edit sentences closely. Slow (about 40 steps).",
+          "evidence": [
+            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit with up to 3 pictures"
+          ]
+        },
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast instruction editing (about 20 s) with the picture and up to three more.",
+          "evidence": [
+            "docs/IMAJUTSU.md: flux2-klein-4b edit with up to 4 pictures"
+          ]
+        }
+      ]
+    },
+    "replace_subject": {
+      "models": [
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "why": "Follows 'replace X with the subject in image 2' instructions with the source and up to two reference pictures.",
+          "evidence": [
+            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit with up to 3 pictures"
+          ]
+        },
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast; takes the source and up to three reference pictures, and can inpaint inside a selection.",
+          "evidence": [
+            "docs/IMAJUTSU.md: flux2-klein-4b edit with up to 4 pictures and inpaint"
+          ]
+        }
+      ]
+    },
+    "inpaint": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast inpainting that can also use reference pictures.",
+          "evidence": [
+            "docs/IMAJUTSU.md: flux2-klein-4b inpaint"
+          ]
+        },
+        {
+          "engine_id": "z-image-turbo",
+          "why": "Inpainting with plain descriptive prompts.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "why": "Slow, high-detail inpainting.",
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        }
+      ]
+    },
+    "outpaint": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast; the new area is a masked region of a padded canvas.",
+          "evidence": [
+            "docs/IMAJUTSU.md: outpaint = padded canvas + inpaint"
+          ]
+        },
+        {
+          "engine_id": "z-image-turbo",
+          "why": "Plain-prompt outpainting.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "why": "Slow, high-detail outpainting.",
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        }
+      ]
+    },
+    "reference": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Takes up to four reference pictures and makes a new picture guided by them.",
+          "evidence": [
+            "docs/IMAJUTSU.md: flux2-klein-4b references 4"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "why": "Takes up to three pictures; slower.",
+          "evidence": [
+            "docs/IMAJUTSU.md: qwen-image-edit-2511 references 3"
+          ]
+        }
+      ]
+    },
+    "restyle": {
+      "models": [
+        {
+          "engine_id": "z-image-turbo",
+          "engine_mode": "img2img",
+          "why": "Image-to-image at a chosen strength: keeps the layout and changes the look.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "engine_mode": "img2img",
+          "why": "Slow, high-detail image-to-image.",
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "engine_mode": "edit",
+          "why": "Restyles by instruction instead of strength.",
+          "evidence": [
+            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit"
+          ]
+        },
+        {
+          "engine_id": "flux2-klein-4b",
+          "engine_mode": "edit",
+          "why": "Fast restyling by instruction.",
+          "evidence": [
+            "docs/IMAJUTSU.md: flux2-klein-4b edit"
+          ]
+        }
+      ]
+    },
+    "upscale": {
+      "models": [],
+      "scaling": {
+        "method": "lanczos",
+        "sharpen": "unsharp",
+        "label": "Scaled, no new detail"
+      },
+      "refine": [
+        {
+          "engine_id": "z-image-turbo",
+          "engine_mode": "img2img",
+          "why": "An optional second pass at low strength after scaling; it can add texture, so it is a model step and is labelled as one.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        }
+      ]
+    },
+    "advanced": {
+      "models": [
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast and flexible: text, edit and inpaint.",
+          "evidence": [
+            "docs/IMAJUTSU.md"
+          ]
+        },
+        {
+          "engine_id": "z-image-turbo",
+          "why": "Text, image-to-image and inpaint with plain prompts.",
+          "avoid_phone_words": true,
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-2512",
+          "why": "Text, image-to-image and inpaint, slow.",
+          "evidence": [
+            "docs/imajutsu-bench/ 2026-11-06"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "why": "Instruction editing.",
+          "evidence": [
+            "docs/IMAJUTSU.md"
+          ]
+        }
+      ]
+    }
+  },
+  "tiers": {
+    "fast": "Fast",
+    "best": "Best realism",
+    "polished": "Polished"
+  }
+}

@@ -248,9 +248,14 @@ def spec_of(st, p: StudioProject) -> dict:
     return {**default_spec(), **_dec(st, p.spec_enc, {})}
 
 
+def project_kind(st, p: StudioProject) -> str:
+    """"video" (OpenJutsu Studio; older specs carry no kind) or "image" (Imajutsu keeps its projects in the same table)."""
+    return _dec(st, p.spec_enc, {}).get("kind") or "video"
+
+
 def own_project(st, s, user_id: str, pid: str) -> StudioProject:
     p = s.get(StudioProject, pid) if isinstance(pid, str) and pid.startswith("sp_") else None
-    if p is None or p.user_id != user_id:
+    if p is None or p.user_id != user_id or project_kind(st, p) != "video":
         raise StudioError(404, "not_found", "Not found.")
     return p
 

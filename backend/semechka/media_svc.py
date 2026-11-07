@@ -394,20 +394,32 @@ def _finish(st, job_id: str, status: str, error: str | None = None, text: str | 
                          status={"completed": "complete"}.get(status, status)))
 
 
+async def upload_inputs(st, b: Backend, uploads: dict[str, list[tuple[Any, str, str]]]) -> dict[str, Any]:
+    """Hand source pictures to the engine once. ``uploads`` maps an engine input name to [(file object or bytes, mime, filename)]; the result maps the name
+    to the engine's file id (a list for ``extra_references``). Used for image jobs that start from a picture, a mask or more pictures (Imajutsu)."""
+    ad = adapter_for(b, st)
+    out: dict[str, Any] = {}
+    for name, items in uploads.items():
+        ids = [await ad.media_upload(fo, mime, fname) for fo, mime, fname in items]
+        out[name] = ids if name == "extra_references" else ids[0]
+    return out
+
+
 async def submit(st, user: User, kind: str, m: Model, b: Backend, params: dict, save: bool,
                  expires_at: float | None, *, job_id: str | None = None, conversation_id: str | None = None,
-                 message_id: str | None = None, origin: str | None = None) -> str:
+                 message_id: str | None = None, origin: str | None = None, extra_params: dict | None = None) -> str:
     """Create the job row and hand the job to the engine. Raises AdapterError (nothing is left behind).
-    `params` may carry engine-side source images (reference_image / start_image); they are not stored here."""
+    `params` may carry engine-side source images (reference_image / extra_references / mask_image / start_image, as engine file ids); they are not stored
+    here. ``extra_params`` is kept with the job's (encrypted) parameters and never sent to the engine (Imajutsu keeps its project snapshot there)."""
     job_id = job_id or "mj_" + uuid.uuid4().hex[:24]
     ad = adapter_for(b, st)
     real = m.real_id.split(":", 1)[1]
     remote = await ad.media_submit(kind, {**params, "model": real}, job_id, **({"title": f"{origin} {kind}"} if origin else {}))
-    params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image")}
+    params = {k: v for k, v in params.items() if k not in ("reference_image", "start_image", "extra_references", "mask_image")}
     with st.db.session(write=True) as s:
         j = MediaJob(id=job_id, user_id=user.id, kind=kind, model_id=m.id, backend_id=b.id, remote_id=remote, save=save,
                      prompt_enc=st.vault.encrypt(params["prompt"], "media") if save else None,
-                     params_enc=st.vault.encrypt(json.dumps({k: v for k, v in params.items() if k != "prompt"}), "media")
+                     params_enc=st.vault.encrypt(json.dumps({**{k: v for k, v in params.items() if k != "prompt"}, **(extra_params or {})}), "media")
                      if save else None, status="queued", progress_text="Queued", started_at=None,
                      expires_at=expires_at if save else None, conversation_id=conversation_id,
                      message_id=message_id)
@@ -653,9 +665,9 @@ class AdmitError(Exception):
         self.status, self.code, self.message = status, code, message
 
 
-def admit(st, s, principal, user_id: str, save: bool, kind: str) -> bool:
-    """Server-side limits for one new generation (the Video/Image routes and Work Mode's engine tools share this one gate).
-    Returns whether the result will be saved; raises AdmitError."""
+def admit(st, s, principal, user_id: str, save: bool, kind: str, n: int = 1) -> bool:
+    """Server-side limits for ``n`` new generations at once (the Video/Image routes and Work Mode's engine tools share this one gate; Imajutsu starts up to
+    four variations together and wants all of them admitted or none). Returns whether the result will be saved; raises AdmitError."""
     def val(key):
         return st.settings.value_for(s, key, principal)
     if not val(f"ui.{kind}_gen"):
@@ -665,13 +677,17 @@ def admit(st, s, principal, user_id: str, save: bool, kind: str) -> bool:
         raise AdmitError(403, "ephemeral_forbidden", "No-save generation is not available to you.")
     if days == 0:
         save = False  # the organisation stores nothing; the result is only held briefly for download
-    if count_active(s, user_id) >= val("media.max_concurrent_jobs"):
-        raise AdmitError(429, "busy", "You already have the maximum number of generations running. Wait for one to finish or cancel it.")
+    limit = val("media.max_concurrent_jobs")
+    if count_active(s, user_id) + n > limit:
+        free = max(0, limit - count_active(s, user_id))
+        raise AdmitError(429, "busy", "You already have the maximum number of generations running. Wait for one to finish or cancel it." if n == 1 else
+                         f"You can have {limit} generations queued or running at once and {free} {'is' if free == 1 else 'are'} free. Ask for {free} variation{'s' if free != 1 else ''} "
+                         "or wait for a running one to finish.")
     daily = val("media.daily_generations")
-    if daily and generations_today(s, user_id) + count_active(s, user_id) >= daily:
+    if daily and generations_today(s, user_id) + count_active(s, user_id) + n > daily:
         raise AdmitError(429, "daily_limit", f"Daily limit of {daily} generations reached.")
     cap = val("media.max_assets")
-    if save and cap and count_assets(s, user_id) >= cap:
+    if save and cap and count_assets(s, user_id) + n > cap:
         raise AdmitError(409, "gallery_full", f"Your gallery holds {cap} items, the maximum. Delete some to continue.")
     return save
 

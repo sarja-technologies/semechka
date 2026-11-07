@@ -6,6 +6,9 @@
   and the OpenJutsu Studio controls, served by tests/fake_sarness.py (see STUDIO_HARNESS.md):
   POST /__control/advance?n=1&job=   move the scripted runs forward n ticks      POST /__control/config   {clock, scenes, variant_next, ...}
   GET  /__control/runs               tick / status of every scripted run
+and the Imajutsu image models (flux2-klein-4b, qwen-image-edit-2511, qwen-image-2512, z-image-turbo, qwen-image-2.1, sdxl-turbo) with their real capabilities,
+native image jobs (scripted like the OpenJutsu ones, see tests/fake_image.py) and GET /__state "image_submissions" = the exact params of every image job
+the engine accepted with the name/size/sha256/dimensions of every picture and the mask. See STUDIO_HARNESS.md, section "Imajutsu".
 """
 import hashlib
 import json
@@ -29,6 +32,7 @@ fs.make_mp4 = lambda: RESULT
 
 def setup():
     fs.reset()
+    fs.use_imajutsu()
     fs.STATE["profiles"] = [fs.openjutsu_entry(DEF)]
     defaults()
 
@@ -47,13 +51,15 @@ def state():
     return {"submissions": fs.STATE["profile_submissions"],
             "uploads": {k: {"size": len(v), "sha256": hashlib.sha256(v).hexdigest(), "name": (fs.STATE["upload_meta"].get(k) or {}).get("name"),
                             "mime": (fs.STATE["upload_meta"].get(k) or {}).get("mime")} for k, v in fs.STATE["uploads"].items()},
-            "control": {k: fs.STATE[k] for k in fs._CTRL_KEYS}, "estimates": fs.STATE["estimates"]}
+            "control": {k: fs.STATE[k] for k in fs._CTRL_KEYS}, "estimates": fs.STATE["estimates"],
+            "image_submissions": fs.STATE["image_submissions"], "model_estimates": fs.STATE["model_estimates"]}
 
 
 @fs.app.post("/__reset")
 def reset():
     profiles = fs.STATE["profiles"]
     fs.reset()
+    fs.use_imajutsu()
     fs.STATE["profiles"] = profiles
     defaults()
     return {"ok": True}

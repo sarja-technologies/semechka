@@ -52,3 +52,26 @@ Jobs of other profiles keep the old behaviour (finish after two polls) and answe
 The UI never talks to the engine: use `/api/studio/...` (see `docs/OPENJUTSU_STUDIO.md` section 3 and `docs/OPENJUTSU_STUDIO_BACKEND.md`).
 A typical browser test: create the project through the UI -> Generate -> `POST :8841/__control/advance?n=5` -> the inspector shows tracking and
 scene 1 -> `advance?n=100` -> completed.
+
+## Imajutsu (native image jobs)
+
+`fake_engine.py` also publishes the six image models of the engine with their REAL capabilities (`backend/tests/fake_image.py`): `flux2-klein-4b` (txt2img, edit, inpaint; 4 pictures), `qwen-image-edit-2511` (edit; 3 pictures),
+`qwen-image-2512` (txt2img, img2img, inpaint), `z-image-turbo` (txt2img, img2img, inpaint), `qwen-image-2.1` (txt2img), `sdxl-turbo`. **`web/e2e_media/setup.ts` must list them in `enable_models`**
+(`image:flux2-klein-4b`, `image:qwen-image-edit-2511`, `image:qwen-image-2512`, `image:z-image-turbo`, `image:qwen-image-2.1`, `image:sdxl-turbo`); the double already serves them. `POST /__reset` keeps them.
+
+What the double does (as the real engine will):
+* `POST /v1/uploads` keeps pictures and masks byte for byte (with width/height of PNG/JPEG); `POST /v1/jobs {kind:"image", simple:{...}}` accepts `reference_image`, `extra_references` (list), `mask_image`, `denoise`, `batch_size`,
+  `seed`, `steps`, `guidance`, `width`, `height`, `scheduler`, `negative_prompt`. It refuses with a 422 what the engine refuses: more pictures than the model's cap ("flux2-klein-4b takes at most 4 pictures (got 5); send fewer"),
+  `extra_references` without `reference_image`, a mask without a picture or on a model that cannot inpaint, a picture for a text-only model, sizes that are not multiples of 16 (8 for sdxl-turbo), a negative prompt for a model without one.
+* A job of these models is a scripted native workflow run, stepped like the OpenJutsu ones (same `POST /__control/advance?n=&job=` and `POST /__control/config`; the default is instant): ticks `queued`, `loading_model`, `encoding_prompt`,
+  `sampling` (step 0, then up to 4 progress steps up to `steps`), `decoding`, `saving_output`, `done`. Inspect documents have `backend: "sarness-workflow"`, `graph_kind: "sarness-workflow"`, node states (`model, prompt, ref, ref_resize, encode, ref_N, mask,
+  latent, sampler, decode, save`), `sampling {step, max}`, `conditioning.references` (+ `mask`), `output.file {width, height, bytes, format}`. `GET /v1/jobs/{id}/graph` -> `{graph_kind, nodes:{id:{class_type, title, inputs}}}`,
+  `/history` -> 404 `no_graph`, `/preview` -> a real small JPEG from the first sampler step on (404 before), `/segments/n` -> 404.
+* `variant_next: "fail"` (or a prompt containing `boom`) makes the NEXT image job fail inside the sampler: error naming node `sampler` / "Sample image", server path replaced by `<path>`. `inspect_down`, `forget_traces` work as for OpenJutsu.
+* The result is a real PNG of exactly the requested size (a smooth, seed-dependent pattern; the same seed and size give the same bytes).
+* `GET /v1/models/{id}/estimate?width=&height=&steps=`: `measured` for flux2-klein-4b at 720x1280x4 (4 s, 31500 MB) and z-image-turbo at 720x1280x9 (12 s) and qwen-image-2512 at 720x1280x50 (144 s), `extrapolated` for other sizes of those, `none` for the other models.
+* `GET /__state` additionally returns `image_submissions` (for every accepted image job: `job, model, engine_mode, simple` = the exact params, `pictures[]` and `mask` with upload id, name, mime, size, sha256, width, height) and `model_estimates`.
+  `/__state.uploads` has the size/sha256 of every upload.
+
+From Semechka the UI calls `/api/imajutsu/...` (`docs/IMAJUTSU_BACKEND.md`) and the Studio's inspector routes for the live job. A typical browser test: create the project -> `PUT` the spec -> Generate -> `POST :8841/__control/config {"clock":"manual"}`
+before generating, then `POST :8841/__control/advance?n=4` -> the strip shows sampling and the preview; `advance?n=100` -> completed and the pictures are in the gallery.

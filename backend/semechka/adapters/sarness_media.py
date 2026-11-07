@@ -19,7 +19,7 @@ from .openai_compat import _short
 
 _PATH = re.compile(r"(?:/[\w.@+\-]+){3,}")
 _IMAGE_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "steps", "guidance", "seed", "scheduler",
-               "reference_image", "denoise")
+               "reference_image", "denoise", "extra_references", "mask_image", "loras", "upscale", "batch_size")
 _VIDEO_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "frames", "fps", "steps", "guidance", "seed",
                "flow_shift", "start_image")
 
@@ -210,6 +210,12 @@ class SarnessMediaMixin:
         from urllib.parse import urlencode
         q = urlencode({k: v for k, v in query.items() if v is not None})
         return await self._peek_json(f"/v1/profiles/{profile_id}/estimate?{q}", timeout=8)
+
+    async def media_model_estimate(self, model_id: str, query: dict):
+        """GET /v1/models/{id}/estimate?width=&height=&steps= : the engine's own recorded timings for an image model -> (status, JSON or None)."""
+        from urllib.parse import quote, urlencode
+        q = urlencode({k: v for k, v in query.items() if v is not None})
+        return await self._peek_json(f"/v1/models/{quote(model_id, safe='')}/estimate?{q}", timeout=8)
 
     async def media_discard(self, discard_id: str) -> None:
         await self._call("DELETE", f"/v1/generations/{discard_id}?permanent=true")

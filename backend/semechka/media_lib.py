@@ -36,7 +36,9 @@ IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "ima
 VIDEO_EXT = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/x-matroska": "mkv", "video/x-msvideo": "avi"}
 SERVE_MIME = {**IMAGE_EXT, **VIDEO_EXT}
 EPHEMERAL_UPLOAD_MAX = 256 * 1024 * 1024
-ORIGINS = ("upload", "edit", "prepared", "export")  # prepared: made for an OpenJutsu Studio run; export: a result scaled to a requested size
+ORIGINS = ("upload", "edit", "prepared", "export", "adjusted", "scaled", "composited")  # prepared: made for an OpenJutsu Studio run; export: a result scaled to a requested size
+# Imajutsu (docs/IMAJUTSU_BACKEND.md): adjusted = photographic adjustments of a picture (no model); scaled = Lanczos resize (never presented as AI);
+# composited = a result blended with its source outside the selection
 META_KEYS = ("origin", "name", "parent", "edit", "media")
 BROWSER_VIDEO = {"h264", "vp8", "vp9", "av1"}
 BROWSER_AUDIO = {None, "aac", "mp3", "opus", "vorbis", "flac"}
@@ -529,7 +531,7 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
     return out
 
 
-_MODEL_OF = {"edit": "edit", "prepared": "prepared", "export": "export"}  # MediaAsset.model_id of derived items (prepared ones are found by it)
+_MODEL_OF = {"edit": "edit", "prepared": "prepared", "export": "export", "adjusted": "adjusted", "scaled": "scaled", "composited": "composited"}  # MediaAsset.model_id of derived items (prepared ones are found by it)
 
 
 def mem_out(st, aid: str) -> dict:
@@ -574,6 +576,8 @@ def asset_json(st, a: MediaAsset) -> dict:
         base["media"] = meta.get("media")
         if meta.get("export"):
             base["export"] = meta["export"]            # the generation it was scaled from, the size asked for, upscale | downscale
+        if meta.get("imajutsu"):
+            base["imajutsu"] = meta["imajutsu"]         # {kind: adjusted|scaled|composited, recipe | method | ..., parent, job}: how a picture made without a model was made
         if meta.get("prep"):
             base["prepared"] = {"key": meta["prep"].get("key"), "mode": meta["prep"].get("mode"), "source": meta["prep"].get("source")}
         base["has_thumb"] = asset_file(st, a.user_id, a.id, "thumb").exists()

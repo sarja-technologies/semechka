@@ -49,6 +49,8 @@
   const elapsed = $derived(elapsedNow(doc, live.receivedAt, now));
   const quiet = $derived(phase === 'running' ? silentFor(doc, live.receivedAt, now) : null);
 
+  /** an image job of the engine's own runtime: one sampler, a picture instead of a video, no ComfyUI prompt id */
+  const image = $derived(doc?.graph_kind === 'sarness-workflow' || doc?.backend === 'sarness-workflow');
   const prog = $derived(progressView(doc));
   const cells = $derived(sceneCells(doc));
   const headline = $derived(sceneHeadline(doc));
@@ -129,8 +131,10 @@
         </div>
         <p class="what small"><b>{doc.profile ?? 'Model not reported'}</b> <span class="muted">· {doc.operation ?? 'operation not reported'}{doc.backend ? ` · on ${doc.backend}` : ''}</span></p>
         <dl class="ids">
+          {#if !image}
           <dt>ComfyUI prompt id</dt>
           <dd><code>{doc.prompt_id ?? 'not assigned yet'}</code>{#if doc.prompt_id}<button class="btn ghost sm" onclick={() => copy('prompt', doc.prompt_id ?? '')} aria-label="Copy ComfyUI prompt id"><Icon name="copy" size={14} />{copied === 'prompt' ? 'Copied' : 'Copy'}</button>{/if}</dd>
+          {/if}
           <dt>Job id</dt>
           <dd><code>{doc.job_id ?? jobId}</code></dd>
         </dl>
@@ -176,7 +180,23 @@
         </section>
       {/if}
 
-      {#if !traceGone && doc.scenes}
+      {#if image && !traceGone}
+        <section class="sec" aria-labelledby="sm-h" data-testid="sampler">
+          <h3 id="sm-h">Sampler</h3>
+          {#if sampling}
+            <p class="headline" data-testid="sampler-step">{sampling.title ?? 'Sampler'}: {stepText}</p>
+            {#if sampling.step != null && sampling.max}<div class="pbar" role="progressbar" aria-label="Sampler steps" aria-valuemin={0} aria-valuemax={sampling.max} aria-valuenow={sampling.step} aria-valuetext={stepText}><i style:width="{Math.min(100, (sampling.step / sampling.max) * 100)}%"></i></div>{/if}
+          {:else}<p class="muted small">{phase === 'completed' ? 'The sampler has finished.' : 'The sampler has not started yet.'}</p>{/if}
+          {#if pvKey}
+            <figure class="preview" style:display={pvOk ? 'block' : 'none'}>
+              <img src="{live.url}/preview?v={pvKey}" alt="Latest engine preview" onload={() => (pvOk = true)} onerror={() => (pvOk = false)} data-testid="inspector-preview" />
+              <figcaption class="tiny muted">{phase === 'running' ? 'Latest preview from the engine' : 'Last preview from the engine'}</figcaption>
+            </figure>
+          {/if}
+        </section>
+      {/if}
+
+      {#if !traceGone && doc.scenes && !image}
         <section class="sec" aria-labelledby="sc-h">
           <h3 id="sc-h">Scenes</h3>
           <p class="headline" data-testid="scene-headline">{headline}{#if sampling && phase === 'running'}<span class="muted">{' · '}sampler {stepText}</span>{/if}</p>
@@ -234,12 +254,13 @@
             {#if doc.conditioning.agree === true}
               <p class="notice ok" data-testid="agree"><Icon name="check" /><span><b>References, graph and submitted inputs match.</b> Every picture marked "Used" is loaded by exactly one picture node in the graph, and that node holds the file that was uploaded.</span></p>
             {:else if doc.conditioning.agree === false}
-              <p class="notice bad" role="alert" data-testid="agree"><Icon name="warn" /><span><b>Mismatch.</b> The pictures in the ComfyUI graph do not match what was submitted. The result may not use the pictures you chose. Check the list below.</span></p>
+              <p class="notice bad" role="alert" data-testid="agree"><Icon name="warn" /><span><b>Mismatch.</b> The pictures in the {image ? "workflow" : "ComfyUI graph"} do not match what was submitted. The result may not use the pictures you chose. Check the list below.</span></p>
             {:else}
               <p class="notice" data-testid="agree"><Icon name="info" /><span>The engine has not checked the inputs against the graph yet.</span></p>
             {/if}
-            <h4 class="small">Video</h4>
-            <p class="small">{#if doc.conditioning.video?.file}<code>{doc.conditioning.video.file}</code> <span class="muted tiny">{doc.conditioning.video.node_id ? `node ${doc.conditioning.video.node_id}` : ''}</span>{:else}<span class="muted">not reported</span>{/if}</p>
+            <h4 class="small">{image ? 'Source picture' : 'Video'}</h4>
+            {@const vid = doc.conditioning.video ?? (doc.conditioning as any).source ?? (doc.conditioning as any).image ?? null}
+            <p class="small">{#if vid?.file}<code>{vid.file}</code> <span class="muted tiny">{vid.node_id ? `node ${vid.node_id}` : ''}</span>{:else}<span class="muted">not reported</span>{/if}</p>
             <h4 class="small">Reference pictures</h4>
             {#if refs.length}
               <ol class="refs">
@@ -263,7 +284,7 @@
           {#if mem}
             <dl class="kv memkv">
               <dt>Free system memory</dt><dd>{fmtMb(mem.ram_available_mb)}</dd>
-              <dt>ComfyUI process</dt><dd>{fmtMb(mem.comfyui_rss_mb)}</dd>
+              <dt>{image ? 'Engine process' : 'ComfyUI process'}</dt><dd>{fmtMb(mem.comfyui_rss_mb)}</dd>
               <dt>Device (GPU) memory</dt><dd>{mem.vram_mb == null ? 'not reported by this machine' : fmtMb(mem.vram_mb)}</dd>
             </dl>
             {#if mem.source}<p class="tiny muted">Source: {mem.source}</p>{/if}
@@ -276,12 +297,12 @@
         <h3 id="out-h">Output</h3>
         {#if out}
           <p class="small" data-testid="output-state">
-            {#if out.state === 'ready'}<span class="chip ok"><Icon name="check" size={12} /> Ready</span> The final video was written and checked.
-            {:else if out.state === 'writing'}<span class="chip info">Writing</span> The final video is being written.
-            {:else}<span class="chip">None yet</span> The final video does not exist yet. Saved scenes are listed above.{/if}
+            {#if out.state === 'ready'}<span class="chip ok"><Icon name="check" size={12} /> Ready</span> The final {image ? 'picture' : 'video'} was written and checked.
+            {:else if out.state === 'writing'}<span class="chip info">Writing</span> The final {image ? 'picture' : 'video'} is being written.
+            {:else}<span class="chip">None yet</span> The final {image ? 'picture' : 'video'} does not exist yet.{image ? '' : ' Saved scenes are listed above.'}{/if}
           </p>
           {#if out.state === 'ready' && out.file}
-            <p class="tiny muted">{out.file.width ?? '?'}×{out.file.height ?? '?'} · {out.file.duration_s != null ? `${out.file.duration_s.toFixed(1)} s` : 'duration not reported'} · {fmtBytes(out.file.bytes)} · {out.file.has_audio == null ? 'audio not reported' : out.file.has_audio ? 'with sound' : 'no sound'}</p>
+            <p class="tiny muted">{out.file.width ?? '?'}×{out.file.height ?? '?'}{image ? '' : ` · ${out.file.duration_s != null ? `${out.file.duration_s.toFixed(1)} s` : 'duration not reported'}`} · {fmtBytes(out.file.bytes)}{image ? '' : ` · ${out.file.has_audio == null ? 'audio not reported' : out.file.has_audio ? 'with sound' : 'no sound'}`}</p>
           {/if}
           {#if out.state === 'ready' && finalAssetId}
             <figure class="player">

@@ -88,6 +88,8 @@ export interface InspectDoc {
   /** highest event seq in the engine's trace; next_seq is the cursor to hand back */
   last_seq?: number | null;
   has_preview?: boolean | null;
+  /** 'comfyui-api' (default) or 'sarness-workflow' (the engine's own image runtime: the button reads VIEW WORKFLOW) */
+  graph_kind?: string | null;
 }
 
 export type InspectSummary = Omit<InspectDoc, 'events'>;

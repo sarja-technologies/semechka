@@ -32,6 +32,8 @@
 
   const doc = $derived(live.doc);
   const graph = $derived(live.graph);
+  /** the engine's own image runtime (not ComfyUI): the same graph view, worded without ComfyUI */
+  const isWorkflow = $derived(doc?.graph_kind === 'sarness-workflow');
   const lay = $derived(graph ? layoutGraph(graph) : null);
   const ids = $derived(lay ? lay.list.map((p) => p.id) : []);
   const stMap = $derived(rollupStates(doc?.node_states, ids));
@@ -239,8 +241,8 @@
   }
 </script>
 
-<PanelShell title="View ComfyUI" subtitle={graph ? `${Object.keys(graph.nodes).length} nodes${doc ? ` · ${PHASE_LABEL[phase]}` : ''}` : ''} {mode} width={1180} {onclose}>
-  <p class="ro" role="note"><Icon name="lock" size={14} /> Read-only view of the workflow ComfyUI is running. Nothing here can change the job.</p>
+<PanelShell title={isWorkflow ? 'View workflow' : 'View ComfyUI'} subtitle={graph ? `${Object.keys(graph.nodes).length} nodes${doc ? ` · ${PHASE_LABEL[phase]}` : ''}` : ''} {mode} width={1180} {onclose}>
+  <p class="ro" role="note"><Icon name="lock" size={14} /> Read-only view of the workflow {isWorkflow ? 'the engine ran' : 'ComfyUI is running'}. Nothing here can change the job.</p>
 
   {#if live.graphState === 'loading' || live.graphState === 'idle'}
     <p class="msg muted" role="status">Loading the workflow…</p>
@@ -344,7 +346,7 @@
                 {/if}
                 <h4>Outputs</h4>
                 {#if live.historyState === 'ready'}
-                  {#if nodeOutputs}<pre class="json">{JSON.stringify(nodeOutputs, null, 2)}</pre>{:else}<p class="muted small">ComfyUI recorded no outputs for this node.</p>{/if}
+                  {#if nodeOutputs}<pre class="json">{JSON.stringify(nodeOutputs, null, 2)}</pre>{:else}<p class="muted small">{isWorkflow ? 'The engine' : 'ComfyUI'} recorded no outputs for this node.</p>{/if}
                 {:else if live.historyState === 'loading'}<p class="muted small" role="status">Loading the history…</p>
                 {:else if live.historyState === 'none' || live.historyState === 'error'}<p class="muted small">{live.historyMessage}</p>
                 {:else}<button class="btn sm" onclick={() => live.loadHistory()}>Load outputs from ComfyUI history</button>{/if}

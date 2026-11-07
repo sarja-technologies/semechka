@@ -62,6 +62,7 @@ class JobInfo:
     backend_id: str
     studio: dict | None
     outputs: list[dict]
+    kind: str = "video"
 
 
 def load_job(st, jid: str, user_id: str) -> JobInfo | None:
@@ -72,8 +73,9 @@ def load_job(st, jid: str, user_id: str) -> JobInfo | None:
             return None
         outs = [{"width": a.width, "height": a.height, "duration": a.duration, "size": a.size, "kind": a.kind, "id": a.id}
                 for a in s.execute(select(MediaAsset).where(MediaAsset.job_id == j.id).order_by(MediaAsset.created_at)).scalars()]
+        from . import imajutsu_svc
         return JobInfo(j.id, j.user_id, j.remote_id, j.status, j.error, j.progress, j.progress_text, j.started_at, j.finished_at, j.created_at, j.backend_id,
-                       studio_svc.studio_block(st, j), outs)
+                       studio_svc.studio_block(st, j) or imajutsu_svc.block_of(st, j), outs, j.kind)
 
 
 def adapter(st, ji: JobInfo):
@@ -92,14 +94,18 @@ def fallback_doc(ji: JobInfo, after: int, *, stale: bool = False, reason: str | 
     sent = {x.get("asset"): x for x in acc.get("sent_to_engine") or []}
     why = {x.get("asset"): x.get("reason") for x in acc.get("not_used") or []}
     refs = []
+    first = 1
+    if ji.kind == "image" and (acc.get("source") or {}).get("asset"):        # an Imajutsu job that started from a picture: that picture is image 1
+        refs.append({"position": 1, "node_id": None, "file": None, "used": True, "name": None, "asset": acc["source"]["asset"], "kind": "source"})
+        first = 2
     for i, r in enumerate(studio.get("references") or []):
         used = r.get("asset") in sent
-        refs.append({"position": i + 1, "node_id": None, "file": None, "used": used, "name": r.get("label") or None, "asset": r.get("asset"),
-                     **({} if used else {"reason": why.get(r.get("asset")) or "Not used in this run."})})
+        refs.append({"position": (i + first) if ji.kind != "image" else (len([x for x in refs if x.get("used")]) + 1 if used else i + first), "node_id": None, "file": None, "used": used,
+                     "name": r.get("label") or None, "asset": r.get("asset"), **({} if used else {"reason": why.get(r.get("asset")) or "Not used in this run."})})
     out_file = None
     if done and ji.outputs:
         o = ji.outputs[0]
-        out_file = {"width": o["width"], "height": o["height"], "duration_s": o["duration"], "bytes": o["size"], "has_audio": None}
+        out_file = {"width": o["width"], "height": o["height"], "duration_s": o["duration"], "bytes": o["size"], "has_audio": None if o.get("kind") != "image" else False}
     end = ji.finished_at or time.time()
     doc = {"job_id": ji.id, "backend": None, "profile": None, "operation": studio.get("operation"), "status": ji.status, "stage": stage, "stage_label": label,
            "prompt_id": None, "started_at": ji.started_at, "updated_at": end, "elapsed_s": round(max(0.0, end - (ji.started_at or ji.created_at)), 1),
@@ -108,11 +114,24 @@ def fallback_doc(ji: JobInfo, after: int, *, stale: bool = False, reason: str | 
            "conditioning": {"video": None, "references": refs, "agree": None}, "memory": None,
            "output": {"state": "ready" if out_file else "none", "file": out_file},
            "error": {"message": clean_error(ji.error), "node_id": None, "node_title": None, "class_type": None} if ji.error else None,
-           "events": [], "next_seq": after, "last_seq": max(0, after - 1), "trace_available": False, "stale": stale, "comfy": {"available": False}, "user_status": ji.status}
+           "events": [], "next_seq": after, "last_seq": max(0, after - 1), "trace_available": False, "stale": stale, "comfy": {"available": False},
+           "workflow": {"available": False}, "graph_kind": None, "user_status": ji.status}
     if stale:
         doc["stale_reason"] = reason
         doc["trace_available"] = None
     return doc
+
+
+def graph_kind(doc: dict) -> str | None:
+    """"comfyui" (a ComfyUI prompt graph) or "sarness-workflow" (the engine's own node graph of an image job), from the engine's own statement."""
+    gk = doc.get("graph_kind") if isinstance(doc.get("graph_kind"), str) else None
+    if gk in ("comfyui", "sarness-workflow"):
+        return gk
+    if doc.get("backend") == "sarness-workflow" or doc.get("format") == "sarness-workflow":
+        return "sarness-workflow"
+    if doc.get("backend") == "comfyui" or doc.get("format") == "comfyui-api":
+        return "comfyui"
+    return None
 
 
 def decorate(ji: JobInfo, doc: dict) -> dict:
@@ -122,7 +141,10 @@ def decorate(ji: JobInfo, doc: dict) -> dict:
     if not isinstance(last, int):                     # an engine that only says next_seq: that is "last + 1" too
         last = max(0, int(doc.get("next_seq") or 1) - 1)
     doc["last_seq"], doc["next_seq"] = last, last + 1
+    gk = graph_kind(doc)
+    doc["graph_kind"] = gk
     doc["comfy"] = {"available": bool(doc.get("backend") == "comfyui" and doc.get("prompt_id") and doc.get("nodes") is not None)}
+    doc["workflow"] = {"available": gk == "sarness-workflow"}          # the UI offers VIEW WORKFLOW for it (and hides VIEW COMFYUI)
     doc["user_status"] = ji.status
     doc["trace_available"] = True
     doc["stale"] = False

@@ -45,6 +45,8 @@ def operations(ctx_s, st, p, g, modes: dict) -> dict:
     out["work"] = {"enabled": modes["work"]["enabled"], "reason": modes["work"]["reason"]}  # the Work navigation entry
     from .. import studio_svc
     out["openjutsu"] = studio_svc.availability(st, ctx_s, p, modes["video"])  # the OpenJutsu Studio navigation entry (an editing model the person may use)
+    from .. import imajutsu_svc
+    out["imajutsu"] = imajutsu_svc.availability(st, ctx_s, p, modes["image"])  # the Imajutsu navigation entry (an image model with txt2img or edit the person may use)
     return out
 
 

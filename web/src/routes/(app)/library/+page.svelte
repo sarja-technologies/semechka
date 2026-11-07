@@ -64,7 +64,7 @@
   }
   const when = (t?: number) => (t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
   const label = (a: Asset) => a.origin === 'generated' ? a.job?.prompt || a.prompt || (a.kind === 'video' ? 'Generated video' : 'Generated picture') : a.name ?? (a.kind === 'video' ? 'Video' : 'Picture');
-  const originLabel = (a: Asset) => ({ upload: 'Uploaded', edit: 'Edited', generated: 'Generated', prepared: 'Prepared', export: 'Exported' })[a.origin ?? 'generated'];
+  const originLabel = (a: Asset) => ({ upload: 'Uploaded', edit: 'Edited', generated: 'Generated', prepared: 'Prepared', export: 'Exported', adjusted: 'Adjusted', upscaled: 'Scaled' })[a.origin ?? 'generated'];
 </script>
 
 <svelte:head><title>Library</title></svelte:head>
