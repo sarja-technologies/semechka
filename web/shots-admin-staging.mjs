@@ -7,7 +7,7 @@ const base = process.env.STAGING_URL ?? 'http://192.168.20.193:8790';
 const REASON = 'Release acceptance check of the admin explorer on staging';
 const b = await chromium.launch({ channel: 'chrome' });
 const p = await (await b.newContext({ viewport: { width: 1360, height: 900 } })).newPage(); p.setDefaultTimeout(30000);
-const shot = (n) => p.screenshot({ path: path.join(out, `admin-${n}.png`) });
+const shot = (/** @type {string} */ n) => p.screenshot({ path: path.join(out, `admin-${n}.png`) });
 const search = () => p.getByRole('search').getByRole('button', { name: 'Search', exact: true }).click();
 const record = async () => { await p.getByLabel('Reason for access').fill(REASON); await p.getByRole('button', { name: 'Record and continue' }).click(); };
 await p.goto(base + '/login'); await p.locator('input[type=email], input[name=email]').first().fill(email); await p.locator('input[type=password]').first().fill(pw);
