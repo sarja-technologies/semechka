@@ -306,3 +306,25 @@ def test_qwen_iphone_photo_uses_the_measured_30_steps_but_plain_generate_keeps_t
     assert run({**s, "quality": "draft"}, QWEN, entry=e)["steps"] == 20 and run({**s, "quality": "high"}, QWEN, entry=e)["steps"] == 70
     g = run(spec(prompt="a red bicycle"), QWEN, entry=R.entry_for(DOC, "generate", "qwen-image-2512"))
     assert g["steps"] == 50
+
+
+def _inpaint(prompt, model=None, **kw):
+    sel = {"box": {"x": .1, "y": .1, "w": .5, "h": .5}, "feather": 0, "invert": False, "keep_outside": None}
+    return run(spec("inpaint", prompt=prompt, selection=sel, aspect={"id": "source", "w": None, "h": None}, **kw), model or KLEIN, source=SRC)
+
+
+def test_klein_inpaint_words_become_an_instruction_and_use_the_measured_8_steps():
+    """Measured 2026-11-08: FLUX.2 klein draws nothing from the bare phrase 'A potted green plant' in the selection, and draws it when told what to do."""
+    p = _inpaint("A potted green plant")
+    assert p["errors"] == [] and p["steps"] == 8
+    assert p["prompt"]["final"] == "Fill the selected area with a potted green plant. Keep the lighting, perspective and style of the rest of the picture."
+    assert _inpaint("wooden bench.")["prompt"]["final"].startswith("Fill the selected area with wooden bench. ")
+    assert _inpaint("the old oak tree!")["prompt"]["final"].startswith("Fill the selected area with the old oak tree. ")
+
+
+def test_other_models_and_modes_keep_their_words_and_the_engine_default_steps():
+    assert _inpaint("A potted green plant", ZIMAGE)["prompt"]["final"] == "A potted green plant"
+    g = run(spec("generate", prompt="A potted green plant"), KLEIN)
+    assert g["prompt"]["final"] == "A potted green plant" and g["steps"] == 4
+    e = run(spec("edit", prompt="Make the sky orange", aspect={"id": "source", "w": None, "h": None}), KLEIN, source=SRC)
+    assert e["prompt"]["final"] == "Make the sky orange" and e["steps"] == 4

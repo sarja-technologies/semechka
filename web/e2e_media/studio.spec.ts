@@ -593,10 +593,14 @@ test('12 a finished job shows the result in the viewer, offers a download and an
   const resultAsset = (await api(page, '/api/studio/jobs')).find((j: any) => j.job === jobId).outputs.find((o: any) => o.kind === 'video');
   // read until the file decodes (the result is copied from the engine just before the job shows as completed); a file that never decodes still fails
   let rf: any, lastErr: any;
+  let seen = '';
   for (let i = 0; i < 20 && !rf; i++) {
-    try { rf = probe(await content(page, resultAsset.id)); } catch (e) { lastErr = e; await page.waitForTimeout(500); }
+    const r = await page.request.get(`/api/media/assets/${resultAsset.id}/content`);
+    const body = Buffer.from(await r.body());
+    seen = `HTTP ${r.status()} ${r.headers()['content-type']} ${body.length} bytes (asset says ${resultAsset.size ?? '?'}), starts ${JSON.stringify(body.subarray(0, 40).toString('latin1'))}`;
+    try { rf = probe(body); } catch (e) { lastErr = e; await page.waitForTimeout(500); }
   }
-  if (!rf) throw lastErr;
+  if (!rf) throw new Error(`the result never decoded: ${seen}\n${lastErr}`);   // say what the server actually returned, so a failure here names its own cause
   expect(rf.w).toBe(resultAsset.width); expect(rf.h).toBe(resultAsset.height); expect(rf.d).toBeGreaterThan(0.5);
   await live.getByTestId('job-result').getByRole('button', { name: 'Open', exact: true }).click();
   const dlg = page.getByRole('dialog');

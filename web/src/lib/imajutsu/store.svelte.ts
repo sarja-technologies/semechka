@@ -319,7 +319,7 @@ export class Imajutsu {
     if (before !== key || fresh) {
       s.aspect = n.source ? { id: 'source', w: null, h: null } : key === 'iphone_photo' ? { id: '9:16', w: 9, h: 16 } : s.aspect.id === 'source' ? { id: '9:16', w: 9, h: 16 } : s.aspect;
       s.size = { native: null, output: null };
-      s.preset = key === 'iphone_photo' ? { id: 'iphone_photo', scenes: s.preset.scenes, finish: true } : { id: null, scenes: [], finish: false };
+      s.preset = key === 'iphone_photo' ? { id: 'iphone_photo', scenes: s.preset.scenes, finish: false } : { id: null, scenes: [], finish: false };
       s.outpaint = { ...s.outpaint, target: null, pad: null };
       if (key === 'upscale') s.upscale = { ...s.upscale, refine: false };
     }

@@ -305,7 +305,7 @@ def plan(spec: dict, ctx: dict) -> dict:
     # ---- settings ------------------------------------------------------------------------------------------------------------------------------------------
     adv = spec.get("advanced") or {}
     defaults = model["defaults"]
-    pln["steps"] = int(adv["steps"]) if adv.get("steps") is not None else steps_for(spec["quality"], entry, defaults, limits, "iphone_photo" if mode == "iphone_photo" else None)
+    pln["steps"] = int(adv["steps"]) if adv.get("steps") is not None else steps_for(spec["quality"], entry, defaults, limits, mode)
     slo, shi = (limits.get("steps") or [1, 200])[:2]
     if pln["steps"] is not None and not slo <= pln["steps"] <= shi:
         errors.append(f"steps must be between {slo} and {shi} for {model['alias']}.")
@@ -329,6 +329,13 @@ def plan(spec: dict, ctx: dict) -> dict:
     return pln
 
 
+def _object_phrase(text: str) -> str:
+    """The person's words as the end of a sentence: no final full stop, a leading article in lower case ('A potted plant' -> 'a potted plant')."""
+    t = text.strip().rstrip(" .!?")
+    first, _, rest = t.partition(" ")
+    return (first.lower() + " " + rest) if first in ("A", "An", "The") and rest else t
+
+
 def _prompt(spec: dict, mode: str, model: dict, entry: dict | None, ctx: dict, used: list[dict], source_counts: bool, warnings: list[str], errors: list[str]) -> dict:
     md = MODE_DEFS[mode]
     text = (spec.get("prompt") or "").strip()
@@ -344,6 +351,10 @@ def _prompt(spec: dict, mode: str, model: dict, entry: dict | None, ctx: dict, u
             errors.append("Describe what is in the photo.")
     else:
         base = text
+        tpl = (entry or {}).get("inpaint_prompt")
+        if mode == "inpaint" and text and tpl:
+            # a measured rule of the routing file: this model draws the object when told what to do with the selection, and does not when only given a noun phrase
+            base = tpl.replace("{text}", _object_phrase(text))
         if not text and mode == "outpaint":
             base = DEFAULT_OUTPAINT_PROMPT
         elif not text and mode == "reference" and used:

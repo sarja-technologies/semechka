@@ -1,6 +1,12 @@
 .e2e-admin-build/
 .e2e-admin-tmp/
 .e2e-chat-tmp/
+.e2e-full1-tmp/
+.e2e-full2-tmp/
+.e2e-full3-tmp/
+.e2e-full4-tmp/
+.e2e-full5-tmp/
+.e2e-full6-tmp/
 .e2e-imajutsu2-tmp/
 .e2e-imajutsu3-tmp/
 .e2e-imajutsu-tmp/

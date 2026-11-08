@@ -114,6 +114,8 @@
 </PanelCard>
 
 <style>
+  /* the small size text inside the SELECTED option sits on the highlight colour: muted grey on it failed the dark-theme contrast check whenever the first option was the selected one */
+  .st-seg button[aria-checked='true'] :global(.muted) { color: var(--fg); }
   .w { width: 110px; } .lock { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; min-height: 34px; cursor: pointer; color: var(--fg-2); }
   .anc { display: inline-grid; grid-template-columns: repeat(3, 44px); gap: 4px; }
   .anc button { all: unset; box-sizing: border-box; width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); cursor: pointer; display: grid; place-items: center; } .anc button:focus-visible { outline: 2px solid var(--m-ring); outline-offset: 2px; }

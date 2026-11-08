@@ -204,6 +204,15 @@
   $effect(() => { if (presetOn && sizeChoices.length && !sizeChoices.some((s) => `${s.w}x${s.h}` === preset.size)) preset.size = `${sizeChoices[0].w}x${sizeChoices[0].h}`; });
   const presetNoText = $derived(presetOn && !!mopt && !!mopt.modes?.length && !mopt.modes.includes('txt2img'));
   const tier = $derived(tierOf(presetInfo, modelId));
+  /** The model of the preset's default quality level, when it is in the list of models this person can use (else null). */
+  function presetModel(): string | null {
+    if (!presetInfo) return null;
+    const pick = presetInfo.tiers.find((x) => x.default && x.status === 'ready') ?? presetInfo.tiers.find((x) => x.status === 'ready');
+    const rec = pick?.model_id ?? presetInfo.model_id;
+    return rec && catalog('image')?.models?.some((m: any) => m.id === rec) ? rec : null;
+  }
+  let applyRec = $state(false);
+  $effect(() => { if (applyRec && preset.on) { const r = presetModel(); if (r) { applyRec = false; untrack(() => { chosen.image = r; }); } } });
   /** Switch the preset on (choosing the model the routing table recommends for it) or off (the earlier model returns). */
   export function setPreset(on: boolean) {
     if (!presetInfo) { if (on) { pendingPreset = true; op = 'image'; } return; }
@@ -213,9 +222,9 @@
       op = 'image';
       preset.back = chosen.image ?? '';
       // the model the routing table recommends for the preset (its default quality level); the quality choice in the options picks another
-      const pick = presetInfo.tiers.find((x) => x.default && x.status === 'ready') ?? presetInfo.tiers.find((x) => x.status === 'ready');
-      const rec = pick?.model_id ?? presetInfo.model_id;
-      if (rec && catalog('image')?.models?.some((m: any) => m.id === rec)) chosen.image = rec;
+      const rec = presetModel();
+      if (rec) chosen.image = rec;
+      else applyRec = true;   // the model list has not arrived yet (a link with ?preset=iphone_photo opens before it): choose as soon as it does
     } else {
       if (preset.back && tierOf(presetInfo, chosen.image) && catalog('image')?.models?.some((m: any) => m.id === preset.back)) chosen.image = preset.back;
       preset.back = ''; setOpen = false;

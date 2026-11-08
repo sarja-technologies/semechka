@@ -157,6 +157,8 @@ test('2b iPhone Photo opens on Best realism: Qwen-Image 2512 at the measured 30 
   await expect(tiers.getByRole('radio', { name: 'Best realism' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('model-name')).toContainText('qwen-image-2512');
   await expect(page.getByTestId('tier-hint')).toContainText('86 s');
+  await expect(page.getByTestId('phone-finish')).not.toBeChecked();      // Phone finish is opt-in: no sharpening or curve unless the person switches it on
+  expect((await spec(page)).preset.finish).toBe(false);
   await page.getByTestId('prompt-input').fill('A family barbecue in the back garden');
   await settle(page);
   const plan = (await (await page.request.post(`/api/imajutsu/projects/${pid(page)}/plan`, { data: {}, headers: { 'x-csrf-token': await csrf(page) } })).json()).plan;
@@ -391,7 +393,8 @@ test('7 inpaint end to end: the engine receives the source and the mask at its w
   const sub = (await subs(page)).at(-1);
   expect(sub.engine_mode).toBe('inpaint');
   expect(sub.model).toBe('flux2-klein-4b');
-  expect(sub.simple.prompt).toContain('A wooden bench');
+  expect(sub.simple.prompt).toContain('Fill the selected area with a wooden bench.');   // Klein draws from an instruction, not from a bare noun phrase
+  expect(sub.simple.steps).toBe(8);
   expect(sub.pictures).toHaveLength(1);
   expect(sub.pictures[0].name).toBe('source.png');
   expect(sub.mask).toBeTruthy();

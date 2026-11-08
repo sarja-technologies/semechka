@@ -252,10 +252,15 @@
       "models": [
         {
           "engine_id": "flux2-klein-4b",
-          "why": "Fast inpainting that can also use reference pictures.",
+          "why": "Fast inpainting that can also use reference pictures. Inpaint words are sent as an instruction ('Fill the selected area with ...') because this model draws nothing from a bare noun phrase.",
           "evidence": [
             "docs/IMAJUTSU.md: flux2-klein-4b inpaint"
-          ]
+          ],
+          "inpaint_prompt": "Fill the selected area with {text}. Keep the lighting, perspective and style of the rest of the picture.",
+          "preset_steps": {
+            "inpaint": 8
+          },
+          "preset_steps_evidence": "2026-11-08, 720x1280, same seed: with a noun phrase ('A potted green plant') FLUX.2 klein drew nothing in the selection; told what to do ('Fill the selected area with a potted green plant ...') it drew the pot, and a larger selection with 8 steps (12 s instead of 6 s) drew a full plant."
         },
         {
           "engine_id": "z-image-turbo",

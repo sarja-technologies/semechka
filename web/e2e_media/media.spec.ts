@@ -387,10 +387,11 @@ test('18 a generated picture is previewable in the viewer and reusable as a sour
 test('19 the Library hands a file to a new message, and the files can be dropped on the Library page', async ({ page }) => {
   await page.goto('/library');
   await page.getByRole('radio', { name: 'Uploaded' }).click();
-  const before = (await api(page, '/api/media/assets?origin=upload')).length;
+  // compare by id, not by count: the list is one page long (newest first), so a count stops growing once many uploads exist (it failed in long combined runs)
+  const before = new Set(((await api(page, '/api/media/assets?origin=upload')) as any[]).map((a) => a.id));
   await drop(page, page.locator('.lib'), [F.webm]);
   await expect(page.getByRole('button', { name: /^Open loop/ })).toBeVisible({ timeout: 30_000 });
-  expect((await api(page, '/api/media/assets?origin=upload')).length).toBe(before + 1);
+  expect(((await api(page, '/api/media/assets?origin=upload')) as any[]).filter((a) => !before.has(a.id))).toHaveLength(1);
   await page.getByRole('button', { name: /^Open loop/ }).locator('xpath=ancestor::li').getByRole('button', { name: 'Use' }).click();
   await expect(page).toHaveURL(/\/chat/);
   await expect(cards(page)).toHaveCount(1);
