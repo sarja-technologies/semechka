@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from . import adapters, media_store, services
+from . import adapters, media_store, services, video_duration
 from .adapters import AdapterError
 from .backends_svc import adapter_for
 from .media_models import MediaAsset, MediaJob
@@ -93,7 +93,21 @@ def option_defaults(kind: str, m: Model, default_size: int, video_max_s: int) ->
         while fr > 1 and fr / fps > video_max_s and fr - step >= int((lim.get("frames") or [5, 5])[0]):
             fr -= step
         d["frames"] = fr
+        ds = video_duration.spec(lim, d, video_max_s) if lim.get("frames") else {"available": False}   # a profile (video editing) has no frame limits: no length to choose
+        if ds["available"]:
+            d["seconds"] = ds["default"]            # what the page shows: the length of the default clip, in seconds
     return d
+
+
+def has_duration(m: Model) -> bool:
+    """A plain video model that declares frame limits (profiles, e.g. video editing, take their length from the source video)."""
+    return not profile_info(m) and bool((media_info(m).get("limits") or {}).get("frames"))
+
+
+def duration_spec(m: Model, video_max_s: int) -> dict:
+    """The seconds-based length facts of a video model for the page (see video_duration.spec)."""
+    info = media_info(m)
+    return video_duration.spec(info.get("limits") or {}, info.get("defaults") or {}, video_max_s)
 
 
 class ParamError(ValueError):
@@ -160,6 +174,13 @@ def validate_params(kind: str, m: Model, body: dict, video_max_s: int) -> dict:
         if res and (w, h) not in res:
             raise ParamError("Pick one of the resolutions this model supports.")
         out["width"], out["height"] = int(w), int(h)
+        if body.get("seconds") is not None and body.get("frames") is None:
+            # a length in SECONDS: the nearest frame count this model accepts, at its own frame rate (frames/fps win when both are sent: older clients keep working)
+            try:
+                plan = video_duration.to_frames(body["seconds"], lim, dfl, video_max_s, fps=body.get("fps"))
+            except video_duration.DurationError as e:
+                raise ParamError(str(e)) from None
+            body = {**body, "frames": plan["frames"], "fps": plan["fps"]}
         f_lo, f_hi = (lim.get("frames") or [5, 121])[:2]
         step = int(lim.get("frame_step") or 4)
         frames = num("frames", f_lo, f_hi)

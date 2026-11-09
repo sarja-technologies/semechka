@@ -45,7 +45,7 @@
     </div>
   {/if}
   {#if upscale}
-    <label class="keep"><input type="checkbox" checked={sp.upscale.refine} disabled={!refine?.available} onchange={(e) => s.edit((x) => { x.upscale.refine = e.currentTarget.checked; })} data-testid="refine" />
+    <label class="keep"><input type="checkbox" checked={sp.upscale.refine} disabled={!refine?.available || (s.upscaleEngine !== 'lanczos' && !sp.upscale.refine)} title={s.upscaleEngine !== 'lanczos' ? 'Choose Scaling (Lanczos) to refine after scaling: an AI method already makes the new detail.' : undefined} onchange={(e) => s.edit((x) => { x.upscale.refine = e.currentTarget.checked; })} data-testid="refine" />
       <span><strong>Refine after scaling</strong> <span class="st-note">{refine?.available ? `A light second pass by a model (${refine.recommended?.why ? refine.recommended.why : 'image to image'}). It can change texture; the scaling step itself adds none.` : 'Not available: no installed model can refine a picture here.'}</span></span></label>
   {/if}
 
@@ -63,7 +63,7 @@
         {#if refs.not_used.length}<dt>Not used</dt><dd data-testid="acc-unused"><ul>{#each refs.not_used as x (x.position)}<li>{nm(x.asset, x.position)} <span class="muted">· {x.reason}</span></li>{/each}</ul></dd>{/if}
       {/if}
       {#if p?.native && !s.upscaleOnly}<dt>The model works at</dt><dd data-testid="acc-native">{fmtDims(p.native)}</dd>{/if}
-      <dt>You get</dt><dd data-testid="acc-output">{p?.output ? fmtDims(p.output) : '–'}{p?.output?.scaling && p.output.scaling !== 'none' ? ` (${p.output.scaling === 'upscale' ? 'scaled up, no new detail' : 'scaled down'})` : ''}</dd>
+      <dt>You get</dt><dd data-testid="acc-output">{p?.output ? fmtDims(p.output) : '–'}{p?.output?.scaling && p.output.scaling !== 'none' ? ` (${p.output.scaling === 'upscale' ? (p.scaling?.ai ? 'AI upscale: new detail is drawn' : 'scaled up, no new detail') : 'scaled down'})` : ''}</dd>
     </dl>
   </section>
 

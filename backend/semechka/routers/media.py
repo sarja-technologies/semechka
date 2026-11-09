@@ -67,6 +67,7 @@ def options(kind: str, ctx: Ctx = Depends(current)):
                        "references": int(info.get("references") or 0),
                        "schedulers": info.get("schedulers") or [], "limits": info.get("limits") or {},
                        "defaults": media_svc.option_defaults(kind, m, size, vmax),
+                       **({"duration": media_svc.duration_spec(m, vmax)} if kind == "video" and media_svc.has_duration(m) else {}),
                        "loaded": (m.meta or {}).get("loaded"),
                        "profile": media_svc.profile_info(m)})
     ephemeral = bool(_val(ctx, "privacy.ephemeral_allowed") and ctx.principal.can("chat.ephemeral"))
@@ -91,6 +92,7 @@ class JobIn(BaseModel):
     seed: int | None = None
     scheduler: str | None = None
     frames: int | None = None
+    seconds: float | None = Field(default=None, gt=0, le=3600)   # length in SECONDS (video): converted to the nearest frame count the model accepts, at its own frame rate
     fps: int | None = None
     save: bool = True
     preset: Literal["iphone_photo"] | None = None  # image only: the shared preset (prompt builder, 9:16, routed wording); see preset_params

@@ -2,6 +2,8 @@
   // The one place a turn starts: write, attach, choose what to make (reply, picture, video) and with which model.
   // Everything offered here is what /api/me says this person may do; the server checks each request again.
   import { tick, untrack } from 'svelte';
+  import DurationControl from '$lib/components/media/DurationControl.svelte';
+  import { planDuration } from '$lib/media/duration';
   import { app } from '$lib/session.svelte';
   import { get, del, qs, ApiError } from '$lib/api';
   import { loadCatalog, catalog, type Operation } from '$lib/chat/store.svelte';
@@ -126,7 +128,7 @@
   // ---- picture and video settings (from the engine's limits for the chosen model) ------------------------------
   const mediaOpts = $state<Record<string, any>>({});
   let mediaErr = $state(''), setOpen = $state(false);
-  let mp = $state<{ size: string; seed: string; negative: string; steps: string | number; frames: number; fps: number }>({ size: '', seed: '', negative: '', steps: '', frames: 0, fps: 0 });
+  let mp = $state<{ size: string; seed: string; negative: string; steps: string | number; secs: number; fpsOv: number | null }>({ size: '', seed: '', negative: '', steps: '', secs: 0, fpsOv: null });
   $effect(() => {
     if (op === 'text' || mediaOpts[op]) return;
     const k = op;
@@ -163,14 +165,16 @@
     return out;
   });
   const rng = (k: string): [number | undefined, number | undefined] => { const r = mopt?.limits?.[k]; return Array.isArray(r) ? [r[0], r[1]] : [undefined, undefined]; };
-  let lastM = '';
+  let lastM = '', secsTouched = false;      // a length the person chose follows them to another model (clamped, with the note); an untouched one follows each model's own default
   $effect(() => {
     if (!mopt || mopt.id === lastM) return;
     lastM = mopt.id; const d = mopt.defaults ?? {};
-    mp = { size: d.width && d.height ? `${d.width}x${d.height}` : '', seed: '', negative: '', steps: d.steps ? String(d.steps) : '', frames: d.frames ?? 0, fps: d.fps ?? 0 };
+    mp = { size: d.width && d.height ? `${d.width}x${d.height}` : '', seed: '', negative: '', steps: d.steps ? String(d.steps) : '', secs: secsTouched && mp.secs > 0 ? mp.secs : (d.seconds ?? mopt.duration?.default ?? 0), fpsOv: null };
   });
   const vmax = $derived(mediaOpts.video?.video_max_seconds ?? null);
-  const seconds = $derived(op === 'video' && mp.fps ? mp.frames / mp.fps : 0);
+  // the length is asked for in SECONDS; the model's frame rate and valid frame counts are automatic (media/duration.ts mirrors the server's rules)
+  const dplan = $derived(op === 'video' && mopt?.duration ? planDuration(mp.secs, mopt.duration, { fps: mp.fpsOv, maxSeconds: vmax }) : null);
+  const seconds = $derived(dplan?.seconds ?? 0);
   function mediaParams(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     // iPhone Photo is always 9:16: its own size list (the server checks the shape and the model's limits again)
@@ -179,7 +183,7 @@
     if (String(mp.seed).trim() !== '' && Number.isInteger(Number(mp.seed))) out.seed = Number(mp.seed);
     if (mp.negative.trim() && mopt?.negative_prompt && !presetOn) out.negative_prompt = mp.negative.trim();
     if (mp.steps && ui.composer.edit_params && !presetOn) out.steps = Number(mp.steps);
-    if (op === 'video' && mp.frames && mp.fps) { out.frames = mp.frames; out.fps = mp.fps; }
+    if (op === 'video' && dplan) { out.seconds = dplan.seconds; if (mp.fpsOv && mopt?.duration?.fps_configurable) out.fps = mp.fpsOv; }
     return out;
   }
   // ---- the iPhone Photo option of the picture operation (state first: the slots below depend on it)
@@ -283,7 +287,7 @@
   const promptRequired = $derived(!!textSpec?.required);
   const textTooLong = $derived(!!textSpec?.max_length && text.length > textSpec.max_length);
   const blocked = $derived(!modelId || tray.busy || tray.failed || tooLong || textTooLong || (op !== 'text' && (prof ? (!!pproblem || !!verdict.problems.length || (promptRequired && !text.trim()))
-    : (!text.trim() || (needSource && !hasImage) || presetNoText || (vmax && seconds > vmax + 1e-9) || !!verdict.problems.length))));
+    : (!text.trim() || (needSource && !hasImage) || presetNoText || (vmax && seconds > vmax + 1e-9) || (op === 'video' && !prof && !!mopt?.duration && !dplan) || !!verdict.problems.length))));
   const canSend = $derived(!busy && !blocked && (!!text.trim() || (op === 'text' && usedItems.length > 0) || (!!prof && usedItems.some((i) => i.kind === 'video'))));
   /** What the message carries, in the shape the thread sends. */
   const asAttachment = (i: (typeof tray.items)[number]): Attachment => i.legacy ?? { id: i.asset!.id, name: i.name, kind: i.kind === 'video' ? 'video' : 'image', mime: i.asset!.mime, size: i.asset!.size,
@@ -431,6 +435,10 @@
     </div>
   </div>
 
+  {#if op === 'video' && !prof && mopt?.duration}
+    <DurationControl spec={mopt.duration} bind:seconds={mp.secs} onuser={() => (secsTouched = true)} fps={mp.fpsOv} maxSeconds={vmax} disabled={busy} />
+  {/if}
+
   {#if presetOn && presetInfo}
     <div class="presetline" role="status">
       <span class="sum"><Icon name="phone" size={13} /> <strong>{presetInfo.label}</strong> · 9:16 · {preset.size.replace('x', ' × ')}{tier ? ` · ${tier.label}` : ''} · {alias}</span>
@@ -451,9 +459,10 @@
         <label class="fld"><span>Size</span><select class="input" bind:value={mp.size}>{#each sizes as s}<option value={s.v}>{s.label}</option>{/each}</select></label>
       {/if}
       {#if op === 'video'}
-        <label class="fld"><span>Frames</span><input class="input" type="number" min={rng('frames')[0] ?? 1} max={rng('frames')[1]} step={mopt.limits?.frame_step ?? 4} bind:value={mp.frames} /></label>
-        <label class="fld"><span>Frames per second</span><input class="input" type="number" min={rng('fps')[0] ?? 1} max={rng('fps')[1] ?? 60} bind:value={mp.fps} /></label>
-        <span class="tiny" class:err={vmax && seconds > vmax} style="align-self:end">{seconds ? `${Math.round(seconds * 10) / 10} s` : ''}{vmax ? ` (at most ${vmax} s)` : ''}</span>
+        {#if mopt.duration?.fps_configurable}
+          <label class="fld"><span>Frame rate (advanced)</span><input class="input" type="number" min={mopt.duration.fps_range[0]} max={mopt.duration.fps_range[1]} placeholder={`Automatic (${mopt.duration.fps})`}
+            value={mp.fpsOv ?? ''} oninput={(e) => { const n = Number(e.currentTarget.value); mp.fpsOv = e.currentTarget.value === '' || !Number.isInteger(n) ? null : n; }} /></label>
+        {/if}
       {/if}
       {#if ui.composer.edit_params && !presetOn}
         <label class="fld"><span>Steps</span><input class="input" type="number" min={rng('steps')[0] ?? 1} max={rng('steps')[1]} bind:value={mp.steps} /></label>

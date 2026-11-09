@@ -80,3 +80,17 @@ speaks the Sarness job protocol with OpenJutsu's real input schema). Run: `cd we
 
 No schema change: install 0.7.0 over 0.8.0. Uploaded and edited items remain in the Library table; 0.7.0 lists them with the generated ones' fields (no
 preview, no name) and cannot read the chunked files (`SMC1`): delete them first (Library) if you need a clean 0.7.0.
+
+## Video length in seconds (0.11.1)
+
+Every prompt-to-video form (the chat media panel for text-to-video and picture-to-video, the media API, the agent's `generate_video`) asks for the **Duration in seconds**, never frames or fps.
+
+* **Page.** *Duration* sits in the main controls under the prompt box (not under "Options"): a slider and an editable number that always agree, the model's real limits ("This model makes 0.3 s to 3.1 s, in steps of 0.25 s"),
+  and one honest line, "Will make 6.06 s" (with "the nearest length this model supports" when it had to adjust). Models that only support specific lengths show exactly those as buttons. Changing the model changes the limits.
+  The frame rate is automatic; **Frame rate (advanced)** appears under Options only for models that genuinely offer a range. Frame counts are never shown.
+* **One rule, two implementations.** `backend/semechka/video_duration.py` is the authority (the engine's own `media.limits`: `frames`, `frame_step`, `fps`, optional `durations`; `media.defaults`); `web/src/lib/media/duration.ts` mirrors it for the display,
+  and both test files use the same vectors. The page always sends the *actual* length it displays (e.g. `seconds: 6.0625`), which the server maps back to the same frame count, so what is shown is what is generated.
+* **API.** `POST /api/media/jobs` takes `seconds` (video). It becomes the nearest valid frame count at the model's default `fps` (or the `fps` you send, inside the model's range), clamped to the model's range and the organisation's `media.video_max_seconds`.
+  `GET /api/media/options?kind=video` returns per model `duration` = `{fps, fps_configurable, fps_range, min, max, step, default, options, declared, available, why}` and `defaults.seconds`.
+  `frames` + `fps` keep working exactly as before, and **win when both are sent** (saved projects, API users, regenerate). A frame count the model does not accept is refused with the rule in the sentence.
+* **Agents.** `generate_video` inputs accept `seconds`; `list_models` rows carry `duration`.

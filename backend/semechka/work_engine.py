@@ -188,6 +188,9 @@ def model_row(st, m: Model, b: Backend, info: dict, current: str | None) -> dict
             row["defaults"], row["limits"] = dfl, {k: v for k, v in lim.items() if k in ("steps", "min_side", "max_side", "multiple", "frames", "fps", "resolutions", "frame_step")}
             if mi.get("negative_prompt"):
                 row["negative_prompt"] = True
+            if "frames" in lim:                       # the length in seconds (what to ask for: "seconds"), at the model's own frame rate
+                from . import video_duration
+                row["duration"] = {k: v for k, v in video_duration.spec(lim, dfl).items() if k in ("fps", "min", "max", "step", "default", "options")}
     if meta.get("description"):
         row["about"] = str(meta["description"])[:160]
     if services.is_external(m, b):
@@ -654,7 +657,7 @@ async def _upload(w: Wk, b: Backend, data: bytes, mime: str, fname: str) -> str:
     return await adapter_for(b, w.st).media_upload(data, mime, fname)
 
 
-VIDEO_PLAIN_KEYS = ("width", "height", "frames", "fps", "steps", "guidance", "seed", "negative_prompt")
+VIDEO_PLAIN_KEYS = ("width", "height", "frames", "fps", "seconds", "steps", "guidance", "seed", "negative_prompt")
 
 
 @work_tool("generate_video", "Make or edit video and wait; returns once the MP4 is in /work/artifacts/. Profiles (OpenJutsu): inputs as in list_models, files are /work paths.",
@@ -717,6 +720,8 @@ def t_generate_video(tc, w: Wk, a: dict) -> ToolOut:
     with scope(w) as (s, p, org, ws, sess):
         dfl = media_svc.option_defaults("video", m, 0, vmax)
     for k in ("width", "height", "frames", "fps", "steps", "guidance"):
+        if k in ("frames", "fps") and body.get("seconds") is not None:
+            continue                                  # a length in seconds is converted by validate_params, at the model's own frame rate
         if body.get(k) is None and dfl.get(k) is not None:
             body[k] = dfl[k]
     try:
