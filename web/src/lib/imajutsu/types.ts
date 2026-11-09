@@ -47,7 +47,7 @@ export type Spec = {
   mask_asset: string | null;
   selection: { box: Box | null; feather: number; invert: boolean; keep_outside: boolean | null };
   outpaint: { pad: { left: number; top: number; right: number; bottom: number } | null; target: Size | null; anchor: { x: number; y: number }; overlap: number };
-  upscale: { refine: boolean; strength: number };
+  upscale: { refine: boolean; strength: number; engine?: 'lanczos' | 'seedvr2' | 'esrgan' };
   references: RefItem[];
   /** the model chosen by hand; null = the recommended one */
   model: string | null;

@@ -31,7 +31,7 @@
   const before = $derived(s.needs.source ? s.source : null);
   let keepBusy = $state(''), keepErr = $state('');
   const kindOf = (d: Derived) => d.imajutsu?.kind ?? d.origin ?? 'copy';
-  const LABEL: Record<string, string> = { adjusted: 'Adjusted copy (photo adjustments, not AI)', composited: 'Your original kept outside the selection', scaled: 'Scaled copy (no new detail)', upscaled: 'Scaled copy (no new detail)' };
+  const LABEL: Record<string, string> = { adjusted: 'Adjusted copy (photo adjustments, not AI)', composited: 'Your original kept outside the selection', scaled: 'Scaled copy (no new detail)', upscaled: 'AI upscaled copy (new detail drawn by a model)' };
   const labelOf = (d: Derived) => (kindOf(d) === 'adjusted' && d.imajutsu?.recipe && !d.imajutsu.label ? LABEL.adjusted : d.imajutsu?.label || LABEL[kindOf(d)] || 'Copy');
   function compare(a: Asset) { s.picked = a.id; s.stage = 'result'; s.compare = true; }
   function show(a: Asset) { s.picked = a.id; s.stage = 'result'; }
@@ -80,7 +80,7 @@
     {#each copies as a (a.id)}
       <li class:on={s.picked === a.id} data-testid="copy" data-asset={a.id}>
         <button type="button" class="th" onclick={() => show(a)} aria-label={`Show this copy on the stage, ${fmtDims(a)}`} aria-pressed={s.picked === a.id}><MediaThumb id={a.id} kind="image" name="Copy" ratio={`${a.width || 1} / ${a.height || 1}`} fit="contain" /></button>
-        <div class="tx"><p class="meta"><span class="st-badge info">{a.origin === 'adjusted' ? 'Adjusted copy' : a.origin === 'upscaled' || a.origin === ('scaled' as string) ? 'Scaled copy' : 'Copy'}</span> {fmtDims(a)} <span class="tiny muted">not made by a model</span></p>{@render actions(a, false)}</div>
+        <div class="tx"><p class="meta"><span class="st-badge info">{a.origin === 'adjusted' ? 'Adjusted copy' : a.origin === 'upscaled' ? 'AI upscaled copy' : a.origin === ('scaled' as string) ? 'Scaled copy' : 'Copy'}</span> {fmtDims(a)} <span class="tiny muted">{a.origin === 'upscaled' ? 'made by an AI model' : 'not made by a model'}</span></p>{@render actions(a, false)}</div>
       </li>
     {/each}
   </ul>

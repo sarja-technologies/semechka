@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from .. import imajutsu_plan as plan_mod
 from .. import imajutsu_svc as svc
 from .. import media_lib, media_svc
 from ..adapters import AdapterError
@@ -216,6 +217,7 @@ class UpscaleIn(BaseModel):
     width: int
     height: int
     name: str | None = Field(default=None, max_length=120)
+    engine: str = Field(default="lanczos", max_length=20)   # lanczos (no AI) | seedvr2 | esrgan (AI, on the Spark's GPU)
 
 
 class KeepOutsideIn(BaseModel):
@@ -250,12 +252,30 @@ async def adjust(aid: str, body: AdjustIn, ctx: Ctx = Depends(current)):
     return {"task": t.id, "task_status": media_lib.task_out(t)}
 
 
+@router.get("/upscale/engines")
+async def upscale_engines(ctx: Ctx = Depends(current)):
+    """The upscale methods and whether each can run right now. Lanczos scaling is always there; the AI methods need OpenSfield on the Spark."""
+    _gated(ctx)
+    from .. import opensfield_upscale as osf
+    caps = await osf.capabilities()
+    out = [{"id": "lanczos", "label": plan_mod.UPSCALE_ENGINES["lanczos"], "ai": False, "ready": True, "reason": None,
+            "note": "Scaled with Lanczos and a light sharpening. No new detail is added: this is not AI.", "max_pixels": plan_mod.MAX_OUT_PIXELS, "max_edge": plan_mod.MAX_OUT}]
+    for e in ("seedvr2", "esrgan"):
+        i = osf.engine_info(caps, e)
+        ready = bool(i and i.get("ready") and caps.get("reachable"))
+        out.append({"id": e, "label": plan_mod.UPSCALE_ENGINES[e], "ai": True, "ready": ready, "reason": None if ready else ((i or {}).get("reason") or caps.get("reason") or "Not available."),
+                    "note": (i or {}).get("note"), "max_pixels": min(plan_mod.MAX_OUT_AI_PIXELS, int(caps.get("max_output_pixels") or plan_mod.MAX_OUT_AI_PIXELS)),
+                    "max_edge": min(plan_mod.MAX_OUT_AI, int(caps.get("max_edge") or plan_mod.MAX_OUT_AI)),
+                    **({"max_scale": 4, "max_source_pixels": int(caps.get("esrgan_max_source_pixels") or 5_625_000)} if e == "esrgan" else {"max_source_pixels": int(caps.get("max_source_pixels") or 64_000_000)})})
+    return {"engines": out}
+
+
 @router.post("/assets/{aid}/upscale")
 async def upscale(aid: str, body: UpscaleIn, ctx: Ctx = Depends(current)):
     """Scale a picture (Lanczos and a light unsharp mask) to a size of the same shape. Labelled 'Scaled, no new detail'; never AI. Also scales down."""
     _gated(ctx)
     try:
-        t, info = await svc.start_upscale(ctx.st, ctx.s, ctx.user, aid, body.width, body.height, body.name)
+        t, info = await svc.start_upscale(ctx.st, ctx.s, ctx.user, aid, body.width, body.height, body.name, body.engine)
     except MediaError as e:
         raise _fail(e) from e
     return {"task": t.id, "task_status": media_lib.task_out(t), **info}

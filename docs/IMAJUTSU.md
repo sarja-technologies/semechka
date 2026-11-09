@@ -80,3 +80,19 @@ Layout like OpenJutsu Studio (stage left, panels right/stacked on mobile). Top: 
   instance now lifts that limit (`e2e_media/setup.ts`); (2) one assertion counted a list that is one page long; it compares ids now; (3) a dark-theme contrast failure that appeared only when the
   first output-size option was the selected one (fixed in `SizePanel.svelte`); (4) a real race in the chat composer: a link with `?preset=iphone_photo` could open before the model list had loaded
   and stay on the previously chosen model (fixed in `Composer.svelte`). An isolated pass is not accepted as proof: the suite is run as one combined run, twice, on fresh data.
+
+## AI upscale methods (0.11.0)
+
+Upscale mode has a **Method**: *Scaling (Lanczos)* (default, never AI, "no new detail"), *SeedVR2 · AI detail restoration* and *Real-ESRGAN · AI, fast and faithful*. The AI methods run
+on the Spark's GPU through OpenSfield's narrow upscale API (`opensfield_upscale.py`); Semechka has no GPU code of its own.
+
+* Config (environment of the instance): `SEMECHKA_OPENSFIELD_URL` (default `http://127.0.0.1:8765`) and `SEMECHKA_OPENSFIELD_UPSCALE_TOKEN_FILE` (a 0600 file with the upscale-only token;
+  never stored in the database, never returned by an API). Unset = the AI methods say "not set up" and Lanczos keeps working. The token only opens OpenSfield's `/api/internal/upscale*`.
+* `GET /api/imajutsu/upscale/engines` lists the methods with `ready` and a plain `reason`; `POST /api/imajutsu/assets/{id}/upscale` takes `engine` (`lanczos` | `seedvr2` | `esrgan`).
+* Limits are OpenSfield's measured ones (84.9 MP in a single 123 s run; cap 90 MP and 12288 px per side; Real-ESRGAN 2-4x on sources up to ~5.6 MP). Plain scaling keeps its 8K limit. Impossible sizes
+  are refused in the plan and in the request with a sentence, before anything is queued.
+* AI results are a new asset with origin **`upscaled`** (never `scaled`, which means "no new detail, not AI"): label "SeedVR2 · AI detail restoration", `imajutsu.ai = true`, the engine's own
+  honest description, and the original untouched. Results above 24 MP are kept as high-quality JPEG (a 90 MP PNG is 120+ MB).
+* Failure paths: OpenSfield down / token refused / engine not ready = 503 with the reason at request time; failing mid-run = the task fails with a plain sentence and the Spark copy is freed;
+  a stopped task cancels the Spark job.
+* Tests: `tests/test_imajutsu_upscale_ai.py` runs against an in-process fake of OpenSfield's API (token header, polling, errors); the live run on the Spark is recorded in the release notes below.

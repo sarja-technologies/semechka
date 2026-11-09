@@ -52,6 +52,10 @@ export class Imajutsu {
 
   plan = $state<Plan | null>(null);
   planBusy = $state(false);
+  /** The upscale methods and whether each can run (loaded when the Upscale mode opens). */
+  upscaleEngines = $state<api.UpscaleEngine[]>([]);
+  async loadUpscaleEngines() { try { this.upscaleEngines = (await api.upscaleEngines()).engines; } catch { this.upscaleEngines = []; } }
+  get upscaleEngine(): api.UpscaleEngineId { return this.spec.upscale.engine ?? 'lanczos'; }
   planError = $state('');
   saveState = $state<SaveState>('idle');
   saveError = $state('');
@@ -480,11 +484,11 @@ export class Imajutsu {
     const src = this.source, out = this.spec.size.output;
     if (!src || !out) { this.gen = { busy: false, error: 'Choose the size you want first.', accounting: null }; return false; }
     try {
-      const { task } = await api.upscale(src.id, out.width, out.height);
+      const { task } = await api.upscale(src.id, out.width, out.height, this.upscaleEngine);
       const a = await api.followTask(task);
       this.assets[a.id] = a; this.copies = [a.id, ...this.copies.filter((x) => x !== a.id)];
       this.picked = a.id; this.stage = 'result';
-      this.gen = { busy: false, error: '', accounting: { scaled: true } };
+      this.gen = { busy: false, error: '', accounting: { scaled: this.upscaleEngine === 'lanczos' } };
       return true;
     } catch (e) { this.gen = { busy: false, error: errText(e), accounting: null }; return false; }
   }

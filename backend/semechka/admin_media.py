@@ -46,7 +46,7 @@ STATUS_FILTERS = (*JOB_STATUSES, "expired")
 JOB_WORKFLOWS = ("chat_image", "chat_video", "imajutsu", "openjutsu", "image_generation", "video_generation")
 ASSET_WORKFLOWS = tuple(media_lib.ORIGINS)  # upload, then the derived copies (edit, prepared, export, adjusted, scaled, composited)
 WORKFLOWS = (*JOB_WORKFLOWS, *ASSET_WORKFLOWS)
-LOOSE_MODELS = ("upload", "edit", "prepared", "export", "adjusted", "scaled", "composited")
+LOOSE_MODELS = ("upload", "edit", "prepared", "export", "adjusted", "scaled", "upscaled", "composited")
 _ID = re.compile(r"^[A-Za-z0-9_]{1,40}$")
 _SECRET_KEY = re.compile(r"(pass(word|wd)?|secret|token|api[_-]?key|apikey|authorization|bearer|credential|cookie|private[_-]?key|signature|session)", re.IGNORECASE)
 _SECRET_VAL = re.compile(r"(Bearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{16,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*"
@@ -601,7 +601,7 @@ def job_detail(st, s, scope: Scope, jid: str, admin_id: str) -> dict:
     out_ids = [o["id"] for o in entry["outputs"]]
     derived = []
     if out_ids:
-        for a in s.execute(select(MediaAsset).where(MediaAsset.user_id == j.user_id, MediaAsset.model_id.in_(("export", "adjusted", "scaled", "composited", "edit")))).scalars():
+        for a in s.execute(select(MediaAsset).where(MediaAsset.user_id == j.user_id, MediaAsset.model_id.in_(("export", "adjusted", "scaled", "upscaled", "composited", "edit")))).scalars():
             meta = media_lib.meta_of(st, a)
             if meta.get("parent") in out_ids:
                 derived.append({**asset_summary(st, a, admin_id, now, thumbs=True, meta=meta), "parent": meta.get("parent")})

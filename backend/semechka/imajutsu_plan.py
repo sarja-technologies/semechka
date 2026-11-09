@@ -18,6 +18,10 @@ ASPECT_LABELS = {"9:16": "9:16 vertical", "16:9": "16:9 wide", "4:5": "4:5", "3:
 ROLES = ("identity", "appearance", "composition", "lighting", "style")
 QUALITY = ("draft", "standard", "high")
 MIN_OUT, MAX_OUT, MAX_OUT_PIXELS = 64, 8192, 8192 * 4320
+# AI upscaling runs on the Spark's GPU through OpenSfield, whose measured reliable limit (84.9 MP in one run) is larger than the 8K of plain scaling;
+# the live limits come from OpenSfield's capabilities and are never larger than these.
+MAX_OUT_AI, MAX_OUT_AI_PIXELS = 12288, 90_000_000
+UPSCALE_ENGINES = {"lanczos": "Scaling (Lanczos), no new detail", "seedvr2": "SeedVR2 · AI detail restoration", "esrgan": "Real-ESRGAN · AI, fast and faithful"}
 SHAPE_TOLERANCE = 0.015
 PROMPT_MAX = 4000
 DEFAULT_OUTPAINT_PROMPT = "Continue the scene naturally beyond the edges of the picture, matching its light, perspective and style."
@@ -386,8 +390,13 @@ def _plan_upscale(spec: dict, ctx: dict, pln: dict) -> dict:
     if not out:
         errors.append("Say the size you want (width and height).")
         return pln
-    if out["width"] * out["height"] > MAX_OUT_PIXELS:
-        errors.append("That size is larger than 8K.")
+    up = spec.get("upscale") or {}
+    engine = (up.get("engine") or "lanczos") if not up.get("refine") else "lanczos"
+    ai = engine in ("seedvr2", "esrgan")
+    caps = ctx.get("upscale_caps") or {}
+    lim_px, lim_edge = (min(MAX_OUT_AI_PIXELS, int(caps.get("max_output_pixels") or MAX_OUT_AI_PIXELS)), min(MAX_OUT_AI, int(caps.get("max_edge") or MAX_OUT_AI))) if ai else (MAX_OUT_PIXELS, MAX_OUT)
+    if out["width"] * out["height"] > lim_px or max(out["width"], out["height"]) > lim_edge:
+        errors.append("That size is larger than 8K." if not ai else f"That size is larger than the Spark upscales reliably (about {lim_px // 1_000_000} megapixels, {lim_edge} px on a side).")
     sw, sh = source["width"], source["height"]
     if abs((out["width"] / out["height"]) / (sw / sh) - 1) > SHAPE_TOLERANCE:
         errors.append(f"{out['width']}×{out['height']} has a different shape from the picture ({sw}×{sh}).")
@@ -399,8 +408,25 @@ def _plan_upscale(spec: dict, ctx: dict, pln: dict) -> dict:
                      "note": ("Scaled with Lanczos and a light sharpening. No new detail is added: this is not AI." if kind == "upscale"
                               else "Scaled down with Lanczos.")}
     pln["scaling"] = {"method": "lanczos", "label": "Scaled, no new detail", "ai": False}
-    up = spec.get("upscale") or {}
     model = ctx.get("model")
+    if ai:
+        eng = next((e for e in caps.get("engines", []) if e.get("id") == engine), None)
+        pln["scaling"] = {"method": engine, "label": UPSCALE_ENGINES[engine], "ai": True}
+        pln["engine_mode"] = None
+        pln["output"]["note"] = ((eng or {}).get("note") or "AI upscale on the Spark GPU.") + " It can change fine detail, faces and text: check the result against your original, which is kept."
+        if kind != "upscale":
+            errors.append("AI upscaling only makes a picture larger. Use plain scaling to make it smaller.")
+        if not caps.get("configured", False) or not caps.get("reachable", False):
+            errors.append(caps.get("reason") or "AI upscaling is not available right now.")
+        elif eng is None or not eng.get("ready"):
+            errors.append("This upscale method is not ready on the Spark" + (f": {eng.get('reason')}" if eng and eng.get("reason") else "."))
+        elif engine == "esrgan":
+            if kind == "upscale" and out["width"] / sw > 4.0 + 1e-9:
+                errors.append("Real-ESRGAN stops at 4×; choose SeedVR2 for a larger enlargement.")
+            if sw * sh > int(caps.get("esrgan_max_source_pixels") or 5_625_000):
+                errors.append(f"Real-ESRGAN handles pictures up to about {int(caps.get('esrgan_max_source_pixels') or 5_625_000) / 1e6:.1f} megapixels; use SeedVR2 for this one.")
+        elif sw * sh > int(caps.get("max_source_pixels") or 64_000_000) and kind == "upscale":
+            errors.append("This picture is too large to enlarge further; it can only be restored at its own size.")
     if up.get("refine"):
         if model is None:
             errors.append(ctx.get("why_none") or "No model available to you can refine a picture.")

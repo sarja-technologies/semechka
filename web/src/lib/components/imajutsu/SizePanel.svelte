@@ -97,7 +97,7 @@
     {:else}
       <ol class="pipe">
         {#if !up}<li data-testid="pipe-native" class="proc"><span class="k"><i>1</i>Model makes</span><strong>{fmtDims(nat)}</strong><span class="sub">its native size</span></li>{/if}
-        <li data-testid="pipe-output"><span class="k"><i>{up ? 1 : 2}</i>You get</span><strong>{fmtDims(out)}</strong><span class="sub">{sc === 'upscale' ? 'scaled up, no new detail' : sc === 'downscale' ? 'scaled down' : sc === 'none' ? 'as made' : ''}</span></li>
+        <li data-testid="pipe-output"><span class="k"><i>{up ? 1 : 2}</i>You get</span><strong>{fmtDims(out)}</strong><span class="sub">{sc === 'upscale' ? (p?.scaling?.ai ? 'AI upscale: new detail is drawn' : 'scaled up, no new detail') : sc === 'downscale' ? 'scaled down' : sc === 'none' ? 'as made' : ''}</span></li>
       </ol>
       {#if nat?.why && !up}<p class="st-note" data-testid="pipe-why"><Icon name="info" size={13} /> {nat.why}</p>{/if}
       {#if out?.note}<p class="st-note" class:warn={sc === 'upscale'} data-testid="pipe-output-note">{out.note}</p>{/if}

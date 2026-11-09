@@ -13,6 +13,9 @@
   const upscale = $derived(sp.mode === 'upscale');
   const mode = $derived(s.mode);
   const refine = $derived(mode?.refine);
+  $effect(() => { if (upscale && !s.upscaleEngines.length) void s.loadUpscaleEngines(); });
+  const curEngine = $derived(s.upscaleEngines.find((e) => e.id === s.upscaleEngine));
+  const engineLabel = $derived(s.upscaleEngines.find((e) => e.id === s.upscaleEngine)?.label ?? 'Scaling (Lanczos), no new detail');
   function go(panel: Panel) { s.panel = panel; document.getElementById(`pn-${panel}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
   const sel = $derived(sp.mask_asset ? 'Saved as a picture (white = change)' : sp.selection.box ? 'A box on the picture' : s.maskStale ? 'Will be saved when you press Generate' : 'None');
 </script>
@@ -27,6 +30,20 @@
       {#if sp.count > 1}<p class="st-note">Each picture is its own run with its own seed, one after the other.</p>{/if}
     </div>
   {/if}
+  {#if upscale && !sp.upscale.refine}
+    <div class="field" data-testid="upscale-engine">
+      <h3 id="ue-h" class="lab">Method</h3>
+      <div class="st-seg col" role="radiogroup" aria-labelledby="ue-h">
+        {#each (s.upscaleEngines.length ? s.upscaleEngines : [{ id: 'lanczos', label: 'Scaling (Lanczos), no new detail', ai: false, ready: true, reason: null, note: null }]) as e (e.id)}
+          <button type="button" role="radio" aria-checked={s.upscaleEngine === e.id} disabled={!e.ready} title={e.ready ? (e.note ?? '') : (e.reason ?? '')}
+            onclick={() => s.edit((x) => { x.upscale.engine = e.id as any; })} data-testid={`engine-${e.id}`}>{e.label}{e.ai ? ' · AI' : ''}{e.ready ? '' : ' (not available)'}</button>
+        {/each}
+      </div>
+      {#if curEngine?.ai}<p class="st-note warn" data-testid="engine-note">{curEngine.note} It runs on the Spark's GPU, can take minutes for large sizes, and can change fine detail, faces and text. Your original is kept.</p>
+      {:else if curEngine && !curEngine.ai}<p class="st-note">{curEngine.note}</p>{/if}
+      {#each s.upscaleEngines.filter((e) => !e.ready && e.ai) as e (e.id)}<p class="st-note">{e.label}: {e.reason}</p>{/each}
+    </div>
+  {/if}
   {#if upscale}
     <label class="keep"><input type="checkbox" checked={sp.upscale.refine} disabled={!refine?.available} onchange={(e) => s.edit((x) => { x.upscale.refine = e.currentTarget.checked; })} data-testid="refine" />
       <span><strong>Refine after scaling</strong> <span class="st-note">{refine?.available ? `A light second pass by a model (${refine.recommended?.why ? refine.recommended.why : 'image to image'}). It can change texture; the scaling step itself adds none.` : 'Not available: no installed model can refine a picture here.'}</span></span></label>
@@ -36,7 +53,7 @@
     <h3>What will be sent</h3>
     <dl>
       {#if nd.model && !s.upscaleOnly}<dt>Model</dt><dd data-testid="acc-model">{p?.model?.alias ?? (modelName(s.entry) || 'None chosen')}</dd>{/if}
-      {#if s.upscaleOnly}<dt>Method</dt><dd data-testid="acc-model">Scaling (Lanczos), no model</dd>{/if}
+      {#if s.upscaleOnly}<dt>Method</dt><dd data-testid="acc-model">{engineLabel}</dd>{/if}
       {#if nd.source}<dt>Source picture</dt><dd data-testid="acc-source">{s.source ? `${s.source.name ?? 'Picture'} · ${fmtDims(s.source)}` : 'None yet'}</dd>{/if}
       {#if nd.selection === 'required' || (nd.selection === 'optional' && s.hasSel)}<dt>Selection</dt><dd data-testid="acc-mask">{s.hasSel ? sel : 'None'}{sp.selection.invert ? ', inverted' : ''}{sp.selection.feather ? `, soft edge ${sp.selection.feather} px` : ''}</dd>{/if}
       {#if nd.selection === 'area'}<dt>New area</dt><dd data-testid="acc-area">{p?.outpaint ? `${fmtDims(p.outpaint.canvas)} canvas, your picture inside` : 'Waiting for the size'}</dd>{/if}
@@ -68,7 +85,7 @@
   {#if s.gen.error}<div class="notice bad" role="alert"><div>{s.gen.error}</div></div>{/if}
   <div class="st-foot">
     <span class="tiny muted" role="status" data-testid="save-hint">{s.maskStale ? 'The selection is saved when you generate.' : ''}</span>
-    <button type="button" class="btn primary go" onclick={() => s.runGenerate()} disabled={bl.length > 0 || s.gen.busy} data-testid="generate">{s.gen.busy ? 'Starting…' : s.upscaleOnly ? 'Scale up' : sp.count > 1 ? `Generate ${sp.count} pictures` : 'Generate'}</button>
+    <button type="button" class="btn primary go" onclick={() => s.runGenerate()} disabled={bl.length > 0 || s.gen.busy} data-testid="generate">{s.gen.busy ? (s.upscaleOnly && s.upscaleEngine !== 'lanczos' ? 'Upscaling… this can take a few minutes' : 'Starting…') : s.upscaleOnly ? 'Scale up' : sp.count > 1 ? `Generate ${sp.count} pictures` : 'Generate'}</button>
   </div>
 </PanelCard>
 
