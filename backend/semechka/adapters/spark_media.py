@@ -107,7 +107,10 @@ class SparkMediaMixin(SarnessMediaMixin):
         return r.json()["id"]
 
     async def media_upload(self, data, mime: str, name: str) -> str:
-        """Hand a source picture or video to the engine. Returns its upload id (the engine removes old uploads itself after two days)."""
+        """Hand a source picture or video to the engine. Returns its upload id (the engine removes old uploads itself after two days).
+        The engine decides the file type from the extension, but a library asset is named by its display name ("Video 12 Nov"), which has none:
+        the extension is derived from the MIME type when the name does not carry a usable one."""
+        name = upload_name(name, mime)
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=10)) as c:
                 r = await c.post(self.base_url + "/v1/uploads", headers=_h(self.api_key), files={"file": (name, data, mime)})
@@ -169,6 +172,21 @@ class SparkMediaMixin(SarnessMediaMixin):
         if r.status_code != 200 or len(r.content) > max_bytes:
             return r.status_code, None, ""
         return 200, r.content, r.headers.get("content-type", "application/octet-stream").split(";")[0]
+
+
+_EXT_BY_MIME = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
+                "video/x-matroska": ".mkv", "audio/mpeg": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mp4": ".m4a"}
+_KNOWN_EXT = set(_EXT_BY_MIME.values()) | {".jpeg", ".gif", ".bmp", ".avi", ".m4v", ".flac", ".ogg", ".aac"}
+
+
+def upload_name(name: str, mime: str) -> str:
+    """A file name the engine can classify: keep a known extension, otherwise append the one that belongs to the MIME type."""
+    name = (name or "upload").strip().replace("/", "_").replace("\\", "_") or "upload"
+    dot = name.rfind(".")
+    if dot > 0 and name[dot:].lower() in _KNOWN_EXT:
+        return name
+    ext = _EXT_BY_MIME.get((mime or "").split(";")[0].strip().lower())
+    return name + ext if ext else name
 
 
 class SparkMediaAdapter(SparkMediaMixin, Adapter):
