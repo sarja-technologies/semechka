@@ -169,3 +169,19 @@ def test_unsupported_models_are_not_discovered():
     assert "image:z-image-turbo" in found and not any("sdxl" in f or "hunyuan" in f for f in found)
     broken = {**doc, "models": [{**m, "supported": False} if m["id"] == "minimax-h3" else m for m in doc["models"]]}
     assert "video:minimax-h3" not in {d.real_id for d in discovered_from_capabilities(broken)}
+
+
+def test_reverse_analysis_is_read_from_the_engine_for_reverse_jobs_only(sp):
+    rv = models(sp, "video")["reverse-video"]
+    files = [("file:video", ("v.mp4", b"\x00\x00\x00\x18ftypmp42" + b"0" * 64, "video/mp4"))]
+    r = sp.c.post("/api/media/profile-jobs", data={"model_id": rv["id"], "inputs": "{}"}, files=files, headers={"x-csrf-token": sp.csrf})
+    assert r.status_code == 200, r.text
+    jid = r.json()["id"]
+    assert sp.get(f"/api/media/jobs/{jid}/analysis").status_code == 404           # not finished yet
+    finish(sp, jid)
+    d = sp.get(f"/api/media/jobs/{jid}/analysis")
+    assert d.status_code == 200 and d.json()["analysis"]["shots"] == [{"index": 0}]
+    img = models(sp, "image")["z-image-turbo"]
+    j = sp.post("/api/media/jobs", json={"kind": "image", "model_id": img["id"], "prompt": "x", "width": 512, "height": 512}).json()["id"]
+    finish(sp, j)
+    assert sp.get(f"/api/media/jobs/{j}/analysis").status_code == 404

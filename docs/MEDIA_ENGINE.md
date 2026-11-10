@@ -166,6 +166,48 @@ normally discarded by Semechka right after it has copied them.
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+## 5b. Recommended engine unit (NOT installed; the orchestrator installs it)
+
+`~/.config/systemd/user/semechka-media-engine.service` on the Spark (after branch `semechka-engine` is merged into `spark-local` in `~/opensfield/app`; until then point `WorkingDirectory`
+at `~/opensfield/wt-engine`). The token file `~/opensfield/config/semechka-media.token` already exists (0600) from the dev runs; `mkdir -p ~/opensfield/state/semechka-engine/outputs` first.
+
+```
+[Unit]
+Description=Semechka media engine (OpenSfield backend, loopback API on 127.0.0.1:8780)
+After=opensfield-comfyui.service
+Wants=opensfield-comfyui.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/opensfield/app
+EnvironmentFile=%h/opensfield/config/opensfield.env
+Environment=OPENSFIELD_OUTPUTS_DIR=%h/opensfield/state/semechka-engine/outputs
+Environment=OPENSFIELD_JOBS_FILE=%h/opensfield/state/semechka-engine/jobs.json
+Environment=OPENSFIELD_SEMECHKA_TOKEN_FILE=%h/opensfield/config/semechka-media.token
+Environment=OPENSFIELD_RECOVER_JOBS=1
+Environment=OPENSFIELD_CLIENT_PREFIX=semechka-
+Environment=OPENSFIELD_REAP=0
+Environment=OPENSFIELD_IDLE_UNLOAD=900
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/opensfield/venv-app/bin/uvicorn app.engine_main:app --host 127.0.0.1 --port 8780 --no-server-header --timeout-keep-alive 30
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/opensfield/logs/semechka-engine.log
+StandardError=append:%h/opensfield/logs/semechka-engine.log
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0027
+
+[Install]
+WantedBy=default.target
+```
+
+Why these settings: its own outputs/jobs file (a separate history from the browser UI); `RECOVER_JOBS` resumes unfinished jobs; a **different ComfyUI client-id prefix** so a restart of the
+`opensfield` UI service (whose orphan reaper interrupts every `opensfield-*` prompt) can never kill an engine job; the engine's own reaper off because it re-attaches instead;
+idle unload frees ComfyUI's models 15 minutes after the last job. It reads the live `config/verified.json`. **Transition risk:** while the `opensfield` UI service still runs, it
+and the engine each have their own single worker and memory gate; ComfyUI serialises execution, but two heavy jobs could both pass the gate at once. Retire the UI service (or stop using it)
+before relying on H3 alongside LLMs.
+
 ## 6. Semechka side
 
 * `adapters/spark_media.py`: adapter `spark-media` (`SparkMediaAdapter(SparkMediaMixin, Adapter)`), registered in `adapters.REGISTRY`. `discover()` turns `/v1/capabilities`

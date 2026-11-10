@@ -202,3 +202,11 @@ async def release(request: Request):
     if any(j["status"] == "running" for j in STATE["jobs"].values()):
         return JSONResponse({"ok": False, "error": "busy"}, status_code=409)
     return {"ok": True, "freed_gb": 40.0, "available_before_gb": 70.0, "available_after_gb": 110.0}
+
+
+@app.get("/v1/reverse/{jid}")
+def reverse(jid: str):
+    j = STATE["jobs"].get(jid)
+    if j is None or j.get("profile") != "reverse-video":
+        raise HTTPException(404, "not an analysis job")
+    return {"id": jid, "analysis": {"shots": [{"index": 0}], "source": {"duration_s": 2.0}}, "plan": {"shots": []}}
