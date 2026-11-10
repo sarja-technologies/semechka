@@ -551,7 +551,7 @@ test('12 upscale is scaling, not a model: labelled "no new detail", exact size, 
   await expect(page.getByTestId('pipe-output')).toContainText('800×600');
   await expect(page.getByTestId('pipe-output')).toContainText('scaled up, no new detail');
   await expect(page.getByTestId('pipe-output-note')).toContainText('No new detail is added: this is not AI');
-  await expect(page.getByTestId('acc-model')).toHaveText('Scaling (Lanczos), no model');
+  await expect(page.getByTestId('acc-model')).toHaveText('Scaling (Lanczos), no new detail');
   await page.getByTestId('generate').click();
   const copy = page.getByTestId('copy').first();
   await expect(copy).toBeVisible({ timeout: 30_000 });

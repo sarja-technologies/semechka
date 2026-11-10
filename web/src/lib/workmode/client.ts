@@ -1,5 +1,5 @@
 // Typed wrappers over /api/work/goose. Every call goes through the shared api() helper: same cookies, CSRF header and ApiError as the rest of the app.
-import { get, post, patch, del, qs, ApiError } from '../api';
+import { get, post, patch, del, qs, sendForm, ApiError } from '../api';
 import type { Decision, FileChange, GooseSession, GooseStatus, WorkEvent } from './types';
 
 const B = '/api/work/goose';
@@ -17,6 +17,8 @@ export const answer = (cid: string, approvalId: string, decision: Decision) => p
 export const transcript = (cid: string) => get<{ items: any[]; last_seq: number }>(`${C(cid)}/transcript`);
 export const changes = (cid: string, turn: string) => get<{ turn_id: string; files: FileChange[]; diff: string; truncated?: boolean }>(`${C(cid)}/changes/${encodeURIComponent(turn)}`);
 export const listFiles = (cid: string, path = '') => get<{ path: string; entries: { name: string; path: string; type: 'file' | 'dir'; size?: number; modified?: number }[] }>(`${C(cid)}/files${qs({ path })}`);
+/** Put a file into the workspace; `path` is the file's own path inside it. */
+export const uploadFile = (cid: string, path: string, file: File) => { const fd = new FormData(); fd.append('file', file, file.name); return sendForm<{ path: string; size: number }>('PUT', `${C(cid)}/files${qs({ path })}`, fd); };
 export const fileUrl = (cid: string, path: string, download = false) => `${C(cid)}/files/content${qs({ path, download: download ? 1 : 0 })}`;
 
 /** Why Work Mode cannot be used, sorted so the screen can say it plainly. `none` = the server has no such API at all. */

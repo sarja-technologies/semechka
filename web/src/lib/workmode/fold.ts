@@ -73,7 +73,8 @@ export function apply(prev: Folded, events: WorkEvent[]): Folded {
         const stuck = ev.stop_reason === 'cancelled' || ev.stop_reason === 'interrupted' || ev.stop_reason === 'error';
         if (stuck) items.forEach((i, n) => { if (i.k === 'tool' && i.status === 'running') set(n, { ...i, status: 'cancelled' }); });
         if (ev.stop_reason && ev.stop_reason !== 'end_turn') put({ key, k: 'end', turn: ev.turn_id, reason: String(ev.stop_reason) });
-        f = { ...f, turn: null };
+        // the turn is over, so nothing is running or waiting any more (a state event that follows says more if there is more to say)
+        f = { ...f, turn: null, state: ['running', 'awaiting_approval', 'cancelling'].includes(f.state) ? 'idle' : f.state };
         break;
       }
       case 'error': put({ key, k: 'error', code: ev.code, message: String(ev.message ?? 'An error occurred.'), retryable: !!ev.retryable }); break;

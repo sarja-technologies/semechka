@@ -8,6 +8,7 @@
   import ToolCard from './ToolCard.svelte';
   import ApprovalCard from './ApprovalCard.svelte';
   import ChangesCard from './ChangesCard.svelte';
+  import FilesPanel from './FilesPanel.svelte';
   import { WorkRun } from '$lib/workmode/store.svelte';
 
   let { cid, ensure, workable = true, why = '' }: { cid: string | null; ensure: () => Promise<string>; workable?: boolean; why?: string } = $props();
@@ -22,6 +23,8 @@
   const pending = $derived(items.some((i) => i.k === 'approval' && !i.decision));
   const lastAssistantKey = $derived([...items].reverse().find((i) => i.k === 'assistant')?.key);
   const sessionOn = $derived(!!run.session);
+  let filesOpen = $state(false);
+  const filesStamp = $derived(items.filter((i) => i.k === 'files').length);
 
   // how long the current wait has lasted, measured here (never invented): used for the model-load and start-up lines
   let since = $state(Date.now()), tickNow = $state(Date.now());
@@ -110,6 +113,7 @@
         {#if statusLine}<span class="dot" aria-hidden="true"></span>{statusLine}{/if}
         {#if run.conn === 'retrying'}<span class="warn"> Reconnecting to the session…</span>{/if}
       </div>
+      {#if filesOpen && run.cid && sessionOn}<FilesPanel cid={run.cid} refresh={filesStamp} />{/if}
       <div class="box">
         <label class="sr-only" for="work-msg">Message to the agent</label>
         <textarea id="work-msg" rows="1" bind:this={box} bind:value={text} onkeydown={key} oninput={autosize} disabled={!workable}
@@ -135,6 +139,7 @@
       <p class="tiny muted foot">
         {#if model && model.state !== 'loaded' && !sessionOn}{model.label} is not loaded yet; the first message waits for it.{/if}
         {#if f.usage}<span class="mono">Context {f.usage.used.toLocaleString()} of {f.usage.size.toLocaleString()}</span>{/if}
+        {#if sessionOn}<button type="button" class="linkish" aria-expanded={filesOpen} onclick={() => (filesOpen = !filesOpen)}>{filesOpen ? 'Hide files' : 'Files'}</button>{/if}
         {#if sessionOn}<button type="button" class="linkish" onclick={() => run.stopProcess()} disabled={run.busy} title="Stops the sandbox. Files and history stay; the next message starts it again.">Stop sandbox</button>{/if}
       </p>
     </div>
@@ -164,6 +169,6 @@
   .sel { display: inline-flex; } .sel select { min-height: 32px; width: auto; max-width: 220px; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .round { all: unset; box-sizing: border-box; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
   .round:disabled { opacity: 0.4; cursor: not-allowed; } .round:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .foot { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 0; align-items: center; } .foot .linkish { margin-left: auto; color: var(--fg-muted); }
+  .foot { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 0; align-items: center; } .foot .linkish { color: var(--fg-muted); } .foot .linkish:first-of-type { margin-left: auto; }
   @media (max-width: 719px) { .col { padding: 12px 12px 16px; } .dock { padding: 0 8px 8px; } .pad { padding: 12px; } .sel { flex: 1 1 150px; } .sel select { max-width: none; width: 100%; } .spacer { display: none; } .round { margin-left: auto; } }
 </style>

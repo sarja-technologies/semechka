@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 });
 
-async function fresh(page: Page) { await page.goto('/chat?new=' + Date.now()); await expect(page.getByLabel('Message', { exact: true })).toBeVisible(); }
+async function fresh(page: Page) { await page.goto('/experimental/studio?new=' + Date.now()); await expect(page.getByLabel('Message', { exact: true })).toBeVisible(); }
 async function pictureOp(page: Page) { await page.getByRole('radio', { name: 'Picture' }).click(); }
 async function chooseModel(page: Page, name: RegExp) {
   await page.getByRole('button', { name: /^(Video |Picture )?[Mm]odel: / }).click();
@@ -267,8 +267,8 @@ test('10 iPhone Photo: Polished quality switches to its model with plain wording
   await expect(page.getByRole('button', { name: /^Picture model: / })).toContainText(/Qwen-Image 2512/);
 });
 
-test('11 /chat?op=image&preset=iphone_photo opens ready for it, and Imajutsu still offers the same preset', async ({ page }) => {
-  await page.goto('/chat?new=' + Date.now() + '&op=image&preset=iphone_photo');
+test('11 /experimental/studio?op=image&preset=iphone_photo opens ready for it, and Imajutsu still offers the same preset', async ({ page }) => {
+  await page.goto('/experimental/studio?new=' + Date.now() + '&op=image&preset=iphone_photo');
   await expect(page.locator('.presetline')).toContainText('720 × 1280');
   await page.goto('/imajutsu?new=1');
   await expect(page.getByTestId('start')).toBeVisible();

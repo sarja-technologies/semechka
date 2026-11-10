@@ -22,7 +22,7 @@ test('a real repository-fixing turn folds into a clean timeline', () => {
   assert.equal(files.length, 1); assert.equal(files[0].files[0].path, 'shop/pricing.py');
   assert.ok(f.items.some((i) => i.k === 'assistant' && i.text.length > 20), 'the agent\'s words are there');
   assert.ok(f.items.some((i) => i.k === 'assistant' && i.reasoning.length > 20), 'its reasoning is kept apart');
-  assert.equal(f.turn, null); assert.equal(f.title, 'Fix failing tests'); assert.ok(f.usage && f.usage.size > 0);
+  assert.equal(f.turn, null); assert.equal(f.state, 'idle', 'a finished turn is not shown as still working'); assert.equal(f.title, 'Fix failing tests'); assert.ok(f.usage && f.usage.size > 0);
   assert.equal(f.items.filter((i) => i.k === 'end').length, 0, 'a normal end adds nothing');
 });
 

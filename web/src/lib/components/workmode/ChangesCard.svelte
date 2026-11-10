@@ -19,7 +19,7 @@
 <section class="files" aria-label="Files changed">
   <div class="h"><Icon name="edit" size={15} /><strong>{c.files.length} file{c.files.length === 1 ? '' : 's'} changed</strong><span class="n"><span class="ad">+{add}</span> <span class="de">−{del}</span></span>
     {#if cid && c.turn}<button type="button" class="btn ghost sm" aria-expanded={open} onclick={toggle}>{open ? 'Hide changes' : 'Show changes'}</button>{/if}</div>
-  <ul>{#each c.files as f (f.path)}<li><span class="s">{word[f.status] ?? f.status}</span> <code>{f.path}</code>{#if !f.binary && (f.additions || f.deletions)} <span class="tiny muted">+{f.additions ?? 0} −{f.deletions ?? 0}</span>{:else if f.binary} <span class="tiny muted">binary</span>{/if}</li>{/each}</ul>
+  <ul>{#each c.files as f (f.path)}<li><span class="s">{word[f.status] ?? f.status}</span> <code>{f.path}</code>{#if !f.binary && (f.additions || f.deletions)}&nbsp;&nbsp;<span class="tiny muted">+{f.additions ?? 0} −{f.deletions ?? 0}</span>{:else if f.binary}&nbsp;&nbsp;<span class="tiny muted">binary</span>{/if}</li>{/each}</ul>
   {#if c.truncated}<p class="tiny muted">More files changed than are listed.</p>{/if}
   {#if open}{#if loading}<p class="small muted" role="status">Loading the changes…</p>{:else if err}<p class="err small" role="alert">{err}</p>{:else if diff}<DiffView unified={diff} />{#if cut}<p class="tiny muted">The diff is cut at its size limit.</p>{/if}{:else}<p class="small muted">No text changes to show.</p>{/if}{/if}
 </section>
