@@ -318,4 +318,6 @@ file is filed by what it is (`audio`, `image`, `3d`), the Library shows sounds a
 **Web**: `/experimental/audio`, `/experimental/tools`, `/experimental/3d` (one page, `ExtrasPage.svelte`, whose form is built from the engine's `inputs_schema`) and
 `/experimental/video-tools` (the existing upscale and smooth-motion profiles through `/api/media/profile-jobs`). Results: pictures on a checkerboard (transparency is visible),
 an audio player, a dependency-free WebGL GLB viewer (`GlbViewer.svelte`: drag, pinch or scroll, double-click to reset, keyboard; Picture/Shape views), always with a download.
-The Images and Videos pages are unchanged.
+A mesh in a picture's camera frame (all of it in front of the origin, looking down -Z, as MoGe writes it) opens from that camera, so it first looks like the picture, and turns
+around a point at the median depth; any other GLB is framed by its bounding box. Tool and Video tools titles are the engine's own names unless an administrator renamed the row
+(`display_name`, also in `/api/media/options`). The Images and Videos pages are unchanged.
