@@ -366,7 +366,7 @@ def main() -> int:
         print("Nothing to change (already migrated).")
         return 0
     token = read_token(a) if plan["backend"]["created"] else None
-    ts = time.strftime("%Y%m%d-%H%M%S")
+    ts = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
     bdir = data / f"{BACKUP_PREFIX}{ts}"
     backup = backup_db(db, bdir)
     print("backup:", backup)
