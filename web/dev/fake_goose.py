@@ -165,6 +165,15 @@ async def events(cid: str, since: int = 0):
             await asyncio.sleep(0.15)
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-store"})
 
+@app.get("/api/work/goose/conversations/{cid}/files")
+def files(cid: str, path: str = ""):
+    sess(cid)
+    return {"path": path, "entries": [] if path else [{"name": "calc.py", "path": "calc.py", "type": "file", "size": 120, "modified": time.time()}, {"name": "tests", "path": "tests", "type": "dir", "size": 0, "modified": time.time()}]}
+
+@app.put("/api/work/goose/conversations/{cid}/files")
+async def put_file(cid: str, path: str):
+    sess(cid); return {"path": path, "size": 1, "sha256": "x"}
+
 @app.post("/__mock/flags")
 async def flags(request: Request):
     FLAGS.update(await request.json()); return FLAGS
