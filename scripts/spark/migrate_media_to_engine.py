@@ -41,7 +41,7 @@ import uuid
 
 NEW_ADAPTER = "spark-media"
 OLD_ADAPTER = "sarness"
-MEDIA_PREFIXES = ("image:", "video:")
+MEDIA_PREFIXES = ("image:", "video:", "tool:")      # tool: rows are the Experimental tools (speech, music, picture tools, 3D) the same engine offers
 OPENJUTSU_OLD = "video:openjutsu-minimax-h3"
 PROFILE_EDIT = "video:opensfield-video-edit"
 ACTIVE = ("queued", "running")

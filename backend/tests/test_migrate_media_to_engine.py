@@ -254,3 +254,17 @@ def test_grant_profiles_on_a_later_run_may_grant_a_profile_row_an_earlier_run_cr
     run(inst, "--apply", "--grant-profiles")                                    # a later run copies the grants and enables it: not an invariant violation
     pe = table(inst, "select * from models where real_id='video:opensfield-video-edit'")[0]
     assert pe["enabled"] == 1 and len(table(inst, f"select * from model_grants where model_id='{pe['id']}'")) == 2
+
+
+def test_engine_tools_are_added_disabled_and_the_non_media_invariant_still_holds(inst):
+    c = caps()
+    c["tools"] = [{"id": "kokoro-tts", "name": "Speech", "group": "audio", "ready": True, "inputs_schema": {}}]
+    (inst / "caps.json").write_text(json.dumps(c))
+    before = snapshot(inst)
+    out = run(inst, "--apply")
+    assert "tool:kokoro-tts" in out
+    after = snapshot(inst)
+    assert after["users"] == before["users"] and after["model_grants"] == before["model_grants"]
+    t = next(m for m in after["models"] if m["real_id"] == "tool:kokoro-tts")
+    assert t["enabled"] == 0
+    assert "tool:kokoro-tts" not in run(inst, "--apply") or "nothing to do" in run(inst, "--apply")          # idempotent
