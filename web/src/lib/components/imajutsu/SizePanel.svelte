@@ -28,7 +28,8 @@
   function setDim(which: 'w' | 'h', v: number) {
     if (!(v >= 16)) return;
     s.edit((x) => {
-      const cw = x.size.output?.width ?? x.aspect.w ?? v, ch = x.size.output?.height ?? x.aspect.h ?? v, r = cw / ch;
+      const sw = up && src?.width && src?.height ? src : null;   // upscale: with no size chosen yet the shape to keep is the picture's own
+      const cw = x.size.output?.width ?? sw?.width ?? x.aspect.w ?? v, ch = x.size.output?.height ?? sw?.height ?? x.aspect.h ?? v, r = cw / ch;
       const w = which === 'w' ? Math.round(v) : lock.on ? Math.round(v * r) : cw, h = which === 'h' ? Math.round(v) : lock.on ? Math.round(v / r) : ch;
       x.aspect = { id: 'custom', w, h }; x.size.output = { width: w, height: h };
     });

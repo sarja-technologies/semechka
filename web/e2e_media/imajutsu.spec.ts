@@ -443,11 +443,14 @@ test('9 replace subject with three references: the source and the pictures reach
   await expect(page.getByTestId('blockers')).toContainText('Add a reference picture.');
   await addRefs(page, PICS.slice(0, 3));
   await settle(page);
-  // the recommended model takes 3 pictures in all (one is the source): only two of the three references fit, and the page says which
+  // the recommended model (FLUX.2 klein) takes four pictures in all (one is the source): all three references are used
+  await expect(page.getByTestId('badge-used')).toHaveCount(3);
+  // Qwen-Image-Edit takes three: only two of the three references fit, and the page says which
+  await chooseModel(page, 'qwen-image-edit-2511');
+  await settle(page);
   await expect(page.getByTestId('badge-used')).toHaveCount(2);
   await expect(page.getByTestId('badge-unused')).toHaveCount(1);
   await expect(page.getByTestId('badge-unused')).toContainText('takes at most 3 pictures (the source picture is one of them)');
-  // FLUX.2 klein takes four: all three references are used
   await chooseModel(page, 'flux2-klein-4b');
   await settle(page);
   await expect(page.getByTestId('badge-used')).toHaveCount(3);
@@ -471,7 +474,7 @@ test('10 edit: instruction edit of the source; the result opens, compares with t
   await generate(page);
   const sub = (await subs(page)).at(-1);
   expect(sub.engine_mode).toBe('edit');
-  expect(sub.model).toBe('qwen-image-edit-2511');
+  expect(sub.model).toBe('flux2-klein-4b');
   expect(sub.pictures).toHaveLength(1);
   expect(sub.simple.prompt).toBe('Make the sky orange');                       // no reference pictures: the words go through untouched
   const res = page.getByTestId('result').first();

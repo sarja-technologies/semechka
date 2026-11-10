@@ -328,3 +328,11 @@ def test_other_models_and_modes_keep_their_words_and_the_engine_default_steps():
     assert g["prompt"]["final"] == "A potted green plant" and g["steps"] == 4
     e = run(spec("edit", prompt="Make the sky orange", aspect={"id": "source", "w": None, "h": None}), KLEIN, source=SRC)
     assert e["prompt"]["final"] == "Make the sky orange" and e["steps"] == 4
+
+
+def test_the_engines_per_mode_picture_counts_win_over_the_model_wide_references():
+    from semechka import imajutsu_plan as plan
+    assert plan.picture_cap("edit", 3) == 3 and plan.picture_cap("inpaint", 1) == 1 and plan.picture_cap("img2img", 3) == 1
+    assert plan.picture_cap("edit", 4, {"edit": 4, "inpaint": 2}) == 4 and plan.picture_cap("inpaint", 4, {"edit": 4, "inpaint": 2}) == 2
+    assert plan.picture_cap("img2img", 0, {"img2img": 1}) == 1 and plan.picture_cap("txt2img", 4, {"txt2img": 0}) == 0
+    assert plan.picture_cap("edit", 2, {"edit": True}) == 2          # a non-number is ignored

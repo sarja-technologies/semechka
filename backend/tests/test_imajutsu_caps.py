@@ -73,8 +73,8 @@ def test_every_mode_lists_every_model_with_the_truth(im):
 def test_recommended_is_the_first_operational_model_of_the_routing_file(im):
     c = caps(im)
     want = {"generate": "flux2-klein-4b", "iphone_photo": "qwen-image-2512",  # iPhone Photo: the model of the default tier (Best realism)
-             "edit": "qwen-image-edit-2511", "replace_subject": "qwen-image-edit-2511", "inpaint": "flux2-klein-4b",
-            "outpaint": "flux2-klein-4b", "reference": "flux2-klein-4b", "restyle": "z-image-turbo", "advanced": "flux2-klein-4b"}
+             "edit": "flux2-klein-4b", "replace_subject": "flux2-klein-4b", "inpaint": "flux2-klein-4b",
+            "outpaint": "flux2-klein-4b", "reference": "flux2-klein-4b", "restyle": "flux2-klein-4b", "advanced": "flux2-klein-4b"}
     for mid, eid in want.items():
         rec = mode(c, mid)["recommended"]
         assert rec["alias"] == eid and rec["model_id"] == model_id(im, eid) and rec["why"] and rec["evidence"], mid
@@ -123,22 +123,22 @@ def test_without_the_first_model_the_next_one_is_recommended(app, st, sarness_ur
 
 
 def test_reordering_the_routing_file_changes_the_recommendation(im, st):
-    assert mode(caps(im), "edit")["recommended"]["alias"] == "qwen-image-edit-2511"
+    assert mode(caps(im), "edit")["recommended"]["alias"] == "flux2-klein-4b"
     doc = json.loads(R.PACKAGED.read_text())
     doc["modes"]["edit"]["models"].reverse()
     doc["modes"]["iphone_photo"]["models"].reverse()
     (st.cfg.data_dir / R.OVERRIDE_NAME).write_text(json.dumps(doc))
     c = caps(im)
-    assert mode(c, "edit")["recommended"]["alias"] == "flux2-klein-4b" and [m["engine_id"] for m in mode(c, "edit")["models"] if m["routed"]] == ["flux2-klein-4b", "qwen-image-edit-2511"]
+    assert mode(c, "edit")["recommended"]["alias"] == "qwen-image-edit-2511" and [m["engine_id"] for m in mode(c, "edit")["models"] if m["routed"]][:2] == ["qwen-image-edit-2511", "flux2-klein-4b"]
     # iPhone Photo is recommended by its default TIER (Best realism), not by position in the file: reordering does not change it
     assert mode(c, "iphone_photo")["recommended"]["alias"] == "qwen-image-2512" and c["routing"]["source"] == "data_dir"
     # a plan picks it up too: no model is named anywhere in the code
     src = up(im, png_of(gradient(120, 160)), "s.png")
     p = mkproject(im, "edit", {"prompt": "make it warmer", "source_asset": src["id"], "aspect": {"id": "source"}})
-    assert im.post(f"/api/imajutsu/projects/{p['id']}/plan", json={}).json()["plan"]["model"]["alias"] == "flux2-klein-4b"
+    assert im.post(f"/api/imajutsu/projects/{p['id']}/plan", json={}).json()["plan"]["model"]["alias"] == "qwen-image-edit-2511"
     (st.cfg.data_dir / R.OVERRIDE_NAME).write_text("{ broken")
     c = caps(im)
-    assert c["routing"]["source"] == "packaged" and "not usable" in c["routing"]["problem"] and mode(c, "edit")["recommended"]["alias"] == "qwen-image-edit-2511"
+    assert c["routing"]["source"] == "packaged" and "not usable" in c["routing"]["problem"] and mode(c, "edit")["recommended"]["alias"] == "flux2-klein-4b"
     (st.cfg.data_dir / R.OVERRIDE_NAME).unlink()
     assert caps(im)["routing"]["problem"] is None
 

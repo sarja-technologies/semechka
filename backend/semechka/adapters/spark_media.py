@@ -38,6 +38,9 @@ def media_meta(m: dict) -> dict:
              "audio": bool(m.get("audio")),
              **({"references": int(refs)} if isinstance(refs, int) and not isinstance(refs, bool) and refs > 0 else {}),
              "defaults": m.get("defaults") or {}, "limits": m.get("limits") or {}}
+    mp = m.get("mode_pictures")
+    if isinstance(mp, dict) and mp:
+        media["mode_pictures"] = {str(k): int(v) for k, v in mp.items() if isinstance(v, int) and not isinstance(v, bool)}
     if m.get("speed_switch"):
         media["speed_switch"] = True
     if m.get("caution"):

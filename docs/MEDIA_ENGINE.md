@@ -44,11 +44,11 @@ the model is the same** so existing Semechka rows (ids, grants, Imajutsu routing
 
 | Engine model id (= old id) | kind | modes -> OpenSfield feature | Measured (one reviewed run) |
 |---|---|---|---|
-| `z-image-turbo` | image | txt2img -> `soul.t2i` | 6 s |
+| `z-image-turbo` | image | txt2img -> `soul.t2i`; **img2img** -> `image.img2img-zimage` (restyle, upscale refine; phase 2) | 6 s |
 | `qwen-image-2512` | image | txt2img -> `image.qwen-2512` | 27 s |
-| `flux2-klein-4b` | image | txt2img -> `image.t2i-open` (text only) | 33 s |
+| `flux2-klein-4b` | image | txt2img -> `image.t2i-open`; **edit** -> `image.edit-klein-1..4` (1-4 pictures, phase 2); **inpaint** -> `image.inpaint-klein-0..3` (selection + 0-3 reference pictures, phase 2) | 33 s; edit/inpaint: see "Phase 2" |
 | `krea2-turbo` (new) | image | txt2img -> `soul.cinematic` | 30 s |
-| `qwen-image-edit-2511` | image | edit -> `image.edit-open` (ONE picture) | 35 s (Fast) / 221 s (Quality) |
+| `qwen-image-edit-2511` | image | edit -> `image.edit-open` (ONE picture), `image.edit-qwen-2` (two), `image.edit-qwen-3` (three, the most its encoder reads) | 35 s (Fast) / 221 s (Quality) |
 | `qwen-image-2.1` | image | edit -> `soul.cast` (exactly TWO pictures) | 27 s |
 | `flux1-fill-dev` (new) | image | inpaint -> `image.inpaint-brush` (picture + mask) | 30 s |
 | `ltx-2.3` | video | t2v -> `video.t2v-i2v-open`; i2v -> `cinema.camera-rig`; flf -> `cinema.first-last-frame` | 105 / 45 / 48 s |
@@ -104,10 +104,11 @@ only where a reviewed run exists (the table above) and say so.
 | Text-to-image (chat, Images page, Work Mode) | **works** | `z-image-turbo`, `qwen-image-2512`, `flux2-klein-4b`, `krea2-turbo` |
 | iPhone Photo preset (tiers Fast / Best realism / Polished) | **works** | Fast = klein (720x1280 exactly), Best = Qwen-Image 2512, Polished = Z-Image (720x1280 exactly). Prompt builder unchanged |
 | Imajutsu `generate`, `advanced` (text) | **works** | as above |
-| Imajutsu `edit` | works, **one picture** | `qwen-image-edit-2511` (no extra references: `references` = 1) |
+| Imajutsu `edit` | **works, 1-4 pictures (phase 2)** | `flux2-klein-4b` (1-4 pictures, exact source size) or `qwen-image-edit-2511` (1-3 pictures) |
 | Imajutsu `inpaint`, `outpaint` (padded canvas + mask) | **works (new routing entry)** | `flux1-fill-dev`; the engine writes the mask into the picture's alpha channel (white = repaint) |
-| Imajutsu `replace_subject`, `reference` | **unavailable** | needs source + >= 1 reference picture; the only two-picture workflow is `qwen-image-2.1` (blend), not the same operation. The routing file lists no model for them, so the page says so |
-| Imajutsu `restyle`, `upscale` + refine | **unavailable** | image-to-image: no verified workflow |
+| Imajutsu `replace_subject`, `reference` | **works (phase 2)** | source + 1-3 reference pictures: `image.edit-klein-N` / `image.edit-qwen-N`; with a selection, `image.inpaint-klein-N` repaints only the selection (everything outside is the source's own pixels) |
+| Imajutsu `restyle` | **works (phase 2)** | instruction edit (`flux2-klein-4b` best, optional style-reference picture); Z-Image image-to-image exists but restyles poorly (measured), so it is last in the routing |
+| Imajutsu `upscale` + refine | **works (phase 2)** | lanczos scaling, then `image.img2img-zimage` at low strength (<= 2048 px a side); it can change small facial detail (measured) and is labelled as a model pass |
 | Imajutsu `upscale` (Lanczos / SeedVR2 / Real-ESRGAN) | **works** | Lanczos stays in Semechka; AI methods use the narrow `/api/internal/upscale*` routes the engine serves |
 | Text-to-video | **works** | `minimax-h3` (t2v), `ltx-2.3`, `wan2.2-ti2v-5b` |
 | Image-to-video | **works** | `minimax-h3` (i2v), `wan2.2-i2v-a14b`, `ltx-2.3` (i2v, and first/last frame at the engine level) |
@@ -157,8 +158,8 @@ normally discarded by Semechka right after it has copied them.
 | `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v` | Diffusers pipeline only on the old engine; no OpenSfield workflow |
 | `wan2.2-t2v-a14b` | OpenSfield has the 14B image-to-video and the 5B text-to-video workflows, not 14B text-to-video |
 | `openjutsu-minimax-h3`, `openjutsu-reference-video` | SAM 3.1 masks + H3 reference-to-video with the Context-Loop nodes live in the old engine's own ComfyUI install (`~/sarness-comfyui`), not in OpenSfield's verified set. The Studio's modes (subject/character/object/vehicle replacement, motion transfer, reference-to-video, video restyling, advanced editing) with box/point selection, size presets and live trace are therefore unavailable; section 2 lists what runs instead (different models, no mask/box). Decision needed if the H3 swap must come back: port that workflow into the OpenSfield ComfyUI and verify it |
-| Image-to-image (Imajutsu restyle, refine pass) | no verified workflow |
-| Multi-reference editing with FLUX.2 klein, edit with extra references | klein is text-to-image only here; Qwen-Image-Edit takes one picture |
+| ~~Image-to-image (Imajutsu restyle, refine pass)~~ | **restored in phase 2** (`image.img2img-zimage`, klein edit); see section 9 |
+| ~~Multi-reference editing with FLUX.2 klein, edit with extra references~~ | **restored in phase 2** (klein 1-4 pictures, Qwen 1-3); see section 9 |
 | Negative prompt, scheduler, guidance, LoRAs, batch, arbitrary steps | the verified workflows are fixed graphs; only Fast/Quality exists where a workflow has the switch |
 | Arbitrary video fps / frame counts | each workflow fixes its fps and frame grid |
 | Studio live trace / graph / history / segments | belong to the old engine's graph |
@@ -230,8 +231,8 @@ before relying on H3 alongside LLMs.
   plan text "N steps" is not what the workflow does.
 * **Sizes**: free sizes (Z-Image, Qwen-Image, FLUX.2 klein) vs fixed shapes (Krea: `limits.sizes`, `size_policy: snap_to_shape`; the result states its real size) vs `size_policy: source_shape`
   (edit and inpaint: the workflow picks its own size from the picture; width/height are ignored).
-* **Imajutsu**: modes `restyle`, `replace_subject`, `reference` and the refine pass of `upscale` have no model (the page already says "no model" when the routing finds none);
-  `edit` takes one picture; `inpaint`/`outpaint` run on FLUX.1 Fill (non-commercial licence, `caution` on the model).
+* **Imajutsu**: since phase 2 every mode has a model (section 9). The catalogue publishes `mode_pictures` (pictures per mode, source included) and Semechka's planner caps the pictures by it;
+  `inpaint`/`outpaint` run on FLUX.1 Fill (non-commercial licence, `caution` on the model) or, with reference pictures, on FLUX.2 klein (Apache-2.0).
 * **Studio**: the new profiles carry no Studio `modes`, so `/studio` lists them as not offering operations; the Composer's profile tray (video + one reference picture + prompt) is the
   way to run them. OpenJutsu's H3 swap is unavailable (section 5).
 * **Reverse Engineer Video** has no page yet: `GET /api/media/jobs/{id}/analysis` returns the analysis and plan; the library item is the contact sheet.
@@ -271,3 +272,67 @@ contact-sheeted (video); progress was polled every second through `GET /api/medi
 Not proven on the GPU: Wan 5B text-to-video, LTX/H3 image-to-video and H3 reference-to-video, first/last frame, Qwen-Image 2.1, the `opensfield-video-edit` / video upscale / smooth-motion
 profiles (their tests use fakes; the workflows themselves are verified by OpenSfield's own `config/verified.json`), Imajutsu outpaint, the browser UI (nothing was clicked), a Roasted/Salted
 deployment. Live sampler previews do not exist (ComfyUI runs without a preview method).
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## 9. Phase 2: Imajutsu picture modes restored (2026-11-10)
+
+New engine features (graphs written by `scripts/make_imajutsu_graphs.py`, registry `registry/imajutsu_features.py`, engine branch `consol2/imajutsu-engine`):
+
+| Feature | What it is | Pictures | Notes |
+|---|---|---|---|
+| `image.edit-klein-1..4` | FLUX.2 klein 4B distilled (fp8, Apache-2.0), 4 steps, cfg 1: the official `image_flux2_klein_image_edit_4b_distilled` template with one reference-conditioning pair per picture | 1-4 (first is edited) | output = the first picture's size (`megapixels` set from the upload, 16-px steps, cap 2 MP), 10-20 s |
+| `image.inpaint-klein-0..3` | the same with a mask: `SetLatentNoiseMask` on the source latent, source + 0-3 references condition it, the result is composited over the source with the mask | source + 0-3 references | outside the selection the result equals the source (measured mean abs diff 0.001-0.003, max 2); 4-16 s |
+| `image.edit-qwen-2`, `-3` | Qwen-Image-Edit 2511 with `TextEncodeQwenImageEditPlus` image2 / image3 | 2, 3 | 41-49 s Fast; output size is Qwen's own (720x1280 -> 752x1392) |
+| `image.img2img-zimage` | Z-Image Turbo with the picture VAE-encoded and a strength (0.05-1) | 1 | picture sides must be multiples of 16, <= 2048; 17 s at 2048x1152 |
+
+Catalogue: `modes` of `flux2-klein-4b` = txt2img, edit, inpaint (`references` 4); `qwen-image-edit-2511` = edit (`references` 3); `z-image-turbo` = txt2img, img2img. `mode_states` keys: `edit` (1 picture), `edit+N` (N extra references);
+a variant that was not rendered and reviewed is `unverified` and refused (409). `denoise` is accepted only by image-to-image (`422` otherwise); a picture whose sides are not multiples of 16 is refused for image-to-image.
+
+### Evidence (real runs through the dev engine on the live ComfyUI, under the exclusive media lock; every output looked at; stills in `docs/evidence/imajutsu/`)
+
+| Run | Time | What was seen |
+|---|---|---|
+| klein edit, 1 picture, "red jacket to dark green" | 11 s | jacket green, face, street and size (720x1280) unchanged |
+| Qwen edit, same | 29-35 s | same result, size 752x1392 |
+| klein edit, 2 pictures: replace the man with the woman of picture 2 | 13 s | curly-haired woman in a yellow raincoat, street and light of picture 1 kept |
+| Qwen edit, 2 pictures, same | 41 s | same idea, background kept |
+| klein edit, 3 pictures (kitchen + teapot + dog), seeds 5 and 9 | 10 s | kitchen kept, the blue teapot and the golden retriever of the references added |
+| Qwen edit, 3 pictures, same | 49 s | same; Qwen re-drew the table |
+| klein edit, 4 pictures (+ woman) | 20 s | kitchen with teapot, dog and the woman by the window |
+| reference mode (no source): woman + teapot, klein / Qwen | 13 / 41 s | one café photo with the woman in her yellow coat holding the teapot |
+| klein restyle "watercolour, keep the same objects" | 11 s | convincing watercolour, same composition and objects |
+| Qwen (Fast) restyle, same prompt | 40 s | almost unchanged (Fast does not restyle); Quality is needed |
+| klein edit with a painting as the style picture | 11 s | portrait re-painted in the painting's style, same man and street |
+| Z-Image img2img "oil painting" 0.55 / "pencil sketch" 0.7 / "watercolour" 0.75 | 17 s | NOT a restyle: 0.55 barely changed the look and altered the fruit, 0.7 changed the man's face, 0.75 invented new objects. Kept for low-strength refine only |
+| refine 0.3 on a 2048x1152 kitchen / 0.25 on a 1152x2048 portrait | 17 s | content and composition kept, fine texture added; on the face it changed the eye colour and added freckles (so the page's "it can change faces" label is real) |
+| klein masked edit, 0 / 1 / 2 / 3 references | 4 / 13 / 16 / 14 s | words only: an old fisherman; one reference: the woman; two: woman with the teapot; three: woman, teapot and dog; outside the selection identical to the source in all four |
+| cancel a Qwen Quality edit at step 2 of 40 | ComfyUI queue empty 4 s after the request | job `cancelled`, no output; `POST /v1/release` freed 27.6 GB |
+
+Progress was monotonic in every job. Z-Image img2img is therefore recommended only as the refine pass; the routing file lists FLUX.2 klein first for edit, replace subject, reference and restyle.
+
+### Browser verification of Imajutsu (real Chrome, desktop 1280 px and 390 px; dev Semechka -> dev engine -> live ComfyUI; stills in `docs/evidence/imajutsu/ui/`)
+
+Signed in as a staging admin on a copy of the staging data, driven with Playwright (`web/` Chrome channel); every picture was fetched from the Library and looked at.
+
+| Flow (Experimental -> Image, or the Images page) | Result |
+|---|---|
+| Images page, text only (the page stays: prompt, model, optional upload, Generate) | picture in 37 s |
+| Images page, uploaded reference + words (FLUX.2 klein, edit mode) | the kitchen re-made at night with lamps on, same layout |
+| Edit Image (recommended model FLUX.2 klein) | jacket green, 14 s, exact 720x1280 |
+| Replace Subject: source + 1 reference + box selection | engine mode inpaint (FLUX.2 klein), 17 s; the "original kept outside the selection" copy was made automatically. Quality note: with a box covering the whole figure the face came out a blend (the man's beard under the woman's curls); a tighter selection and the API run gave the clean replacement shown in section 9 |
+| Reference Image: two pictures, no source | woman holding the teapot in a café, 20 s |
+| Restyle (klein edit) | watercolour kitchen, 11 s |
+| Upscale + refine (2048x1152 from 1280x720, Z-Image image-to-image at 0.3) | 2048x1152 in 38 s; the plan said "scaled up" and labelled the refine as a model pass |
+| Upscale with SeedVR2 to 1440x2560 | sharper face detail than Lanczos (crop in `ui_seedvr2_crop.jpg`) |
+| iPhone Photo, Fast (klein) and Best realism (Qwen-Image 2512) | both exactly 720x1280 (9:16); 34 s and 166 s |
+| Inpaint (FLUX.1 Fill, box) / Outpaint (padded canvas, FLUX.1 Fill) | bread on a board added inside the box; teapot photo extended to 16:9 |
+| 390 px: Images, Experimental, Picture studio, Replace Subject | no horizontal overflow; layout readable |
+
+Bug found and fixed on the way: in Upscale a custom width with no size chosen yet produced a SQUARE output (the shape lock started from 1:1); it now keeps the picture's own shape (`SizePanel.svelte`).
+
+### Deploy / roll out (operator)
+
+1. Engine: merge `consol2/imajutsu-engine` (Spark `~/opensfield/wt-imajutsu`) into `spark-local`; merge the 11 entries of `docs/evidence/imajutsu/verified_entries_to_merge.json` into the live `~/opensfield/config/verified.json`; restart `semechka-media-engine` when its queue is 0 (the live engine must restart to load the new registry; ComfyUI is not touched, no node or weight was added).
+2. Semechka: deploy this branch; then per instance `scripts/spark/migrate_media_to_engine.py <data-dir> --apply` (dry run first). It refreshes the rows already on the engine backend, keeps enabled flags and grants, and with `--enable-models image:z-image-turbo --like image:flux2-klein-4b` enables Z-Image for the same people as FLUX.2 klein. Rollback: `--rollback <data-dir>/pre-update-media-engine-<ts>/rollback.json`. Rehearsed on copies of the pre-0.12.2 Salted and Roasted databases on the Spark (users/conversations/media hashes unchanged, rollback restores every hash).
+3. Licences: FLUX.2 klein 4B and Qwen-Image-Edit 2511 and Z-Image Turbo are Apache-2.0; FLUX.1 Fill (inpaint/outpaint) stays non-commercial and keeps its `caution`.
