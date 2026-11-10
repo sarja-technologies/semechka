@@ -58,7 +58,12 @@ def main() -> int:
                 s.add(u)
                 s.flush()
                 s.add(UserRole(user_id=u.id, role_id="member"))
-                s.add(OrgMember(org_id=org.id, user_id=u.id, status="active", role_ids=[role.id], added_by="operator"))
+                with s.no_autoflush:  # an organisation with auto_join already added the membership when the user was created
+                    mem = s.execute(select(OrgMember).where(OrgMember.org_id == org.id, OrgMember.user_id == u.id)).scalar_one_or_none()
+                if mem is None:
+                    s.add(OrgMember(org_id=org.id, user_id=u.id, status="active", role_ids=[role.id], added_by="operator"))
+                else:
+                    mem.role_ids = [role.id]
                 if kind == "admin":
                     s.add(UserOverride(user_id=u.id, grants=["admin.content.read"], denies=[]))
                 audit.record(s, "operator", "user.create", u.id, {"source": "operator script accept_accounts.py", "kind": "throwaway acceptance account"})
