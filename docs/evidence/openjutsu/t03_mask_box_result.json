@@ -1,0 +1,90 @@
+{
+ "name": "t03_mask_box",
+ "job": "8c24c8199818",
+ "status": "completed",
+ "wall_s": 24.3,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  9
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-minimax-h3",
+  "operation": "check_mask",
+  "feature": "openjutsu.mask",
+  "openjutsu": {
+   "operation": "check_mask",
+   "resolution": "736p",
+   "short_edge": null,
+   "seed": 701276382,
+   "hat_fix": false,
+   "no_lip_sync": false,
+   "motion_reference": 512,
+   "clip_seconds": 6.0,
+   "subject_kind": null,
+   "subject_selection": {
+    "box": [
+     0.22,
+     0.02,
+     0.34,
+     0.95
+    ]
+   },
+   "mask_margin": 40,
+   "target": "person"
+  },
+  "references": [],
+  "source": {
+   "width": 1344,
+   "height": 768,
+   "duration": 5.167,
+   "fps": 24.0,
+   "frames": 124,
+   "has_audio": true
+  },
+  "output": {
+   "width": 1024,
+   "height": 294,
+   "frames": 72,
+   "fps": 24.0,
+   "duration": 3.0
+  },
+  "sampler_steps_last": 72
+ },
+ "generations": [
+  {
+   "id": "8c24c8199818-0",
+   "file_id": "8c24c8199818-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 472228,
+   "width": 1024,
+   "height": 294,
+   "duration": 3.0,
+   "fps": 24.0,
+   "frames": 72,
+   "audio": false,
+   "seed": null,
+   "name": "18_0_mask_00002.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 1024,
+    "height": 294,
+    "r_frame_rate": "24/1",
+    "nb_frames": "72",
+    "duration": "3.000000",
+    "sample_rate": null,
+    "channels": null
+   }
+  ],
+  "duration": "3.000000"
+ },
+ "volume0": []
+}

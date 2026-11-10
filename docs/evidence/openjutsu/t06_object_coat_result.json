@@ -1,0 +1,102 @@
+{
+ "name": "t06_object_coat",
+ "job": "304d5f8287e7",
+ "status": "completed",
+ "wall_s": 96.4,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  33
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-minimax-h3",
+  "operation": "object_edit",
+  "feature": "openjutsu.object",
+  "openjutsu": {
+   "operation": "object_edit",
+   "resolution": "480p",
+   "short_edge": null,
+   "seed": 3,
+   "hat_fix": false,
+   "no_lip_sync": false,
+   "motion_reference": 512,
+   "clip_seconds": 6.0,
+   "subject_kind": "person",
+   "subject_selection": null,
+   "object_mode": "change",
+   "object_target": "the coat",
+   "change_to": "a bright yellow raincoat",
+   "object_margin": "normal",
+   "picture": false,
+   "keep_outline": false,
+   "biggest_only": false
+  },
+  "references": [],
+  "source": {
+   "width": 854,
+   "height": 480,
+   "duration": 3.0,
+   "fps": 24.0,
+   "frames": 72,
+   "has_audio": true
+  },
+  "output": {
+   "width": 864,
+   "height": 480,
+   "frames": 56,
+   "fps": 24.0,
+   "duration": 2.3333
+  },
+  "sampler_steps_last": 6
+ },
+ "generations": [
+  {
+   "id": "304d5f8287e7-0",
+   "file_id": "304d5f8287e7-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 902186,
+   "width": 864,
+   "height": 480,
+   "duration": 2.3333,
+   "fps": 24.0,
+   "frames": 56,
+   "audio": true,
+   "seed": 3,
+   "name": "55_0_edit_2026-11-10.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 864,
+    "height": 480,
+    "r_frame_rate": "24/1",
+    "nb_frames": "56",
+    "duration": "2.333333",
+    "sample_rate": null,
+    "channels": null
+   },
+   {
+    "codec_type": "audio",
+    "codec_name": "aac",
+    "width": null,
+    "height": null,
+    "r_frame_rate": "0/0",
+    "nb_frames": "111",
+    "duration": "2.333000",
+    "sample_rate": "48000",
+    "channels": 2
+   }
+  ],
+  "duration": "2.333333"
+ },
+ "volume0": [
+  "[Parsed_volumedetect_0 @ 0xb279fd476a90] mean_volume: -16.7 dB",
+  "[Parsed_volumedetect_0 @ 0xb279fd476a90] max_volume: -2.4 dB"
+ ]
+}

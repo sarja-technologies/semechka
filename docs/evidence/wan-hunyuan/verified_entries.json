@@ -1,0 +1,56 @@
+{
+ "video.wan22-t2v14": {
+  "at": "2026-11-11T00:00:00",
+  "job": "b094195992e2",
+  "seconds": 102.0,
+  "outputs": [
+   {
+    "duration": 5.0625,
+    "size": 1775624,
+    "codec": "h264",
+    "w": 480,
+    "h": 832,
+    "frames": 81,
+    "fps": "16/1",
+    "name": "wan14_t2v_fast_5s_916.mp4",
+    "kind": "video"
+   }
+  ]
+ },
+ "video.hunyuan15-t2v": {
+  "at": "2026-11-11T00:00:00",
+  "job": "6fa5c65e8f8c",
+  "seconds": 797.0,
+  "outputs": [
+   {
+    "duration": 5.0417,
+    "size": 1540234,
+    "codec": "h264",
+    "w": 848,
+    "h": 480,
+    "frames": 121,
+    "fps": "24/1",
+    "name": "hy_t2v_5s.mp4",
+    "kind": "video"
+   }
+  ]
+ },
+ "video.hunyuan15-i2v": {
+  "at": "2026-11-11T00:00:00",
+  "job": "f096abf35336",
+  "seconds": 819.0,
+  "outputs": [
+   {
+    "duration": 5.0417,
+    "size": 653297,
+    "codec": "h264",
+    "w": 848,
+    "h": 480,
+    "frames": 121,
+    "fps": "24/1",
+    "name": "hy_i2v_5s.mp4",
+    "kind": "video"
+   }
+  ]
+ }
+}

@@ -1,0 +1,1040 @@
+{
+ "smooth2x": {
+  "job": "f66ec317a0f0",
+  "status": "completed",
+  "wall_s": 16.9,
+  "progress_monotonic": true,
+  "progress_samples": 9,
+  "applied": {
+   "profile": "opensfield-smooth-motion",
+   "operation": "interpolate",
+   "feature": "video.interpolate",
+   "output": {
+    "width": 854,
+    "height": 480,
+    "frames": 143,
+    "fps": 48.0,
+    "duration": 2.9792
+   },
+   "sampler_steps_last": 71
+  },
+  "ffprobe": {
+   "size": "854x480",
+   "fps": "48/1",
+   "frames": "143",
+   "duration": "2.979167",
+   "audio": true,
+   "mean_volume": "-16.9 dB"
+  }
+ },
+ "smooth4x": {
+  "job": "6d4e7b4f4e11",
+  "status": "completed",
+  "wall_s": 36.3,
+  "progress_monotonic": true,
+  "progress_samples": 19,
+  "applied": {
+   "profile": "opensfield-smooth-motion",
+   "operation": "interpolate",
+   "feature": "video.interpolate",
+   "output": {
+    "width": 854,
+    "height": 480,
+    "frames": 285,
+    "fps": 96.0,
+    "duration": 2.9688
+   },
+   "sampler_steps_last": 213
+  },
+  "ffprobe": {
+   "size": "854x480",
+   "fps": "96/1",
+   "frames": "285",
+   "duration": "2.968750",
+   "audio": true,
+   "mean_volume": "-16.9 dB"
+  }
+ },
+ "upscale": {
+  "job": "d6a859ddc79b",
+  "status": "completed",
+  "wall_s": 332.7,
+  "progress_monotonic": true,
+  "progress_samples": 167,
+  "applied": {
+   "profile": "opensfield-video-upscale",
+   "operation": "upscale",
+   "feature": "video.upscale",
+   "output": {
+    "width": 1708,
+    "height": 960,
+    "frames": 73,
+    "fps": 24.0,
+    "duration": 3.0417
+   },
+   "sampler_steps_last": 15
+  },
+  "ffprobe": {
+   "size": "1708x960",
+   "fps": "24/1",
+   "frames": "73",
+   "duration": "3.041667",
+   "audio": true,
+   "mean_volume": "-17.4 dB"
+  }
+ },
+ "edit_replace": {
+  "job": "88f6d675cb07",
+  "status": "completed",
+  "wall_s": 260.7,
+  "progress_monotonic": true,
+  "progress_samples": 131,
+  "applied": {
+   "profile": "opensfield-video-edit",
+   "operation": "replace_object",
+   "feature": "genjutsu.replace-object",
+   "output": {
+    "width": 896,
+    "height": 512,
+    "frames": 70,
+    "fps": 24.0,
+    "duration": 2.9167
+   },
+   "sampler_steps_last": 1
+  },
+  "ffprobe": {
+   "size": "896x512",
+   "fps": "24/1",
+   "frames": "70",
+   "duration": "2.916667",
+   "audio": true,
+   "mean_volume": "-16.9 dB"
+  }
+ },
+ "edit_restyle": {
+  "job": "99239e3bbdd7",
+  "status": "completed",
+  "wall_s": 126.5,
+  "progress_monotonic": true,
+  "progress_samples": 64,
+  "applied": {
+   "profile": "opensfield-video-edit",
+   "operation": "restyle",
+   "feature": "genjutsu.styles",
+   "output": {
+    "width": 1280,
+    "height": 704,
+    "frames": 65,
+    "fps": 25.0,
+    "duration": 2.6
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "1280x704",
+   "fps": "25/1",
+   "frames": "65",
+   "duration": "2.600000",
+   "audio": true,
+   "mean_volume": "-21.4 dB"
+  }
+ },
+ "edit_restyle2": {
+  "job": "ff95bdbaaa56",
+  "status": "completed",
+  "wall_s": 765.5,
+  "progress_monotonic": true,
+  "progress_samples": 383,
+  "applied": {
+   "profile": "opensfield-video-edit",
+   "operation": "restyle",
+   "feature": "genjutsu.styles",
+   "output": {
+    "width": 1280,
+    "height": 704,
+    "frames": 65,
+    "fps": 25.0,
+    "duration": 2.6
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "1280x704",
+   "fps": "25/1",
+   "frames": "65",
+   "duration": "2.600000",
+   "audio": true,
+   "mean_volume": "-24.1 dB"
+  }
+ },
+ "edit_motion2": {
+  "job": "6b7e3a318d2e",
+  "status": "completed",
+  "wall_s": 340.9,
+  "progress_monotonic": true,
+  "progress_samples": 171,
+  "applied": {
+   "profile": "opensfield-video-edit",
+   "operation": "motion_transfer",
+   "feature": "genjutsu.motion-control",
+   "output": {
+    "width": 480,
+    "height": 848,
+    "frames": 81,
+    "fps": 24.0,
+    "duration": 3.375
+   },
+   "sampler_steps_last": 10
+  },
+  "ffprobe": {
+   "size": "480x848",
+   "fps": "24/1",
+   "frames": "81",
+   "duration": "3.375000",
+   "audio": true,
+   "mean_volume": "-16.9 dB"
+  }
+ },
+ "edit_video2": {
+  "job": "5ccba79ce775",
+  "status": "completed",
+  "wall_s": 296.8,
+  "progress_monotonic": true,
+  "progress_samples": 149,
+  "applied": {
+   "profile": "opensfield-video-edit",
+   "operation": "edit_video",
+   "feature": "video.edit",
+   "processing_size": [
+    848,
+    480
+   ],
+   "output": {
+    "width": 848,
+    "height": 480,
+    "frames": 69,
+    "fps": 24.0,
+    "duration": 2.875
+   },
+   "sampler_steps_last": 3
+  },
+  "ffprobe": {
+   "size": "848x480",
+   "fps": "24/1",
+   "frames": "69",
+   "duration": "2.875000",
+   "audio": true,
+   "mean_volume": "-16.8 dB"
+  }
+ },
+ "ltx_i2v": {
+  "job": "ed7c10463859",
+  "status": "completed",
+  "wall_s": 70.9,
+  "progress_monotonic": true,
+  "progress_samples": 35,
+  "applied": {
+   "model": "ltx-2.3",
+   "mode": "i2v",
+   "feature": "cinema.camera-rig",
+   "width": 768,
+   "height": 448,
+   "frames": 73,
+   "fps": 24,
+   "seconds": 3.0417,
+   "seconds_input": 3,
+   "output": {
+    "width": 768,
+    "height": 448,
+    "frames": 73,
+    "fps": 24.0,
+    "duration": 3.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "768x448",
+   "fps": "24/1",
+   "frames": "73",
+   "duration": "3.041667",
+   "audio": true,
+   "mean_volume": "-25.6 dB"
+  }
+ },
+ "ltx_flf": {
+  "job": "2ba19ebbe0e5",
+  "status": "completed",
+  "wall_s": 38.3,
+  "progress_monotonic": true,
+  "progress_samples": 20,
+  "applied": {
+   "model": "ltx-2.3",
+   "mode": "flf",
+   "feature": "cinema.first-last-frame",
+   "width": 768,
+   "height": 448,
+   "frames": 73,
+   "fps": 24,
+   "seconds": 3.0417,
+   "seconds_input": 3,
+   "output": {
+    "width": 768,
+    "height": 448,
+    "frames": 73,
+    "fps": 24.0,
+    "duration": 3.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "768x448",
+   "fps": "24/1",
+   "frames": "73",
+   "duration": "3.041667",
+   "audio": true,
+   "mean_volume": "-20.5 dB"
+  }
+ },
+ "h3_i2v": {
+  "job": "0fd5c85d01eb",
+  "status": "completed",
+  "wall_s": 100.4,
+  "progress_monotonic": true,
+  "progress_samples": 51,
+  "applied": {
+   "model": "minimax-h3",
+   "mode": "i2v",
+   "feature": "video.h3-i2v",
+   "width": 864,
+   "height": 480,
+   "frames": 73,
+   "fps": 24,
+   "seconds": 3.0417,
+   "seconds_input": 3,
+   "output": {
+    "width": 864,
+    "height": 480,
+    "frames": 73,
+    "fps": 24.0,
+    "duration": 3.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "864x480",
+   "fps": "24/1",
+   "frames": "73",
+   "duration": "3.041667",
+   "audio": true,
+   "mean_volume": "-25.2 dB"
+  }
+ },
+ "h3_r2v": {
+  "job": "6b782de57d43",
+  "status": "completed",
+  "wall_s": 58.3,
+  "progress_monotonic": true,
+  "progress_samples": 30,
+  "applied": {
+   "model": "minimax-h3",
+   "mode": "r2v",
+   "feature": "video.h3-r2v",
+   "width": 864,
+   "height": 480,
+   "frames": 73,
+   "fps": 24,
+   "seconds": 3.0417,
+   "seconds_input": 3,
+   "output": {
+    "width": 864,
+    "height": 480,
+    "frames": 73,
+    "fps": 24.0,
+    "duration": 3.0417
+   },
+   "sampler_steps_last": 4
+  },
+  "ffprobe": {
+   "size": "864x480",
+   "fps": "24/1",
+   "frames": "73",
+   "duration": "3.041667",
+   "audio": true,
+   "mean_volume": "-16.8 dB"
+  }
+ },
+ "w5_base": {
+  "job": "b67b18ece68a",
+  "status": "completed",
+  "wall_s": 64.3,
+  "progress_monotonic": true,
+  "progress_samples": 33,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5_neg": {
+  "job": "da8700e97104",
+  "status": "completed",
+  "wall_s": 56.3,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "negative_prompt": true,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5_steps8": {
+  "job": "73757baae618",
+  "status": "completed",
+  "wall_s": 30.2,
+  "progress_monotonic": true,
+  "progress_samples": 16,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "steps": 8,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5_cfg1": {
+  "job": "213c289ee66f",
+  "status": "completed",
+  "wall_s": 34.3,
+  "progress_monotonic": true,
+  "progress_samples": 18,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "guidance": 1.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5_cfg9": {
+  "job": "39b734134e5b",
+  "status": "completed",
+  "wall_s": 56.4,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "guidance": 9.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5_seed22": {
+  "job": "dc55d47fcb8d",
+  "status": "completed",
+  "wall_s": 56.3,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5n_a": {
+  "job": "aa3828fbe0ea",
+  "status": "completed",
+  "wall_s": 64.5,
+  "progress_monotonic": true,
+  "progress_samples": 33,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "guidance": 7.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5n_b": {
+  "job": "bb106938d019",
+  "status": "completed",
+  "wall_s": 56.3,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "negative_prompt": true,
+   "guidance": 7.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5n_c": {
+  "job": "e5c3cb7eba56",
+  "status": "completed",
+  "wall_s": 56.4,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "guidance": 7.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w5n_d": {
+  "job": "97d84d0f8607",
+  "status": "completed",
+  "wall_s": 56.3,
+  "progress_monotonic": true,
+  "progress_samples": 29,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "negative_prompt": true,
+   "guidance": 7.0,
+   "width": 960,
+   "height": 544,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 960,
+    "height": 544,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 20
+  },
+  "ffprobe": {
+   "size": "960x544",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w14_base": {
+  "job": "b2047ed20792",
+  "status": "completed",
+  "wall_s": 112.5,
+  "progress_monotonic": true,
+  "progress_samples": 57,
+  "applied": {
+   "model": "wan2.2-i2v-a14b",
+   "mode": "i2v",
+   "feature": "video.wan22-i2v",
+   "speed": "Quality",
+   "steps": 20,
+   "width": 832,
+   "height": 480,
+   "frames": 17,
+   "fps": 16,
+   "seconds": 1.0625,
+   "seconds_input": 1,
+   "output": {
+    "width": 832,
+    "height": 480,
+    "frames": 17,
+    "fps": 16.0,
+    "duration": 1.0625
+   },
+   "sampler_steps_last": 10
+  },
+  "ffprobe": {
+   "size": "832x480",
+   "fps": "16/1",
+   "frames": "17",
+   "duration": "1.062500",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w14_steps10": {
+  "job": "826dd359db19",
+  "status": "completed",
+  "wall_s": 52.3,
+  "progress_monotonic": true,
+  "progress_samples": 27,
+  "applied": {
+   "model": "wan2.2-i2v-a14b",
+   "mode": "i2v",
+   "feature": "video.wan22-i2v",
+   "speed": "Quality",
+   "steps": 10,
+   "width": 832,
+   "height": 480,
+   "frames": 17,
+   "fps": 16,
+   "seconds": 1.0625,
+   "seconds_input": 1,
+   "output": {
+    "width": 832,
+    "height": 480,
+    "frames": 17,
+    "fps": 16.0,
+    "duration": 1.0625
+   },
+   "sampler_steps_last": 5
+  },
+  "ffprobe": {
+   "size": "832x480",
+   "fps": "16/1",
+   "frames": "17",
+   "duration": "1.062500",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w14_neg": {
+  "job": "d08b3ec13cca",
+  "status": "completed",
+  "wall_s": 98.4,
+  "progress_monotonic": true,
+  "progress_samples": 50,
+  "applied": {
+   "model": "wan2.2-i2v-a14b",
+   "mode": "i2v",
+   "feature": "video.wan22-i2v",
+   "speed": "Quality",
+   "negative_prompt": true,
+   "steps": 20,
+   "width": 832,
+   "height": 480,
+   "frames": 17,
+   "fps": 16,
+   "seconds": 1.0625,
+   "seconds_input": 1,
+   "output": {
+    "width": 832,
+    "height": 480,
+    "frames": 17,
+    "fps": 16.0,
+    "duration": 1.0625
+   },
+   "sampler_steps_last": 10
+  },
+  "ffprobe": {
+   "size": "832x480",
+   "fps": "16/1",
+   "frames": "17",
+   "duration": "1.062500",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w14_cfg1": {
+  "job": "de9c617ee702",
+  "status": "completed",
+  "wall_s": 54.3,
+  "progress_monotonic": true,
+  "progress_samples": 28,
+  "applied": {
+   "model": "wan2.2-i2v-a14b",
+   "mode": "i2v",
+   "feature": "video.wan22-i2v",
+   "speed": "Quality",
+   "steps": 20,
+   "guidance": 1.0,
+   "width": 832,
+   "height": 480,
+   "frames": 17,
+   "fps": 16,
+   "seconds": 1.0625,
+   "seconds_input": 1,
+   "output": {
+    "width": 832,
+    "height": 480,
+    "frames": 17,
+    "fps": 16.0,
+    "duration": 1.0625
+   },
+   "sampler_steps_last": 10
+  },
+  "ffprobe": {
+   "size": "832x480",
+   "fps": "16/1",
+   "frames": "17",
+   "duration": "1.062500",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "w14_fast": {
+  "job": "3ca2d9ef0894",
+  "status": "completed",
+  "wall_s": 34.3,
+  "progress_monotonic": true,
+  "progress_samples": 18,
+  "applied": {
+   "model": "wan2.2-i2v-a14b",
+   "mode": "i2v",
+   "feature": "video.wan22-i2v",
+   "speed": "Fast",
+   "width": 832,
+   "height": 480,
+   "frames": 17,
+   "fps": 16,
+   "seconds": 1.0625,
+   "seconds_input": 1,
+   "output": {
+    "width": 832,
+    "height": 480,
+    "frames": 17,
+    "fps": 16.0,
+    "duration": 1.0625
+   },
+   "sampler_steps_last": 2
+  },
+  "ffprobe": {
+   "size": "832x480",
+   "fps": "16/1",
+   "frames": "17",
+   "duration": "1.062500",
+   "audio": false,
+   "mean_volume": null
+  }
+ },
+ "ltx_base": {
+  "job": "a626c4710f67",
+  "status": "completed",
+  "wall_s": 62.3,
+  "progress_monotonic": true,
+  "progress_samples": 32,
+  "applied": {
+   "model": "ltx-2.3",
+   "mode": "t2v",
+   "feature": "video.t2v-i2v-open",
+   "width": 768,
+   "height": 448,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 768,
+    "height": 448,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "768x448",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": true,
+   "mean_volume": "-13.3 dB"
+  }
+ },
+ "ltx_cfg2": {
+  "job": "d3132ce8a258",
+  "status": "completed",
+  "wall_s": 70.7,
+  "progress_monotonic": true,
+  "progress_samples": 36,
+  "applied": {
+   "model": "ltx-2.3",
+   "mode": "t2v",
+   "feature": "video.t2v-i2v-open",
+   "guidance": 2.0,
+   "width": 768,
+   "height": 448,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 768,
+    "height": 448,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "768x448",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": true,
+   "mean_volume": "-12.2 dB"
+  }
+ },
+ "ltx_cfg2neg": {
+  "job": "889e6e851657",
+  "status": "completed",
+  "wall_s": 34.2,
+  "progress_monotonic": true,
+  "progress_samples": 18,
+  "applied": {
+   "model": "ltx-2.3",
+   "mode": "t2v",
+   "feature": "video.t2v-i2v-open",
+   "negative_prompt": true,
+   "guidance": 2.0,
+   "width": 768,
+   "height": 448,
+   "frames": 49,
+   "fps": 24,
+   "seconds": 2.0417,
+   "seconds_input": 2,
+   "output": {
+    "width": 768,
+    "height": 448,
+    "frames": 49,
+    "fps": 24.0,
+    "duration": 2.0417
+   },
+   "sampler_steps_last": 8
+  },
+  "ffprobe": {
+   "size": "768x448",
+   "fps": "24/1",
+   "frames": "49",
+   "duration": "2.041667",
+   "audio": true,
+   "mean_volume": "-12.7 dB"
+  }
+ },
+ "w5_cancel": {
+  "job": "a81e7568df4d",
+  "status": "cancelled",
+  "wall_s": 44.3,
+  "progress_monotonic": true,
+  "progress_samples": 22,
+  "applied": {
+   "model": "wan2.2-ti2v-5b",
+   "mode": "t2v",
+   "feature": "video.wan22-t2v",
+   "width": 960,
+   "height": 544,
+   "frames": 121,
+   "fps": 24,
+   "seconds": 5.0417,
+   "seconds_input": 5
+  },
+  "ffprobe": {}
+ },
+ "img_anime": {
+  "job": "f19bbd307a06",
+  "status": "completed",
+  "wall_s": 244.0,
+  "progress_monotonic": true,
+  "progress_samples": 121,
+  "applied": {
+   "model": "qwen-image-edit-2511",
+   "mode": "edit",
+   "feature": "image.edit-open",
+   "speed": "Quality",
+   "output": {
+    "width": 1392,
+    "height": 752
+   },
+   "sampler_steps_last": 40
+  },
+  "ffprobe": {}
+ }
+}

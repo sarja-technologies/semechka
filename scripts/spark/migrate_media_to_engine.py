@@ -16,6 +16,9 @@ Dry run by default (the database is opened read-only and nothing is written): it
      keep working). If the engine offers the same real id its meta/capabilities are replaced (like a catalogue sync) and it is available; otherwise it is
      moved too, marked available=false with meta.media.unavailable_reason, and keeps its enabled flag;
   4. engine models/profiles without a row are added disabled with no grants (like any newly discovered model);
+  4b. RESTORE: a row that is already on the engine backend but marked unavailable (an earlier run found no workflow for it) whose real id the engine NOW offers is
+     refreshed from the catalogue and made available again; its enabled flag, alias and grants are never touched (this re-enables restored models such as the
+     OpenJutsu profile or Wan 2.2 text-to-video on an instance that was migrated before they came back);
   5. with --grant-profiles, the grants of the old OpenJutsu row (video:openjutsu-minimax-h3) are copied to video:opensfield-video-edit, which is then enabled.
   6. REFRESH (always, on rows already on the engine backend): a row whose engine model is offered now gets the engine's current meta/capabilities and available=1 (what the admin's
      "Sync models" does), so modes the engine gained (Imajutsu: several reference pictures, masked edit, image-to-image restyle/refine) appear on instances migrated earlier.
@@ -126,7 +129,7 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
     base = a.engine_url.rstrip("/")
     new_b = next((b for b in rows(con, "select * from backends where adapter = ? and base_url = ?", (NEW_ADAPTER, base))), None)
     plan: dict = {"backend": {"id": new_b["id"] if new_b else uid("b_"), "created": new_b is None, "name": a.backend_name, "base_url": base},
-                  "moves": [], "creates": [], "grants": [], "toggles": [], "refreshes": [], "notes": []}
+                  "moves": [], "creates": [], "grants": [], "toggles": [], "refreshes": [], "restores": [], "notes": []}
     bid = plan["backend"]["id"]
     clash = next((x for x in rows(con, "select * from backends where name = ?", (a.backend_name,)) if x["id"] != bid), None)
     if clash:
@@ -164,6 +167,21 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
         plan["moves"].append(entry)
     if left_over:
         plan["notes"].append(f"{len(left_over)} media row(s) on the old Sarness backend were left where they are: the engine backend already has a row for each (a rerun after an earlier migration)")
+    for m in models:                                    # RESTORE: engine-backend rows that were parked unavailable and are offered again
+        if m["backend_id"] != bid or not is_media(m["real_id"]) or m["real_id"] not in found:
+            continue
+        try:
+            old_meta = json.loads(m["meta"]) if isinstance(m["meta"], str) else (m["meta"] or {})
+        except ValueError:
+            old_meta = {}
+        parked = (((old_meta or {}).get("media") or {}).get("unavailable_reason"))
+        if m["available"] and not parked:
+            continue
+        d = found[m["real_id"]]
+        meta = {**d.meta, **({"loaded": d.loaded} if d.loaded is not None else {})}
+        plan["restores"].append({"id": m["id"], "real_id": m["real_id"], "enabled": bool(m["enabled"]), "was": parked or "marked unavailable",
+                                 "old": {"meta": m["meta"], "capabilities": m["capabilities"], "available": m["available"]},
+                                 "new": {"meta": meta, "capabilities": list(d.capabilities), "available": 1}})
     moved_real = {e["real_id"] for e in plan["moves"]}
     for rid, d in found.items():
         if rid in have_new or rid in moved_real:
@@ -179,9 +197,10 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
 
     def _stable(meta):
         return {k: v for k, v in (meta or {}).items() if k != "loaded"} if isinstance(meta, dict) else meta
+    restored_ids = {r["id"] for r in plan["restores"]}          # a row parked unavailable is restored above; it is not refreshed a second time
     for rid, m in have_new.items():
         d = found.get(rid)
-        if d is None:
+        if d is None or m["id"] in restored_ids:
             continue
         new_meta = {**d.meta, **({"loaded": d.loaded} if d.loaded is not None else {})}
         old_meta, old_caps = _j(m["meta"]), _j(m["capabilities"])
@@ -235,7 +254,7 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
         if any(c["real_id"] == PROFILE_EDIT for c in plan["creates"]):
             plan["notes"].append(f"{PROFILE_EDIT} is added disabled with no grants (use --grant-profiles to copy the old OpenJutsu grants and enable it)")
     plan["backend"]["needed"] = bool(plan["moves"] or plan["creates"] or plan["refreshes"])
-    plan["changes"] = bool(plan["moves"] or plan["creates"] or plan["grants"] or plan["toggles"] or plan["refreshes"])
+    plan["changes"] = bool(plan["moves"] or plan["creates"] or plan["grants"] or plan["toggles"] or plan["refreshes"] or plan["restores"])
     if not plan["backend"]["needed"] and plan["backend"]["created"]:
         plan["backend"]["created"] = False        # nothing to attach to it: do not create an empty backend
     return plan
@@ -246,6 +265,8 @@ def print_plan(plan: dict) -> None:
     print(f"engine backend: {b['name']} ({b['base_url']}) -> " + (f"CREATE {b['id']}" if b["created"] else f"existing {b['id']}" if b.get("needed") else "not needed"))
     for e in plan["moves"]:
         print(f"  {e['id']}  {e['real_id']:<34} alias={e['alias']!r:<28} enabled={int(e['enabled'])}  -> {e['action']}" + (f" ({e['reason']})" if e.get("reason") else ""))
+    for r in plan["restores"]:
+        print(f"  RESTORE {r['id']}  {r['real_id']:<34} enabled={int(r['enabled'])}  -> available again (was: {str(r['was'])[:70]}); grants and enabled flag unchanged")
     for c in plan["creates"]:
         print(f"  NEW {c['id']}  {c['real_id']:<34} alias={c['alias']!r:<28} enabled={c['enabled']}  -> add from the engine catalogue (no grants)")
     for g in plan["grants"]:
@@ -289,6 +310,9 @@ def apply_plan(con: sqlite3.Connection, plan: dict, token: str | None, data: pat
                 con.execute("update models set backend_id=?, meta=?, available=0 where id=?", (b["id"], _js(n["meta"]), e["id"]))
             else:
                 con.execute("update models set backend_id=?, meta=?, capabilities=?, available=1 where id=?", (b["id"], _js(n["meta"]), _js(n["capabilities"]), e["id"]))
+        for r in plan["restores"]:
+            n = r["new"]
+            con.execute("update models set meta=?, capabilities=?, available=1 where id=?", (_js(n["meta"]), _js(n["capabilities"]), r["id"]))
         for c in plan["creates"]:
             insert_row(con, "models", {"id": c["id"], "backend_id": b["id"], "real_id": c["real_id"], "alias": c["alias"], "enabled": c["enabled"], "pinned": 0, "tags": _js([]),
                                        "capabilities": _js(c["capabilities"]), "meta": _js(c["meta"]), "system_prompt": "", "gen_limits": _js({}), "allow_tools": 0, "available": 1,
@@ -331,6 +355,7 @@ def rollback_doc(plan: dict, data: pathlib.Path, backup: pathlib.Path) -> dict:
     return {"version": 1, "created_at": time.time(), "data_dir": str(data), "backup": str(backup),
             "backend": {"id": plan["backend"]["id"], "created": plan["backend"]["created"]},
             "moved": [{"id": e["id"], "old_backend_id": e["old_backend_id"], "old": e["old"]} for e in plan["moves"]],
+            "restored": [{"id": r["id"], "old": r["old"]} for r in plan["restores"]],
             "created_models": [c["id"] for c in plan["creates"]],
             "grant_rows": [g["row_id"] for g in plan["grants"] if "row_id" in g],
             "toggled": plan["toggles"],
@@ -347,7 +372,7 @@ def do_rollback(con: sqlite3.Connection, doc: dict) -> None:
             con.execute("delete from models where id=?", (mid,))
         for t in doc.get("toggled", []):
             con.execute("update models set enabled=? where id=?", (t["old_enabled"], t["id"]))
-        for r in doc.get("refreshed", []):
+        for r in doc.get("refreshed", []) + doc.get("restored", []):
             o = r["old"]
             con.execute("update models set meta=?, capabilities=?, available=? where id=?", (o["meta"], o["capabilities"], o["available"], r["id"]))
         for m in doc.get("moved", []):

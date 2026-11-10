@@ -1,0 +1,63 @@
+{
+ "name": "hy_t2v_cancel",
+ "job": "36183ecf7da0",
+ "status": "cancelled",
+ "wall_s": 40,
+ "applied": {
+  "model": "hunyuanvideo-1.5-t2v",
+  "mode": "t2v",
+  "feature": "video.hunyuan15-t2v",
+  "width": 848,
+  "height": 480,
+  "frames": 49,
+  "fps": 24,
+  "seconds": 2.0417,
+  "seconds_input": 2
+ },
+ "error": null,
+ "progress_series": [
+  [
+   0,
+   0.0,
+   "Preparing"
+  ],
+  [
+   2,
+   0.025,
+   "Preparing"
+  ],
+  [
+   8,
+   0.07,
+   "Generating, step 1 of 20"
+  ],
+  [
+   18,
+   0.11500000000000002,
+   "Generating, step 2 of 20"
+  ],
+  [
+   28,
+   0.16,
+   "Generating, step 3 of 20"
+  ],
+  [
+   38,
+   0.20500000000000002,
+   "Generating, step 4 of 20"
+  ],
+  [
+   40,
+   null,
+   "Cancelled"
+  ]
+ ],
+ "comfy_queue_empty_after_s": 1.6,
+ "comfy_queue": {
+  "running": 0,
+  "pending": 0,
+  "running_prompt_ids": [],
+  "pending_prompt_ids": []
+ },
+ "gpu_util": "96 %"
+}

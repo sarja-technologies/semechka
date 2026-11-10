@@ -1,0 +1,177 @@
+{
+ "name": "t07_ref9",
+ "job": "acd01b9e6358",
+ "status": "completed",
+ "wall_s": 82.5,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  28
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-reference-video",
+  "operation": "reference_video",
+  "feature": "openjutsu.reference-video",
+  "openjutsu": {
+   "operation": "reference_video",
+   "short_edge": 480,
+   "width": 864,
+   "height": 480,
+   "frames": 56,
+   "seconds": 2.333,
+   "aspect": "16:9",
+   "seed": 4,
+   "pictures": 9,
+   "warnings": [
+    "the prompt never names <Picture 7>: the model may ignore that picture",
+    "the prompt never names <Picture 8>: the model may ignore that picture",
+    "the prompt never names <Picture 9>: the model may ignore that picture"
+   ]
+  },
+  "references": [
+   {
+    "original": "768x1024",
+    "prepared": "768x1024",
+    "warnings": [],
+    "position": 1,
+    "used": true,
+    "file": "6dc3c241f3594a52af1c22e05dfd6956.png"
+   },
+   {
+    "original": "768x1024",
+    "prepared": "768x1024",
+    "warnings": [],
+    "position": 2,
+    "used": true,
+    "file": "1b956b69faca4171b01579b02035d5f8.png"
+   },
+   {
+    "original": "768x1024",
+    "prepared": "768x1024",
+    "warnings": [],
+    "position": 3,
+    "used": true,
+    "file": "22fd0ccb29db491fa8bc5f437b995505.png"
+   },
+   {
+    "original": "400x740",
+    "prepared": "400x740",
+    "warnings": [
+     "small picture (400x740): likeness improves with 512+ px"
+    ],
+    "position": 4,
+    "used": true,
+    "file": "71c5af4b5f144128a6881f35195fe5b3.png"
+   },
+   {
+    "original": "854x480",
+    "prepared": "854x480",
+    "warnings": [
+     "small picture (854x480): likeness improves with 512+ px"
+    ],
+    "position": 5,
+    "used": true,
+    "file": "d66c33850ace4e1c97ecf344baa84f70.png"
+   },
+   {
+    "original": "864x480",
+    "prepared": "864x480",
+    "warnings": [
+     "small picture (864x480): likeness improves with 512+ px"
+    ],
+    "position": 6,
+    "used": true,
+    "file": "37f1a5c498f04ec08a90cfbd61b782bf.png"
+   },
+   {
+    "original": "864x480",
+    "prepared": "864x480",
+    "warnings": [
+     "small picture (864x480): likeness improves with 512+ px"
+    ],
+    "position": 7,
+    "used": true,
+    "file": "2aa21b777122491086c9544db4ebbb35.png"
+   },
+   {
+    "original": "1024x576",
+    "prepared": "1024x576",
+    "warnings": [],
+    "position": 8,
+    "used": true,
+    "file": "49ec182d311b4d668b30650e048ff082.png"
+   },
+   {
+    "original": "1024x576",
+    "prepared": "1024x576",
+    "warnings": [],
+    "position": 9,
+    "used": true,
+    "file": "77f307c683e341ae92d77551a970444d.png"
+   }
+  ],
+  "warnings": [
+   "the prompt never names <Picture 7>: the model may ignore that picture",
+   "the prompt never names <Picture 8>: the model may ignore that picture",
+   "the prompt never names <Picture 9>: the model may ignore that picture"
+  ],
+  "output": {
+   "width": 864,
+   "height": 480,
+   "frames": 56,
+   "fps": 24.0,
+   "duration": 2.3333
+  },
+  "sampler_steps_last": 56
+ },
+ "generations": [
+  {
+   "id": "acd01b9e6358-0",
+   "file_id": "acd01b9e6358-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 721926,
+   "width": 864,
+   "height": 480,
+   "duration": 2.3333,
+   "fps": 24.0,
+   "frames": 56,
+   "audio": true,
+   "seed": 4,
+   "name": "19_0_reference_video_00001-audio.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 864,
+    "height": 480,
+    "r_frame_rate": "24/1",
+    "nb_frames": "56",
+    "duration": "2.333333",
+    "sample_rate": null,
+    "channels": null
+   },
+   {
+    "codec_type": "audio",
+    "codec_name": "aac",
+    "width": null,
+    "height": null,
+    "r_frame_rate": "0/0",
+    "nb_frames": "73",
+    "duration": "2.304000",
+    "sample_rate": "32000",
+    "channels": 2
+   }
+  ],
+  "duration": "2.333333"
+ },
+ "volume0": [
+  "[Parsed_volumedetect_0 @ 0xb966bb310880] mean_volume: -14.0 dB",
+  "[Parsed_volumedetect_0 @ 0xb966bb310880] max_volume: -0.8 dB"
+ ]
+}

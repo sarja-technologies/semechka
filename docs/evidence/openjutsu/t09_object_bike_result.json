@@ -1,0 +1,105 @@
+{
+ "name": "t09_object_bike",
+ "job": "90432e59327b",
+ "status": "completed",
+ "wall_s": 123.5,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  42
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-minimax-h3",
+  "operation": "object_edit",
+  "feature": "openjutsu.object",
+  "openjutsu": {
+   "operation": "object_edit",
+   "resolution": "480p",
+   "short_edge": null,
+   "seed": 4,
+   "hat_fix": false,
+   "no_lip_sync": false,
+   "motion_reference": 512,
+   "clip_seconds": 6.0,
+   "subject_kind": "vehicle",
+   "subject_selection": null,
+   "object_mode": "change",
+   "object_target": "the dirt bike",
+   "change_to": "a blue dirt bike",
+   "object_margin": "normal",
+   "picture": false,
+   "keep_outline": false,
+   "biggest_only": true
+  },
+  "references": [],
+  "warnings": [
+   "the source has no soundtrack: a silent one was added"
+  ],
+  "source": {
+   "width": 832,
+   "height": 480,
+   "duration": 3.041667,
+   "fps": 24.0,
+   "frames": 73,
+   "has_audio": false
+  },
+  "output": {
+   "width": 832,
+   "height": 480,
+   "frames": 73,
+   "fps": 24.0,
+   "duration": 3.0417
+  },
+  "sampler_steps_last": 6
+ },
+ "generations": [
+  {
+   "id": "90432e59327b-0",
+   "file_id": "90432e59327b-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 5265318,
+   "width": 832,
+   "height": 480,
+   "duration": 3.0417,
+   "fps": 24.0,
+   "frames": 73,
+   "audio": true,
+   "seed": 4,
+   "name": "55_0_edit_2026-11-10_001.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 832,
+    "height": 480,
+    "r_frame_rate": "24/1",
+    "nb_frames": "73",
+    "duration": "3.041667",
+    "sample_rate": null,
+    "channels": null
+   },
+   {
+    "codec_type": "audio",
+    "codec_name": "aac",
+    "width": null,
+    "height": null,
+    "r_frame_rate": "0/0",
+    "nb_frames": "144",
+    "duration": "3.041000",
+    "sample_rate": "48000",
+    "channels": 2
+   }
+  ],
+  "duration": "3.041667"
+ },
+ "volume0": [
+  "[Parsed_volumedetect_0 @ 0xb4fbd5ff4890] mean_volume: -91.0 dB",
+  "[Parsed_volumedetect_0 @ 0xb4fbd5ff4890] max_volume: -91.0 dB"
+ ]
+}

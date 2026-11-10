@@ -218,3 +218,39 @@ def test_enable_models_enables_and_gives_them_the_grants_of_the_named_analogue_a
     rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
     assert "restored to the backed-up state: YES" in run(inst, "--rollback", str(rb))
     assert snapshot(inst) == before
+
+
+def test_restore_re_enables_rows_parked_unavailable_when_the_engine_offers_them_again_and_rolls_back(inst):
+    """An instance migrated before OpenJutsu / Wan 14B text-to-video came back: its parked rows become available again, with the enabled flag and grants untouched."""
+    run(inst, "--apply")                                              # first migration: the OpenJutsu row is parked unavailable
+    assert only(inst, "m_oj")["available"] == 0
+    c = caps()
+    c["unavailable"] = [u for u in c["unavailable"] if u["id"] != "openjutsu-minimax-h3"]
+    c["profiles"].append({"id": "openjutsu-minimax-h3", "name": "OpenJutsu", "family": "openjutsu", "category": "video", "readiness": {"ready": True, "state": "experimental"},
+                          "capabilities": {"operations": ["swap"]}, "inputs_schema": {"video": {"type": "file", "kind": "video", "required": True}},
+                          "modes": [{"id": "character_replacement", "operation": "swap", "status": "ready"}], "limits": {"max_source_seconds": 30},
+                          "reference_policy": {"swap": {"min": 1, "active_max": 1}}, "subject_selection": {"text": True}, "operation_status": {"swap": {"status": "ready"}}})
+    (inst / "caps.json").write_text(json.dumps(c))
+    before = snapshot(inst)
+    out = run(inst)                                                   # dry run
+    assert "RESTORE m_oj" in out and snapshot(inst) == before
+    run(inst, "--apply")
+    oj = only(inst, "m_oj")
+    prof = json.loads(oj["meta"])["media"]["profile"]
+    assert oj["available"] == 1 and oj["enabled"] == 1 and "unavailable_reason" not in json.loads(oj["meta"])["media"]
+    assert prof["modes"][0]["id"] == "character_replacement" and prof["limits"]["max_source_seconds"] == 30 and prof["reference_policy"]["swap"]["active_max"] == 1
+    assert table(inst, "select * from model_grants order by id") == before["model_grants"]          # grants untouched
+    assert only(inst, "m_sdxl")["available"] == 0                                                   # still unavailable: the engine still lacks it
+    assert "Nothing to change" in run(inst, "--apply")
+    rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
+    run(inst, "--rollback", str(rb))
+    assert only(inst, "m_oj")["available"] == 0
+
+
+def test_grant_profiles_on_a_later_run_may_grant_a_profile_row_an_earlier_run_created(inst):
+    run(inst, "--apply")                                                        # the profile row is added disabled, no grants
+    pe = table(inst, "select * from models where real_id='video:opensfield-video-edit'")[0]
+    assert pe["enabled"] == 0 and not table(inst, f"select * from model_grants where model_id='{pe['id']}'")
+    run(inst, "--apply", "--grant-profiles")                                    # a later run copies the grants and enables it: not an invariant violation
+    pe = table(inst, "select * from models where real_id='video:opensfield-video-edit'")[0]
+    assert pe["enabled"] == 1 and len(table(inst, f"select * from model_grants where model_id='{pe['id']}'")) == 2

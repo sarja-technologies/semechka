@@ -61,12 +61,13 @@ export function blockReason(a: { kind: Kind; model?: MediaModel; prompt: string;
 }
 
 /** The media settings of a request (the same keys the chat composer sends). Frame counts and frame rates are never asked of the person here. */
-export function mediaParams(a: { kind: Kind; size: string; seed: string; negative: string; steps: string; seconds: number | null; fps: number | null; model?: MediaModel; editParams: boolean }): Record<string, unknown> {
+export function mediaParams(a: { kind: Kind; size: string; seed: string; negative: string; steps: string; guidance?: string; seconds: number | null; fps: number | null; model?: MediaModel; editParams: boolean }): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (a.size) { const [w, h] = a.size.split('x').map(Number); if (w > 0 && h > 0) { out.width = w; out.height = h; } }
   if (a.seed.trim() !== '' && Number.isInteger(Number(a.seed)) && Number(a.seed) >= 0) out.seed = Number(a.seed);
   if (a.negative.trim() && a.model?.negative_prompt) out.negative_prompt = a.negative.trim();
   if (a.steps && a.editParams && Number(a.steps) > 0) out.steps = Number(a.steps);
+  if (a.guidance && a.model?.limits?.guidance && Number(a.guidance) > 0) out.guidance = Number(a.guidance);   // only where the engine publishes a guidance range
   if (a.kind === 'video' && a.seconds) { out.seconds = a.seconds; if (a.fps && a.model?.duration?.fps_configurable) out.fps = a.fps; }
   return out;
 }
