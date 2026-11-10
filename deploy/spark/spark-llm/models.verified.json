@@ -1,0 +1,135 @@
+{
+ "measured": "2026-11-10 via ~/spark-llm/llmtest.py (router, GB10) and goose run (v1.58.1) from a second machine",
+ "models": {
+  "qwen3-coder-next": {
+   "loaded_memory_mib": 50118,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": true,
+   "coding_agent_compatible": true,
+   "note": ""
+  },
+  "qwen3.6-35b-a3b": {
+   "loaded_memory_mib": 25251,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": true,
+   "coding_agent_compatible": true,
+   "note": ""
+  },
+  "gpt-oss-120b": {
+   "loaded_memory_mib": 64554,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": true,
+   "coding_agent_compatible": true,
+   "note": ""
+  },
+  "qwen3-4b-instruct-2507": {
+   "loaded_memory_mib": 8105,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": ""
+  },
+  "qwen3.5-0.8b": {
+   "loaded_memory_mib": 2528,
+   "streaming": true,
+   "context_retention": false,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": "fails multi-turn context check"
+  },
+  "hermes-4-70b": {
+   "loaded_memory_mib": 63107,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": ""
+  },
+  "dolphin3.0-r1-mistral-24b": {
+   "loaded_memory_mib": 30028,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": false,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": "never emitted a tool call"
+  },
+  "huihui-qwen3.8-27b-abliterated": {
+   "loaded_memory_mib": 28720,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": ""
+  },
+  "huihui-qwen3.5-27b-abliterated": {
+   "loaded_memory_mib": 29009,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": ""
+  },
+  "qwen3.8-27b-uncensored-hauhaucs": {
+   "loaded_memory_mib": 32074,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": ""
+  },
+  "qwen3.8-flash-next": {
+   "loaded_memory_mib": 93695,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": "takes ~93 GB: leaves ~22 GB free, effectively exclusive"
+  },
+  "huihui-qwen3.8-flash-next-abliterated": {
+   "loaded_memory_mib": 93783,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": false,
+   "coding_agent_compatible": false,
+   "note": "takes ~93 GB: leaves ~22 GB free, effectively exclusive"
+  },
+  "qwen3.8-27b": {
+   "loaded_memory_mib": 28048,
+   "streaming": true,
+   "context_retention": true,
+   "tool_roundtrip": true,
+   "memory_released_on_unload": true,
+   "goose_coding_task_verified": true,
+   "coding_agent_compatible": true,
+   "note": ""
+  }
+ }
+}

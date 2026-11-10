@@ -1,0 +1,20 @@
+[Unit]
+Description=Spark Control - model management dashboard for the DGX Spark
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/spark-control/venv/bin/spark-control serve
+Environment=PYTHONUNBUFFERED=1
+Environment=SPARK_CONTROL_WEB=%h/spark-control/web
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+MemoryMax=1G
+# Spark Control never spawns model processes, so stopping or crashing it cannot affect them.
+# No ProtectSystem/ProtectKernelTunables on purpose: process and cgroup inspection needs a normal /proc.
+
+[Install]
+WantedBy=default.target
