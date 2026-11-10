@@ -85,7 +85,7 @@ def test_mode_state_reflects_the_connected_backend(mo):
 def test_modes_are_unsupported_when_no_backend_can_generate(owner):
     owner.put("/api/admin/settings/modes.image.enabled", json={"value": True})
     ui = owner.get("/api/me").json()["ui"]["modes"]["image"]
-    assert not ui["enabled"] and ui["code"] == "unsupported" and "Sarness" in ui["reason"]
+    assert not ui["enabled"] and ui["code"] == "unsupported" and "media engine" in ui["reason"]
     r = owner.get("/api/media/options", params={"kind": "image"})
     assert r.status_code == 501
 

@@ -97,6 +97,14 @@ def engine_info(caps: dict, engine: str) -> dict | None:
     return next((e for e in caps.get("engines", []) if e.get("id") == engine), None)
 
 
+def wire_name(data: bytes, name: str) -> str:
+    """The file name sent to OpenSfield: its upload check goes by the extension, and a library name (a generated picture's title) may have none."""
+    ext = ".png" if data[:4] == b"\x89PNG" else ".jpg" if data[:3] == b"\xff\xd8\xff" else ".webp" if data[8:12] == b"WEBP" else ""
+    if not ext:
+        return name
+    return (name.rsplit(".", 1)[0] if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")) else name)[:80] + ext
+
+
 async def upscale(data: bytes, name: str, engine: str, width: int, height: int, fmt: str, *, on_progress: Callable[[float, str], None] | None = None,
                   cancelled: Callable[[], bool] | None = None) -> tuple[bytes, dict]:
     """Send the picture, wait for the result, fetch it, free OpenSfield's copy. -> (file bytes, the job's result description). Raises UpscaleUnavailable."""
@@ -104,6 +112,7 @@ async def upscale(data: bytes, name: str, engine: str, width: int, height: int, 
         raise UpscaleUnavailable("Unknown upscale method.")
     h = _headers()
     job = None
+    name = wire_name(data, name)
     try:
         async with make_client(60.0) as c:
             r = await c.post("/api/internal/upscale", headers=h, files={"file": (name, data, "application/octet-stream")},
