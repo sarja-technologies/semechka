@@ -1,0 +1,184 @@
+{
+ "name": "wan14_t2v_quality_2s",
+ "job": "452fe3e36558",
+ "status": "completed",
+ "wall_s": 214,
+ "applied": {
+  "model": "wan2.2-t2v-a14b",
+  "mode": "t2v",
+  "feature": "video.wan22-t2v14",
+  "speed": "Quality",
+  "width": 832,
+  "height": 480,
+  "frames": 33,
+  "fps": 16,
+  "seconds": 2.0625,
+  "seconds_input": 2,
+  "output": {
+   "width": 832,
+   "height": 480,
+   "frames": 33,
+   "fps": 16.0,
+   "duration": 2.0625
+  },
+  "sampler_steps_last": 10
+ },
+ "error": null,
+ "progress_series": [
+  [
+   0,
+   0.0,
+   "Preparing"
+  ],
+  [
+   2,
+   0.014516129032258067,
+   "Preparing"
+  ],
+  [
+   6,
+   0.030645161290322583,
+   "Preparing"
+  ],
+  [
+   18,
+   0.07564516129032259,
+   "Generating, step 1 of 10"
+  ],
+  [
+   24,
+   0.1206451612903226,
+   "Generating, step 2 of 10"
+  ],
+  [
+   34,
+   0.16564516129032258,
+   "Generating, step 3 of 10"
+  ],
+  [
+   44,
+   0.2106451612903226,
+   "Generating, step 4 of 10"
+  ],
+  [
+   52,
+   0.2556451612903226,
+   "Generating, step 5 of 10"
+  ],
+  [
+   62,
+   0.3006451612903226,
+   "Generating, step 6 of 10"
+  ],
+  [
+   72,
+   0.3456451612903226,
+   "Generating, step 7 of 10"
+  ],
+  [
+   82,
+   0.3906451612903226,
+   "Generating, step 8 of 10"
+  ],
+  [
+   92,
+   0.4356451612903226,
+   "Generating, step 9 of 10"
+  ],
+  [
+   102,
+   0.4806451612903226,
+   "Generating, step 10 of 10"
+  ],
+  [
+   106,
+   0.48225806451612907,
+   "Loading the model (Load Diffusion Model)"
+  ],
+  [
+   108,
+   0.4854838709677419,
+   "Preparing"
+  ],
+  [
+   120,
+   0.530483870967742,
+   "Generating, step 1 of 10"
+  ],
+  [
+   124,
+   0.575483870967742,
+   "Generating, step 2 of 10"
+  ],
+  [
+   134,
+   0.620483870967742,
+   "Generating, step 3 of 10"
+  ],
+  [
+   144,
+   0.665483870967742,
+   "Generating, step 4 of 10"
+  ],
+  [
+   154,
+   0.710483870967742,
+   "Generating, step 5 of 10"
+  ],
+  [
+   164,
+   0.755483870967742,
+   "Generating, step 6 of 10"
+  ],
+  [
+   174,
+   0.800483870967742,
+   "Generating, step 7 of 10"
+  ],
+  [
+   184,
+   0.845483870967742,
+   "Generating, step 8 of 10"
+  ],
+  [
+   194,
+   0.890483870967742,
+   "Generating, step 9 of 10"
+  ],
+  [
+   204,
+   0.935483870967742,
+   "Generating, step 10 of 10"
+  ],
+  [
+   208,
+   0.9370967741935484,
+   "Generating, step 10 of 10"
+  ],
+  [
+   214,
+   1.0,
+   "Done"
+  ]
+ ],
+ "generation": {
+  "width": 832,
+  "height": 480,
+  "frames": 33,
+  "fps": 16.0,
+  "duration": 2.0625,
+  "audio": false,
+  "size": 259822
+ },
+ "ffprobe": [
+  {
+   "codec_name": "h264",
+   "codec_type": "video",
+   "width": 832,
+   "height": 480,
+   "r_frame_rate": "16/1",
+   "duration": "2.062500",
+   "nb_frames": "33"
+  }
+ ]
+}

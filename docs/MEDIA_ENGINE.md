@@ -55,6 +55,8 @@ the model is the same** so existing Semechka rows (ids, grants, Imajutsu routing
 | `wan2.2-ti2v-5b` ("Clip") | video | t2v -> `video.wan22-t2v` (text only) | 57 s |
 | `wan2.2-i2v-a14b` | video | i2v -> `video.wan22-i2v` (needs a picture) | 57 s |
 | `minimax-h3` | video | t2v -> `video.h3-t2v`; i2v -> `video.h3-i2v`; r2v -> `video.h3-r2v` (two pictures) | 51 / 57 / 36 s |
+| `wan2.2-t2v-a14b` (restored, phase 2) | video | t2v -> `video.wan22-t2v14` (Fast 4-step LightX2V / Quality 20 steps; converted weights) | 44 s (2 s clip) |
+| `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v` (restored, phase 2) | video | t2v -> `video.hunyuan15-t2v`; i2v -> `video.hunyuan15-i2v` (needs a picture); 848x480 at 24 fps, 1-5 s, no sound | 106 s (1 s) / 797 s (5 s) |
 
 Profiles (video in, video out; same `inputs_schema` contract as before, **no** Studio `modes`):
 
@@ -156,12 +158,12 @@ normally discarded by Semechka right after it has copied them.
 | Old capability | Why it is not offered |
 |---|---|
 | `sdxl-turbo` ("Sketch") | exists only as a Diffusers pipeline on the old engine; OpenSfield has no verified SDXL workflow |
-| `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v` | Diffusers pipeline only on the old engine; no OpenSfield workflow |
-| `wan2.2-t2v-a14b` | OpenSfield has the 14B image-to-video and the 5B text-to-video workflows, not 14B text-to-video |
+| `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v` | **restored in phase 2** (section 10) |
+| `wan2.2-t2v-a14b` | **restored in phase 2** (section 10) |
 | `openjutsu-minimax-h3`, `openjutsu-reference-video` | **restored in phase 2** (section 9): the workflow was ported into this engine's ComfyUI (additive node packs read through `extra_model_paths`) and re-validated by real runs |
 | Image-to-image (Imajutsu restyle, refine pass) | no verified workflow |
 | Multi-reference editing with FLUX.2 klein, edit with extra references | klein is text-to-image only here; Qwen-Image-Edit takes one picture |
-| Negative prompt, scheduler, guidance, LoRAs, batch, arbitrary steps | the verified workflows are fixed graphs; only Fast/Quality exists where a workflow has the switch |
+| Negative prompt, steps, guidance | **partly restored in phase 2** (section 10): they exist, and are proven by A/B runs, only for Wan 2.2 5B, Wan 2.2 14B (Quality) and LTX-2.3 (negative prompt and guidance above 1). Scheduler, LoRAs and batches stay refused everywhere |
 | Arbitrary video fps / frame counts | each workflow fixes its fps and frame grid |
 | Studio live trace / graph / history / segments | belong to the old engine's graph |
 | Live sampler previews | ComfyUI here runs without `--preview-method`; the engine forwards frames if that ever changes and never fakes one |
@@ -227,7 +229,7 @@ before relying on H3 alongside LLMs.
 
 * **Length**: show `duration.options` (the exact clip lengths, e.g. H3 5.167 s / 6.583 s) and the asset's own `duration` after the run; never the length that was asked for.
   `GET /api/media/options` already returns it per model (`duration.options`, `declared: true`, `fps` fixed).
-* **Controls that do not exist**: negative prompt (`negative_prompt: false` on every model), scheduler, guidance, frame rate. **Steps** exist only on models with `speed_switch: true`
+* **Controls**: negative prompt (`negative_prompt: true` only on Wan 5B/14B and LTX-2.3), steps and guidance where the model publishes `limits.steps` / `limits.guidance` (Advanced video shows a field only then); scheduler, LoRAs, batch and frame rate do not exist. **Steps** exist only on models with `speed_switch: true`
   (Qwen-Image 2512, Qwen-Image-Edit, Wan 14B, H3): label it "Fast / Quality" (<= 8 = Fast), not a step count. Imajutsu's draft/high step numbers therefore map to Fast/Quality and the
   plan text "N steps" is not what the workflow does.
 * **Sizes**: free sizes (Z-Image, Qwen-Image, FLUX.2 klein) vs fixed shapes (Krea: `limits.sizes`, `size_policy: snap_to_shape`; the result states its real size) vs `size_policy: source_shape`
@@ -303,3 +305,42 @@ videos that run as a single 6 s clip, one reference per person in `advanced_swap
 three-person clip for masks and `advanced_swap`); camera footage, crowds, occlusion and hat/face fixes are not claimed. **Licence:** MiniMax H3's licence excludes the EU, UK, South Korea and the US;
 the caution is in the profile and model descriptions. Not restored: the live node trace (VIEW PROCESS / VIEW COMFYUI) is still not published by the engine, so the Studio shows its fallback document;
 the Studio's `motion_transfer` and `video_restyling` modes stay unavailable there and point at the editing profile `opensfield-video-edit` (Wan Animate 2, LTX restyle, Bernini-R), which runs from the Conversation studio.
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## 10. Phase 2: video tools run for real, advanced controls, Wan 14B text-to-video and HunyuanVideo 1.5
+
+Engine branches `consol2/openjutsu-vid` (real runs + controls) and `consol2/openjutsu-wanhy` (converted weights, graphs), merged with `consol2/openjutsu-swap` in `consol2/openjutsu-integrated`
+(engine tests 1300 passed, 2 skipped; baseline 1236). Evidence: `docs/evidence/video-tools/` (README + `runs.json`), `docs/evidence/wan-hunyuan/` (README, run JSONs, sha256 of every converted file).
+
+**Video tools, run on the GPU for the first time** (dev engine -> live ComfyUI, AI-generated inputs, contact sheets looked at, progress monotonic): `opensfield-video-edit` replace_object (SCAIL-2, 261 s: person truly
+replaced, motion kept), motion_transfer (Wan Animate 2, 341 s; the engine now delivers the clean result, not the side-by-side comparison it used to), restyle (LTX, 766 s incl. a memory wait; **the reference picture must be the
+first frame already drawn in the new look**, otherwise the output stays photographic), edit_video (Bernini-R, 297 s; fixed: it forced a portrait shape on landscape clips, now follows the clip), `opensfield-video-upscale`
+(SeedVR2, 333 s, 1708x960, real detail), `opensfield-smooth-motion` 2x/4x (17 s / 36 s; the 4x result is 96 fps), LTX-2.3 i2v (71 s) and first/last frame (38 s), H3 i2v (100 s) and r2v with two pictures (58 s), Wan 5B t2v (64 s, 960x544,
+no audio track: the model has none). Cancel at 30 %: ComfyUI idle and GPU 0 % within 6 s. Also fixed: a busy ComfyUI was reported "not reachable".
+
+**Advanced controls, proven by same-seed A/B runs** (everything else stays refused with a plain sentence): Wan 5B steps (8 vs 20 steps: 30 s vs 64 s), guidance, seed, negative prompt (wired, output changes; not a removal guarantee);
+Wan 14B Quality steps / guidance / negative prompt (Fast uses a fixed 4-step recipe); LTX-2.3 guidance above 1 (negative prompt wired but weak). Proven through Semechka's Advanced video (Wan 5B, steps 8, guidance 4, negative prompt "people, text"):
+the engine reported "step n of 8", 41 s, 960x544, 49 frames. fps is not configurable on any model (it would only change playback speed); no model takes LoRAs from the user.
+
+**Restored models** (converted from the Diffusers files into NEW ComfyUI files under `~/opensfield/models`, originals untouched, `CONVERTED.md` there): Wan 2.2 14B text-to-video (Fast 44 s for 2 s; 8 s clip 182 s; Quality 214 s for 2 s),
+HunyuanVideo 1.5 text-to-video and image-to-video (1 s 106 s, 2 s 221 s, 5 s about 13 minutes, so the catalogue caps it at 5 s; neither model makes sound). Each was also run through Semechka (Wan 14B 2 s: 52 s, 832x480, 33 frames at 16 fps;
+HunyuanVideo 1 s: 105 s, 848x480, 25 frames) and the result was looked at. Licence: the HunyuanVideo licence text was read (Tencent Hunyuan Community: the Territory excludes the European Union, the United Kingdom and South Korea, use outside it is unlicensed); the caution is in the model description.
+Gap: Fast mode of Wan 14B uses the Wan 2.1 LightX2V T2V LoRA (good output on the 2.2 experts); the official Wan 2.2 T2V 4-step LoRAs are not on disk (optional download, size not measured).
+
+## 11. Deploying phase 2 on the production Spark (operator order)
+
+1. **Engine code**: in `~/opensfield/app` (branch `spark-local`) merge `consol2/openjutsu-integrated` (it already contains `consol2/openjutsu-swap`, `-vid`, `-wanhy`; engine tests 1300 passed). `git -C ~/opensfield/app merge consol2/openjutsu-integrated`.
+2. **Weights** (new files, already on this Spark under `~/opensfield/models`; on another machine copy them or re-run the converters in `scripts/convert_*_to_comfy.py`): see `~/opensfield/models/CONVERTED.md`.
+3. **Node packs** (already installed, additive): `~/opensfield/node-packs-oj/` (pinned commits and licences in `MANIFEST.json`). Add this block to `~/opensfield/config/extra_model_paths.yaml`:
+   ```
+   openjutsu_nodes:
+     base_path: /home/spark/opensfield/node-packs-oj
+     custom_nodes: .
+   ```
+   then restart ONLY ComfyUI, under `~/spark-reset/gpu-media`, when `GET /v1/system` of the live engine shows queue 0: `systemctl --user restart opensfield-comfyui`. Afterwards re-run one `video.h3-t2v` and one image job (this was done on the dev ComfyUI with the same yaml: H3 t2v 58 s and Z-Image 20 s, both correct).
+4. **verified.json**: merge `docs/evidence/openjutsu/verified-entries.json` (the five `openjutsu.*` features) and `docs/evidence/wan-hunyuan/verified_entries.json` (`video.wan22-t2v14`, `video.hunyuan15-t2v`, `video.hunyuan15-i2v`) into `~/opensfield/config/verified.json` (hand merge; never overwrite the file).
+5. **Engine unit**: add `Environment=OPENSFIELD_COMFY_OUTPUT_DIR=%h/opensfield/state/comfy-output` (lets the hourly sweep remove old OpenJutsu clip checkpoints), then `systemctl --user restart semechka-media-engine`. `GET /v1/capabilities` must list `openjutsu-minimax-h3`, `openjutsu-reference-video` and the three restored models.
+6. **Semechka release** from branch `consol2/openjutsu` (adapter passes the Studio contract, Guidance field, migration RESTORE), then per instance: `migrate_media_to_engine.py <data> --apply` (dry run first; it RESTOREs the parked OpenJutsu / Wan 14B / HunyuanVideo rows, keeps enabled flags and grants; rollback file written), then admin > backends > sync once.
+   `openjutsu-reference-video` and `opensfield-video-edit` are new rows on Salted/Roasted (disabled, no grants): enable and grant in admin. The restored Wan 14B / HunyuanVideo rows keep their previous enabled flag (off on Salted).

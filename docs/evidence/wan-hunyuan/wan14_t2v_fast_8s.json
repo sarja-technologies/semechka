@@ -1,0 +1,103 @@
+{
+ "name": "wan14_t2v_fast_8s",
+ "job": "56bdd4d737f7",
+ "status": "completed",
+ "wall_s": 182,
+ "applied": {
+  "model": "wan2.2-t2v-a14b",
+  "mode": "t2v",
+  "feature": "video.wan22-t2v14",
+  "width": 832,
+  "height": 480,
+  "frames": 129,
+  "fps": 16,
+  "seconds": 8.0625,
+  "seconds_input": 8,
+  "output": {
+   "width": 832,
+   "height": 480,
+   "frames": 129,
+   "fps": 16.0,
+   "duration": 8.062
+  },
+  "sampler_steps_last": 2
+ },
+ "error": null,
+ "progress_series": [
+  [
+   0,
+   0.0,
+   "Preparing"
+  ],
+  [
+   2,
+   0.014516129032258067,
+   "Preparing"
+  ],
+  [
+   6,
+   0.03225806451612903,
+   "Preparing"
+  ],
+  [
+   46,
+   0.25725806451612904,
+   "Generating, step 1 of 2"
+  ],
+  [
+   64,
+   0.48225806451612907,
+   "Generating, step 2 of 2"
+  ],
+  [
+   82,
+   0.48870967741935484,
+   "Preparing"
+  ],
+  [
+   124,
+   0.7137096774193549,
+   "Generating, step 1 of 2"
+  ],
+  [
+   140,
+   0.9387096774193548,
+   "Generating, step 2 of 2"
+  ],
+  [
+   160,
+   0.9403225806451613,
+   "Generating, step 2 of 2"
+  ],
+  [
+   180,
+   0.9435483870967742,
+   "Saving the result"
+  ],
+  [
+   182,
+   1.0,
+   "Done"
+  ]
+ ],
+ "generation": {
+  "width": 832,
+  "height": 480,
+  "frames": 129,
+  "fps": 16.0,
+  "duration": 8.062,
+  "audio": false,
+  "size": 2607188
+ },
+ "ffprobe": [
+  {
+   "codec_name": "h264",
+   "codec_type": "video",
+   "width": 832,
+   "height": 480,
+   "r_frame_rate": "16/1",
+   "duration": "8.062012",
+   "nb_frames": "129"
+  }
+ ]
+}
