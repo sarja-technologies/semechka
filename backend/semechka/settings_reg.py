@@ -71,6 +71,34 @@ def _str_list(v):
     return [x.strip() for x in v if x.strip()]
 
 
+_MCP_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
+def _goose_mcp(v):
+    """Admin catalogue of MCP servers a Work Mode (Goose) session may be given. Commands run INSIDE the session container."""
+    if not isinstance(v, dict) or len(v) > 30:
+        raise SettingError("Must be a map of server id to its definition (up to 30).")
+    out = {}
+    for k, d in v.items():
+        if not isinstance(k, str) or not _MCP_ID.match(k) or not isinstance(d, dict):
+            raise SettingError("Server ids are 1-32 lowercase letters, digits, - or _; each definition is an object.")
+        cmd, args, env = d.get("command"), d.get("args", []), d.get("env", {})
+        if not isinstance(cmd, str) or not cmd.startswith("/") or len(cmd) > 200:
+            raise SettingError(f"'{k}': command must be an absolute path inside the Work image.")
+        if not isinstance(args, list) or len(args) > 20 or not all(isinstance(a, str) and len(a) <= 300 for a in args):
+            raise SettingError(f"'{k}': args must be a list of up to 20 short texts.")
+        if not isinstance(env, dict) or len(env) > 20 or not all(isinstance(a, str) and isinstance(b, str) and len(b) <= 300 for a, b in env.items()):
+            raise SettingError(f"'{k}': env must be a map of text to text.")
+        out[k] = {"label": str(d.get("label", k))[:80], "description": str(d.get("description", ""))[:300], "command": cmd, "args": args,
+                  "env": env, "enabled": bool(d.get("enabled", True))}
+    return out
+
+
+def _goose_autonomy(v):
+    if not isinstance(v, list) or not v or not all(x in ("ask", "smart", "auto") for x in v):
+        raise SettingError("Choose from ask, smart, auto.")
+    return list(dict.fromkeys(v))
+
 # ---- validators ------------------------------------------------------------------------------------
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -214,6 +242,7 @@ E = "Email"
 U = "Chat & Composer"
 SCH = "Schemra"
 WK = "Work Mode"
+GW = "Work Mode (Goose)"
 
 DEFS: list[Def] = [
     # ---- identity & branding ----
@@ -795,6 +824,69 @@ DEFS: list[Def] = [
         "token; Schemra's pages cannot save anything unless they send it.", "enum", "token_or_origin",
         choices=["token_or_origin", "token"], scopes=["deployment"], edit_perm="admin.settings.edit",
         lowers_privacy=lambda o, n: o == "token" and n == "token_or_origin"),
+    # ---- Work Mode on upstream Goose (docs/WORK_MODE_GOOSE.md) ----
+    Def("goose.enabled", GW, "Work Mode on Goose",
+        "Lets people with the Work Mode permission switch a conversation to Work: the unmodified upstream Goose agent runs in "
+        "its own isolated container (no network, own workspace) and uses models of the llama.cpp router that are verified for coding agents. "
+        "Needs the container runtime, the Goose image (scripts/spark/goose_image.sh) and the router. Off until you turn it on; "
+        "also needs 'Enable Work Mode' under Modes.", "bool", False, scopes=["deployment"], edit_perm="admin.settings.edit",
+        effect="Model-written shell commands and file edits run on this machine, inside per-conversation containers with no network."),
+    Def("goose.docker_host", GW, "Container runtime address", "Socket of the unprivileged container runtime. Empty uses the sandbox runtime address.",
+        "string", "", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.image", GW, "Goose image", "The container image sessions start from (never pulled at run time).", "string",
+        "semechka-goose:1", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.router_url", GW, "Model router address", "Base address of the llama.cpp router (no /v1).", "string", "http://127.0.0.1:8080",
+        scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.router_key_file", GW, "Router key file", "Path of a file holding the router API key. Semechka reads it; the session container never sees it.",
+        "string", "", scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.verified_file", GW, "Verified models file",
+        "Path of models.verified.json from the router host. Only models marked coding_agent_compatible can be used for Work.", "string", "",
+        scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.models", GW, "Allowed models (optional narrowing)",
+        "Router model ids that may be used for Work Mode. Empty means every coding-verified model the person may otherwise use.", "json", [],
+        scopes=["deployment"], edit_perm="admin.settings.edit", validator=lambda v: _str_list(v)),
+    Def("goose.default_model", GW, "Preferred model", "Model id a new session starts with (must be allowed). Empty: the first allowed model.", "string", "",
+        scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.autonomy_choices", GW, "Approval modes people may choose",
+        "ask: Goose asks before every action. smart: only for sensitive actions (decided by the model). auto: never asks.", "json",
+        ["ask", "smart", "auto"], scopes=["deployment"], edit_perm="admin.settings.edit", validator=lambda v: _goose_autonomy(v)),
+    Def("goose.autonomy_default", GW, "Default approval mode", "", "enum", "ask", choices=["ask", "smart", "auto"], scopes=["deployment"],
+        edit_perm="admin.settings.edit"),
+    Def("goose.mcp_servers", GW, "MCP servers sessions may use",
+        "Allowlist: id -> {label, description, command, args, env, enabled}. The command runs inside the session container, so it must exist "
+        "in the Goose image. Sessions can only choose from this list.", "json", {
+            "repo-stats": {"label": "Repository statistics", "description": "Counts files and lines per extension in the workspace (read only).",
+                           "command": "/usr/local/bin/python3", "args": ["-I", "/opt/semechka/mcp/repo_stats.py"], "enabled": True}},
+        scopes=["deployment"], edit_perm="admin.settings.edit", validator=lambda v: _goose_mcp(v),
+        effect="Each enabled server is code that runs inside the session container with the agent."),
+    Def("goose.memory_mb", GW, "Container memory (MB)", "Hard limit per session container.", "int", 4096, min=512, max=65536,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.cpus", GW, "Container CPUs", "Hard limit per session container.", "float", 2, min=0.25, max=32, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("goose.pids", GW, "Container process limit", "", "int", 512, min=64, max=8192, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.workspace_max_mb", GW, "Workspace size ceiling (MB)", "Informational ceiling shown to people; enforced by the volume checks.", "int", 2048,
+        min=64, max=102400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.upload_max_mb", GW, "Largest upload into a workspace (MB)", "", "int", 100, min=1, max=2048, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("goose.max_running_total", GW, "Goose sessions running at once (whole server)", "Others get a clear 'busy' answer.", "int", 4,
+        min=1, max=64, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.max_stored_per_user", GW, "Work sessions kept per person", "", "int", 20, min=1, max=500, scopes=["deployment"],
+        edit_perm="admin.quotas.edit"),
+    Def("goose.idle_stop_minutes", GW, "Stop idle sessions after (minutes)", "Stops the Goose process and container; workspace and history stay.",
+        "int", 30, min=1, max=1440, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.approval_timeout_s", GW, "Approval timeout (seconds)", "An unanswered approval is denied after this long.", "int", 900,
+        min=10, max=86400, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.max_turns", GW, "Goose steps per prompt", "Upper bound on model/tool rounds one prompt may take (GOOSE_MAX_TURNS).", "int", 60,
+        min=1, max=1000, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.turn_timeout_s", GW, "Longest prompt (seconds)", "A prompt still running after this is cancelled.", "int", 3600, min=30, max=86400,
+        scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.model_load_timeout_s", GW, "Longest model load (seconds)", "How long Work waits for the router to load a model.", "int", 420,
+        min=10, max=3600, scopes=["deployment"], edit_perm="admin.quotas.edit"),
+    Def("goose.sock_root", GW, "Socket directory", "Host directory for per-session model sockets. Empty: /tmp/semechka-goose-<uid>.", "string", "",
+        scopes=["deployment"], edit_perm="admin.settings.edit"),
+    Def("goose.mirror_to_conversation", GW, "Mirror prompts and answers into the conversation",
+        "Adds each Work prompt and Goose's final answer to the conversation as ordinary messages.", "bool", True, scopes=["deployment"],
+        edit_perm="admin.settings.edit"),
 ]
 
 BY_ID: dict[str, Def] = {d.id: d for d in DEFS}
