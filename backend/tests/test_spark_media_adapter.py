@@ -185,3 +185,21 @@ def test_reverse_analysis_is_read_from_the_engine_for_reverse_jobs_only(sp):
     j = sp.post("/api/media/jobs", json={"kind": "image", "model_id": img["id"], "prompt": "x", "width": 512, "height": 512}).json()["id"]
     finish(sp, j)
     assert sp.get(f"/api/media/jobs/{j}/analysis").status_code == 404
+
+
+def test_openjutsu_studio_contract_passes_through_profile_meta():
+    """The engine's OpenJutsu profile carries the Studio contract (modes, limits, reference policy, subject selection, per-operation status): the Studio reads it from Model.meta."""
+    from semechka.adapters.spark_media import discovered_from_capabilities
+    doc = {"models": [], "profiles": [{"id": "openjutsu-minimax-h3", "name": "OpenJutsu", "family": "openjutsu", "category": "video", "readiness": {"ready": True, "state": "experimental"},
+                                       "capabilities": {"operations": ["swap", "check_mask"]}, "memory": {"estimate_mb": 86016}, "inputs_schema": {"video": {"type": "file", "kind": "video"}},
+                                       "modes": [{"id": "character_replacement", "operation": "swap", "status": "ready", "needs": {"video": True}}],
+                                       "limits": {"max_source_seconds": 30, "resolutions": {"presets": ["480p"], "max_short_edge": 768}},
+                                       "reference_policy": {"swap": {"min": 1, "active_max": 1}}, "subject_selection": {"text": True, "box": False},
+                                       "operation_status": {"swap": {"status": "ready", "reason": None}}},
+                                      {"id": "opensfield-video-upscale", "name": "Up", "family": "seedvr2", "category": "video", "readiness": {"ready": True, "state": "ready"},
+                                       "capabilities": {"operations": ["upscale"]}, "inputs_schema": {}}]}
+    found = {d.real_id: d.meta["media"]["profile"] for d in discovered_from_capabilities(doc)}
+    oj = found["video:openjutsu-minimax-h3"]
+    assert oj["modes"][0]["id"] == "character_replacement" and oj["limits"]["max_source_seconds"] == 30 and oj["reference_policy"]["swap"]["active_max"] == 1
+    assert oj["subject_selection"] == {"text": True, "box": False} and oj["operation_status"]["swap"]["status"] == "ready" and oj["estimate_mb"] == 86016
+    assert "modes" not in found["video:opensfield-video-upscale"]

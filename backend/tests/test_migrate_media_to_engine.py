@@ -167,3 +167,30 @@ def test_an_instance_without_a_token_file_cannot_be_applied_but_can_be_planned(i
                        env={"PYTHONPATH": str(pathlib.Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
     assert r.returncode != 0 and "no engine token" in r.stderr + r.stdout
     assert not table(inst, "select * from backends where adapter='spark-media'")
+
+
+def test_restore_re_enables_rows_parked_unavailable_when_the_engine_offers_them_again_and_rolls_back(inst):
+    """An instance migrated before OpenJutsu / Wan 14B text-to-video came back: its parked rows become available again, with the enabled flag and grants untouched."""
+    run(inst, "--apply")                                              # first migration: the OpenJutsu row is parked unavailable
+    assert only(inst, "m_oj")["available"] == 0
+    c = caps()
+    c["unavailable"] = [u for u in c["unavailable"] if u["id"] != "openjutsu-minimax-h3"]
+    c["profiles"].append({"id": "openjutsu-minimax-h3", "name": "OpenJutsu", "family": "openjutsu", "category": "video", "readiness": {"ready": True, "state": "experimental"},
+                          "capabilities": {"operations": ["swap"]}, "inputs_schema": {"video": {"type": "file", "kind": "video", "required": True}},
+                          "modes": [{"id": "character_replacement", "operation": "swap", "status": "ready"}], "limits": {"max_source_seconds": 30},
+                          "reference_policy": {"swap": {"min": 1, "active_max": 1}}, "subject_selection": {"text": True}, "operation_status": {"swap": {"status": "ready"}}})
+    (inst / "caps.json").write_text(json.dumps(c))
+    before = snapshot(inst)
+    out = run(inst)                                                   # dry run
+    assert "RESTORE m_oj" in out and snapshot(inst) == before
+    run(inst, "--apply")
+    oj = only(inst, "m_oj")
+    prof = json.loads(oj["meta"])["media"]["profile"]
+    assert oj["available"] == 1 and oj["enabled"] == 1 and "unavailable_reason" not in json.loads(oj["meta"])["media"]
+    assert prof["modes"][0]["id"] == "character_replacement" and prof["limits"]["max_source_seconds"] == 30 and prof["reference_policy"]["swap"]["active_max"] == 1
+    assert table(inst, "select * from model_grants order by id") == before["model_grants"]          # grants untouched
+    assert only(inst, "m_sdxl")["available"] == 0                                                   # still unavailable: the engine still lacks it
+    assert "Nothing to change" in run(inst, "--apply")
+    rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
+    run(inst, "--rollback", str(rb))
+    assert only(inst, "m_oj")["available"] == 0

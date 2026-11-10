@@ -20,6 +20,7 @@ import httpx
 from .base import Adapter, AdapterError, DiscoveredModel, Manifest
 from .sarness_media import SarnessMediaMixin, _h, clean_error
 from .openai_compat import _short
+from .sarness import _plain
 
 _IMAGE_KEYS = ("model", "prompt", "negative_prompt", "width", "height", "steps", "guidance", "seed", "scheduler",
                "reference_image", "denoise", "extra_references", "mask_image", "loras", "upscale", "batch_size")
@@ -57,7 +58,9 @@ def profile_meta(p: dict) -> dict:
                   "profile": {"id": p["id"], "family": p.get("family"), "ready": bool(r.get("ready")), "state": r.get("state"), "reason": r.get("reason"),
                               "official": p.get("official", True), "inputs_schema": p.get("inputs_schema") or {},
                               "operations": (p.get("capabilities") or {}).get("operations") or [],
-                              "operation_status": p.get("operation_status") or {}}}})
+                              "estimate_mb": (p.get("memory") or {}).get("estimate_mb"),
+                              # OpenJutsu Studio contract (docs/MEDIA_ENGINE.md section 5): present on the engine's OpenJutsu profiles, absent on the others
+                              **{k: _plain(p[k]) for k in ("modes", "limits", "reference_policy", "subject_selection", "operation_status") if p.get(k) not in (None, "", [], {})}}}})
 
 
 def discovered_from_capabilities(doc: dict) -> list[DiscoveredModel]:
