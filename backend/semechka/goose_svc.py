@@ -578,6 +578,7 @@ class Live:
             self.drop_process()
             rt = runtime(self.st, c)
             self.ensure_container(c)
+            rt.kill_goose(self.name)   # a Goose left by an earlier service process would hold the same session open
             self.proc_model, self.proc_key = row_info["model"], key
             self.start_gateway(c, row_info["model"])
             self.write_goose_files(c, rt, row_info["model"], row_info["context"], row_info["skill_files"])
@@ -861,6 +862,8 @@ class Live:
         try:
             try:
                 self._load_model(c, info["model"])
+                if self.cancelled:
+                    raise AcpClosed("cancelled")
                 self.set_state("starting")
                 self.ensure_process(c, info)
                 snap_a = self._checkpoint(c, "a")

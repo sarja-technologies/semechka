@@ -209,3 +209,14 @@ See the removal recommendation in `docs/WORK_MODE_GOOSE_SECURITY.md`.
   `session/new` returns `modes` (`auto`, `approve`, `smart_approve`, `chat`), `session/update` kinds seen: `agent_message_chunk`,
   `tool_call`, `tool_call_update` (incl. live output in `_meta.toolNotification`), `usage_update`, `session_info_update`,
   `available_commands_update`; `session/request_permission` offers `allow_always|allow_once|reject_once|reject_always`.
+* 2026-11-10 (after the Spark run with Goose 1.58.1 and qwen3.6-35b-a3b; additive clarifications, nothing above changed):
+  * **Several approvals can be pending at once.** Goose issues parallel tool calls (4 `read_image` calls were seen in one step), each with its own
+    `approval_request`. `session.pending_approvals` is a list; the UI must render all of them and answer each independently. `state` is
+    `awaiting_approval` while any is open.
+  * Tool names seen from the built-in `developer` extension: `tree`, `shell`, `edit`, `write`, `read_image`; an MCP tool arrives as `extension: "<server id>"`,
+    `tool: "<server id>__<tool name>"`.
+  * `reasoning_delta` is emitted for models that stream `reasoning_content` (qwen3.6 does), at about 5-10 events per second; clients should append and collapse them.
+  * After a `deny`, Goose continues the turn (the tool call ends `failed`); the model usually tries another tool. The turn is not ended by a denial.
+  * `session.container` may also be `"unknown"` when the container has not been touched since the Semechka process started (no Docker call is made on a plain GET).
+  * `tool_end.diff` is present for `edit` calls only; `files_changed` (turn-level checkpoint diff) is the general mechanism and also covers files written by `shell`/`write`.
+  * Cancel while a shell tool runs: `turn_end` with `stop_reason: "cancelled"` arrived 0.4 s after `POST .../cancel` and the tool's process was gone.
