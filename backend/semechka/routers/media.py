@@ -287,6 +287,24 @@ async def get_job(jid: str, ctx: Ctx = Depends(current)):
     return media_svc.job_out(ctx.st, ctx.s, ctx.principal, ctx.s.get(MediaJob, jid))
 
 
+@router.get("/jobs/{jid}/analysis")
+async def job_analysis(jid: str, ctx: Ctx = Depends(current)):
+    """Reverse Engineer Video: the measured analysis and the editable plan of a finished ``reverse-video`` job, read from the media engine (it keeps them for a few
+    days; the stored result in the library is the contact sheet). 404 for any other job or an engine that has no analysis."""
+    from ..backends_svc import adapter_for
+    j = _own_job(ctx, jid)
+    _gate(ctx, j.kind)
+    b = ctx.s.get(Backend, j.backend_id)
+    ad = adapter_for(b, ctx.st) if b is not None else None
+    if ad is None or not hasattr(ad, "media_reverse") or not j.remote_id or j.status != "completed":
+        raise HTTPException(404, {"code": "not_found", "message": "There is no analysis for this job."})
+    ctx.s.commit()
+    try:
+        return await ad.media_reverse(j.remote_id)
+    except AdapterError as e:
+        raise HTTPException(404 if e.status in (404, 409) else 502, {"code": e.kind, "message": str(e)}) from e
+
+
 @router.post("/jobs/{jid}/cancel")
 async def cancel_job(jid: str, ctx: Ctx = Depends(current)):
     j = _own_job(ctx, jid)

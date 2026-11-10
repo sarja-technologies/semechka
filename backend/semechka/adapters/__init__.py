@@ -3,9 +3,10 @@ from .llamacpp import LlamaCppAdapter
 from .ollama import OllamaAdapter
 from .openai_compat import OpenAICompatAdapter
 from .sarness import SarnessAdapter
+from .spark_media import SparkMediaAdapter
 
 REGISTRY: dict[str, type[Adapter]] = {
-    a.manifest.id: a for a in (SarnessAdapter, OllamaAdapter, OpenAICompatAdapter, LlamaCppAdapter)
+    a.manifest.id: a for a in (SarnessAdapter, SparkMediaAdapter, OllamaAdapter, OpenAICompatAdapter, LlamaCppAdapter)
 }
 
 

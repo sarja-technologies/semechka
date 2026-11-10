@@ -195,3 +195,10 @@ def test_plan_for_an_ai_upscale_is_labelled_and_enforces_the_engine_limits(im, o
 def test_the_token_is_never_returned_by_any_endpoint(im, osfake):
     for path in ("/api/imajutsu/upscale/engines",):
         assert TOKEN not in json.dumps(im.get(path).json())
+
+
+def test_the_name_sent_to_opensfield_always_has_the_picture_extension():
+    png, jpg = b"\x89PNG\r\n\x1a\n" + b"0" * 20, b"\xff\xd8\xff\xe0" + b"0" * 20
+    assert osf.wire_name(png, "Z-Image: a red bicycle") == "Z-Image: a red bicycle.png"
+    assert osf.wire_name(jpg, "street.png") == "street.jpg" and osf.wire_name(png, "street.png") == "street.png"
+    assert osf.wire_name(b"RIFF....WEBPVP8 ", "x") == "x.webp" and osf.wire_name(b"unknown", "x") == "x"
