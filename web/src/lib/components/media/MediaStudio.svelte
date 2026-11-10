@@ -39,13 +39,14 @@
   const vmax = $derived<number | null>(kind === 'video' ? opts?.video_max_seconds ?? null : null);
 
   // ---- the request -----------------------------------------------------------------------------------------------------
-  let prompt = $state(''), size = $state(''), seed = $state(''), negative = $state(''), steps = $state(''), secs = $state(0), fps = $state<number | null>(null);
+  let prompt = $state(''), size = $state(''), seed = $state(''), negative = $state(''), steps = $state(''), guidance = $state(''), secs = $state(0), fps = $state<number | null>(null);
   let lastModel = '', secsTouched = false;
   $effect(() => {
     const m = model; if (!m || m.id === lastModel) return;
     lastModel = m.id; const d = m.defaults ?? {};
     size = d.width && d.height ? `${d.width}x${d.height}` : '';
     steps = d.steps ? String(d.steps) : '';
+    guidance = d.guidance ? String(d.guidance) : '';
     fps = null;
     secs = secsTouched && secs > 0 ? secs : (d.seconds ?? m.duration?.default ?? 0);
   });
@@ -85,7 +86,7 @@
   async function generate() {
     if (why || running) return;
     err = ''; starting = true;
-    const media = mediaParams({ kind, size: advanced || kind === 'image' ? size : '', seed: advanced ? seed : '', negative: advanced ? negative : '', steps: advanced ? steps : '',
+    const media = mediaParams({ kind, size: advanced || kind === 'image' ? size : '', seed: advanced ? seed : '', negative: advanced ? negative : '', steps: advanced ? steps : '', guidance: advanced ? guidance : '',
       seconds: dplan?.seconds ?? null, fps: advanced ? fps : null, model, editParams: !!ui.composer.edit_params });
     try {
       job = ref ? await startFromReference(uid, kind, modelId, prompt, ref.id, media) : await startFromWords(kind, modelId, prompt, media);
@@ -165,6 +166,10 @@
             <div class="field"><label for="st-seed">Seed</label><input id="st-seed" class="input" inputmode="numeric" placeholder="Random" bind:value={seed} /></div>
             {#if ui.composer.edit_params}<div class="field"><label for="st-steps">Steps</label><input id="st-steps" class="input" inputmode="numeric" bind:value={steps} /></div>{/if}
           </div>
+          {#if model?.limits?.guidance}
+            <div class="field"><label for="st-guid">Guidance</label><input id="st-guid" class="input" type="number" step="0.1" min={model.limits.guidance[0]} max={model.limits.guidance[1]} placeholder="Model default" bind:value={guidance} />
+              <span class="hint tiny">How strongly the clip follows the words ({model.limits.guidance[0]} to {model.limits.guidance[1]}).</span></div>
+          {/if}
           {#if model?.negative_prompt}
             <div class="field"><label for="st-neg">Negative prompt</label><input id="st-neg" class="input" bind:value={negative} placeholder="What to keep out" /></div>
           {/if}
