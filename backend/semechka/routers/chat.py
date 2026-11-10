@@ -32,7 +32,7 @@ from .. import (
 )
 from ..adapters import AdapterError
 from ..backends_svc import adapter_for
-from ..deps import Ctx, current
+from ..deps import Ctx, abegin_write, current
 from ..media_models import MediaJob
 from ..models import (
     Backend,
@@ -911,6 +911,10 @@ async def generate(cid: str, body: GenIn, request: Request, ctx: Ctx = Depends(c
     m, b = _resolve_model(ctx, body.model_id, c.model_id or r0.assistant_model_id)
     params = _apply_assistant_params(_effective_params(ctx, m, body.params), body.params, r0)
     _admit(ctx)
+    # Everything above only reads. This handler is a coroutine, so its session began as a reader: take the write lock explicitly (on a worker
+    # thread) before the first write. Without this, two people starting a chat in the same instant made the second one fail with
+    # "database is locked" (HTTP 500) because a reader cannot upgrade over another writer's commit.
+    await abegin_write(ctx)
     user_msg_id = None
     if body.mode == "send":
         content = _check_text(ctx, body.content, need=not body.attachments)

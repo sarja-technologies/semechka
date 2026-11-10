@@ -408,6 +408,36 @@ def test_two_chats_on_two_models_run_together(lcapp, st, app):
     assert sorted(chats) == ["chat-small", "chat-vision"] and not [c for c in fr.CALLS if c[0] == "unload"]
 
 
+def test_many_chats_starting_in_the_same_instant_never_hit_a_database_lock(lcapp, st, app):
+    """Regression (found on the Spark by two people starting a chat together): a coroutine handler began as a reader and could not upgrade over
+    another writer's commit, so the loser got HTTP 500 'database is locked'. All of them must now start and complete."""
+    import threading
+    fr.reset(loaded=["chat-small"])
+    n = 8
+    convs = [lcapp.post("/api/chat/conversations", json={"model_id": mid(st, "chat-small")}).json()["id"] for _ in range(n)]
+    srv = Server(app, _free_port())
+    srv.start()
+    go_all = threading.Barrier(n)
+    out = {}
+
+    def go(i):
+        with httpx.Client(base_url=f"http://127.0.0.1:{srv.port}", timeout=60) as c:
+            assert c.post("/api/auth/login", json={"email": "owner@example.test", "password": PW}).status_code == 200
+            csrf = c.get("/api/me").json()["csrf"]
+            go_all.wait(15)
+            with c.stream("POST", f"/api/chat/conversations/{convs[i]}/generate", headers={"x-csrf-token": csrf},
+                          json={"mode": "send", "operation": "text", "content": f"hi {i}", "model_id": mid(st, "chat-small")}) as r:
+                out[i] = (r.status_code, [json.loads(x[6:]) for x in r.iter_lines() if x.startswith("data: ")])
+    try:
+        ts = [threading.Thread(target=go, args=(i,)) for i in range(n)]
+        [t.start() for t in ts]
+        [t.join(60) for t in ts]
+    finally:
+        srv.stop()
+    assert len(out) == n and all(v[0] == 200 for v in out.values()), {k: v[0] for k, v in out.items()}
+    assert all(v[1][-1]["status"] == "complete" for v in out.values()), out
+
+
 # ---- embeddings through the router ---------------------------------------------------------------------------------------------------
 def test_embeddings_use_the_router_key_and_model_name(lcapp, st, router_url):
     root = router_url.removesuffix("/v1")
