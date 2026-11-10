@@ -64,6 +64,8 @@ Profiles (video in, video out; same `inputs_schema` contract as before, **no** S
 | `opensfield-video-upscale` | `upscale` -> `video.upscale` (SeedVR2) | 192 s |
 | `opensfield-smooth-motion` | `interpolate` -> `video.interpolate` (FILM, 2x/4x) | 6 s |
 | `reverse-video` | `analyse` -> `video.reverse` (REA, Reverse Engineer Video) | 3 s; CPU only; see section 7 |
+| `openjutsu-minimax-h3` (restored, phase 2) | `swap` (one person, 1 picture), `advanced_swap` (1-4 pictures, one per person), `object_edit` (change / remove / add / background), `check_mask` (SAM 3.1 preview) -> `openjutsu.swap|advanced|object|mask` | the validated OpenJutsu H3 masked swap (SAM 3.1 + MiniMax H3 + Context-Loop chain), ported into this engine; publishes the Studio contract (`modes`, `limits`, `reference_policy`, `subject_selection`, `operation_status`). Details and evidence: section 9 |
+| `openjutsu-reference-video` (restored) | `reference_video` (1-9 pictures + prompt, no source video) -> `openjutsu.reference-video` | H3 reference-to-video with up to 9 pictures |
 
 Engine-only extras that exist in OpenSfield but Semechka does not use (kept available in the engine, no Semechka surface): background removal (`image.bg-remove`), image layers
 (`image.decompose`), style reference (`soul.styles`), ACE-Step music, Kokoro TTS, camera/effects LTX presets, `iphone-photo` finish (Semechka has its own finish and it is off by default).
@@ -113,7 +115,7 @@ only where a reviewed run exists (the table above) and say so.
 | Image-to-video | **works** | `minimax-h3` (i2v), `wan2.2-i2v-a14b`, `ltx-2.3` (i2v, and first/last frame at the engine level) |
 | Reference-to-video (two pictures) | **works at the engine level** | `minimax-h3` r2v (`extra_references` = 2 ids). Semechka's composer sends it only if the web part exposes two references for video |
 | Video editing profile (Composer "profile" tray) | **works, different models** | `opensfield-video-edit` operations above |
-| OpenJutsu Studio (8 modes, SAM mask/box, H3 context loop, size presets, live trace) | **unavailable** | see section 5: not an OpenSfield workflow. The new profiles publish no Studio `modes`, so the Studio lists them as "does not say which operations it can do" instead of pretending |
+| OpenJutsu Studio (modes, SAM mask/points, H3 context loop, size presets) | **restored (phase 2)** | profiles `openjutsu-minimax-h3` and `openjutsu-reference-video` (section 9). The live node trace (VIEW PROCESS / VIEW COMFYUI) is still not published: the Studio shows its fallback |
 | Reverse Engineer Video (REA) | **works** | profile `reverse-video`; analysis served at `GET /v1/reverse/{job}` |
 | Live job inspector / workflow graph / history / segments (Studio trace) | **not offered** | those traces belong to the old engine's node graph; the routes answer 404 and Semechka shows "no trace" |
 | Cancel | works | `POST /v1/jobs/{id}/cancel` -> ComfyUI `/interrupt` + queue delete (verified on the GPU in the evidence section) |
@@ -156,7 +158,7 @@ normally discarded by Semechka right after it has copied them.
 | `sdxl-turbo` ("Sketch") | exists only as a Diffusers pipeline on the old engine; OpenSfield has no verified SDXL workflow |
 | `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v` | Diffusers pipeline only on the old engine; no OpenSfield workflow |
 | `wan2.2-t2v-a14b` | OpenSfield has the 14B image-to-video and the 5B text-to-video workflows, not 14B text-to-video |
-| `openjutsu-minimax-h3`, `openjutsu-reference-video` | SAM 3.1 masks + H3 reference-to-video with the Context-Loop nodes live in the old engine's own ComfyUI install (`~/sarness-comfyui`), not in OpenSfield's verified set. The Studio's modes (subject/character/object/vehicle replacement, motion transfer, reference-to-video, video restyling, advanced editing) with box/point selection, size presets and live trace are therefore unavailable; section 2 lists what runs instead (different models, no mask/box). Decision needed if the H3 swap must come back: port that workflow into the OpenSfield ComfyUI and verify it |
+| `openjutsu-minimax-h3`, `openjutsu-reference-video` | **restored in phase 2** (section 9): the workflow was ported into this engine's ComfyUI (additive node packs read through `extra_model_paths`) and re-validated by real runs |
 | Image-to-image (Imajutsu restyle, refine pass) | no verified workflow |
 | Multi-reference editing with FLUX.2 klein, edit with extra references | klein is text-to-image only here; Qwen-Image-Edit takes one picture |
 | Negative prompt, scheduler, guidance, LoRAs, batch, arbitrary steps | the verified workflows are fixed graphs; only Fast/Quality exists where a workflow has the switch |
@@ -232,8 +234,8 @@ before relying on H3 alongside LLMs.
   (edit and inpaint: the workflow picks its own size from the picture; width/height are ignored).
 * **Imajutsu**: modes `restyle`, `replace_subject`, `reference` and the refine pass of `upscale` have no model (the page already says "no model" when the routing finds none);
   `edit` takes one picture; `inpaint`/`outpaint` run on FLUX.1 Fill (non-commercial licence, `caution` on the model).
-* **Studio**: the new profiles carry no Studio `modes`, so `/studio` lists them as not offering operations; the Composer's profile tray (video + one reference picture + prompt) is the
-  way to run them. OpenJutsu's H3 swap is unavailable (section 5).
+* **Studio**: the OpenJutsu profiles carry the Studio contract again (section 9), so `/studio` (Experimental > Video editor) lists their modes with the statuses the engine computes; the other
+  profiles (`opensfield-video-edit` ...) have no `modes` and run from the Composer's profile tray (video + one reference picture + prompt).
 * **Reverse Engineer Video** has no page yet: `GET /api/media/jobs/{id}/analysis` returns the analysis and plan; the library item is the contact sheet.
 * **Live previews** do not exist while a job runs (ComfyUI has no preview method enabled); progress is real: queue position, then "Loading the model", "Generating, step N of M".
 
@@ -271,3 +273,33 @@ contact-sheeted (video); progress was polled every second through `GET /api/medi
 Not proven on the GPU: Wan 5B text-to-video, LTX/H3 image-to-video and H3 reference-to-video, first/last frame, Qwen-Image 2.1, the `opensfield-video-edit` / video upscale / smooth-motion
 profiles (their tests use fakes; the workflows themselves are verified by OpenSfield's own `config/verified.json`), Imajutsu outpaint, the browser UI (nothing was clicked), a Roasted/Salted
 deployment. Live sampler previews do not exist (ComfyUI runs without a preview method).
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## 9. Phase 2: OpenJutsu restored (H3 masked swap, multi-reference, object edit, mask preview)
+
+Engine branch `consol2/openjutsu-swap` (merged with the other phase-2 engine branches in `consol2/openjutsu-integrated`), docs `docs/OPENJUTSU.md` in the engine repo, node-pack manifest
+`~/opensfield/node-packs-oj/MANIFEST.json`. Nothing here is a new service: the validated Sarness builder (D3voz/openjutsu @ 7fe118b, MIT) was ported into the media engine
+(`app/openjutsu/`), the three ComfyUI node packs it needs are installed ADDITIVELY in a new folder and reach ComfyUI through one added block in `extra_model_paths.yaml`, and the old H3 /
+SAM 3.1 weights are read in place. Statuses are computed by the engine (`ready` only with a real run in `verified.json`), never copied from a file.
+
+What a person gets in **Experimental > Video editor** (the Studio, unchanged UI) and what was proven on this Spark (dev Semechka -> dev engine -> ComfyUI with the new nodes; every output was
+looked at; AI-generated footage and AI-generated reference pictures only):
+
+| Operation / mode | Run | Result |
+|---|---|---|
+| `swap` (character replacement), 1 reference | 3 s 854x480 AI clip, 480p | 271 s wall; the woman is replaced by the reference person, street/bus/motion kept; 56 frames 2.333 s (72 -> 56: H3's 17k+5 frame grid), 864x480, soundtrack kept (aac, mean -16.7 dB); progress monotonic |
+| `swap`, multi-clip | 10.1 s AI clip, 480p | 523 s; 2 clips; 226 frames 9.417 s (grid rounding), identity holds across the clip boundary and a bus passing; audio kept |
+| `advanced_swap`, 3 references | 3-person AI clip, 480p, 3 s | 199 s; all three people replaced by the three pictures in the order of `roles`; 56 frames, audio present. The workflow takes up to 4 pictures; 3 were run (no 4-person clip) |
+| `object_edit` change | coat -> yellow raincoat (words only), bike colour red -> blue (words only), 480p | 96 s / 124 s; only the object changes, face, background and soundtrack kept. `remove`, `add`, `background` and `paint` have NO real run: they stay experimental |
+| `check_mask` text / box / points | 3-person AI clip, 3 s | 24-30 s each; text tracks the largest person, a box around the small man and a clicked point on the old man each select only that subject (point = the part clicked) |
+| `reference_video`, 9 pictures | 9 AI pictures + prompt naming 6, 480p, 2.3 s | 82 s; 864x480, 56 frames, audio. **Limit:** 9 pictures are accepted and conditioned, but the model draws what the prompt names: about five identities are visible, the others are ignored (the engine warns for each picture the prompt never names) |
+| Through Semechka's Studio (vehicle replacement, 1 picture, 640x480) | button press in the browser | 84 s; real engine progress in the UI ("Generating, step n of 6", cancel button), result saved to the Library (640x480, 2.333 s, audio); `accept_experimental` false because the operation is verified |
+| Cancel at 12 % of a 10 s swap | API | ComfyUI queue empty 3.3 s later, engine `cancelled`, GPU 0 %, no output; `POST /v1/release` freed 61 GB |
+| Regression on the extended ComfyUI | H3 text-to-video 2 s, Z-Image 1024 | both completed with correct output (58 s / 20 s) |
+
+Limits that stay (published in the profile `limits`, shown by the Studio): at most 30 s of source, short edge <= 768 (only 480p was run in this phase; the old engine validated 736p), box/points only for
+videos that run as a single 6 s clip, one reference per person in `advanced_swap`, `object_edit` needs words or one picture. **Validated footage:** AI-generated single-person clips (and the
+three-person clip for masks and `advanced_swap`); camera footage, crowds, occlusion and hat/face fixes are not claimed. **Licence:** MiniMax H3's licence excludes the EU, UK, South Korea and the US;
+the caution is in the profile and model descriptions. Not restored: the live node trace (VIEW PROCESS / VIEW COMFYUI) is still not published by the engine, so the Studio shows its fallback document;
+the Studio's `motion_transfer` and `video_restyling` modes stay unavailable there and point at the editing profile `opensfield-video-edit` (Wan Animate 2, LTX restyle, Bernini-R), which runs from the Conversation studio.

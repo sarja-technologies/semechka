@@ -194,3 +194,12 @@ def test_restore_re_enables_rows_parked_unavailable_when_the_engine_offers_them_
     rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
     run(inst, "--rollback", str(rb))
     assert only(inst, "m_oj")["available"] == 0
+
+
+def test_grant_profiles_on_a_later_run_may_grant_a_profile_row_an_earlier_run_created(inst):
+    run(inst, "--apply")                                                        # the profile row is added disabled, no grants
+    pe = table(inst, "select * from models where real_id='video:opensfield-video-edit'")[0]
+    assert pe["enabled"] == 0 and not table(inst, f"select * from model_grants where model_id='{pe['id']}'")
+    run(inst, "--apply", "--grant-profiles")                                    # a later run copies the grants and enables it: not an invariant violation
+    pe = table(inst, "select * from models where real_id='video:opensfield-video-edit'")[0]
+    assert pe["enabled"] == 1 and len(table(inst, f"select * from model_grants where model_id='{pe['id']}'")) == 2

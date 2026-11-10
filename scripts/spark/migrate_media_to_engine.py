@@ -376,8 +376,11 @@ def main() -> int:
     caps = load_catalog(a)
     ro = connect_ro(db)
     orig_ids = [r["id"] for r in rows(ro, "select id from models order by id")]
-    before = fingerprint(ro, orig_ids)
     plan = make_plan(ro, caps, a)
+    # --grant-profiles on a later run grants/enables a profile row that an earlier run created: that row is changed on purpose, so it is not part of the invariant
+    touched = {g["model_id"] for g in plan["grants"]} | {t["id"] for t in plan["toggles"]}
+    orig_ids = [i for i in orig_ids if i not in touched]
+    before = fingerprint(ro, orig_ids)
     active = rows(ro, "select id, kind, model_id, status from media_jobs where status in (?,?)", ACTIVE)
     ro.close()
     show("before", before)

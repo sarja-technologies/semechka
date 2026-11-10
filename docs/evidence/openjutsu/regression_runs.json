@@ -1,0 +1,119 @@
+{
+ "r1_h3_t2v": {
+  "name": "r1_h3_t2v",
+  "job": "6ee8bc972f98",
+  "status": "completed",
+  "wall_s": 58.4,
+  "progress_monotonic": true,
+  "pfln": [
+   0.0,
+   1.0,
+   30
+  ],
+  "error": null,
+  "applied": {
+   "model": "minimax-h3",
+   "mode": "t2v",
+   "feature": "video.h3-t2v",
+   "width": 864,
+   "height": 480,
+   "frames": 56,
+   "fps": 24,
+   "seconds": 2.3333,
+   "seconds_input": 2,
+   "output": {
+    "width": 864,
+    "height": 480,
+    "frames": 56,
+    "fps": 24.0,
+    "duration": 2.3333
+   },
+   "sampler_steps_last": 8
+  },
+  "generations": [
+   {
+    "id": "6ee8bc972f98-0",
+    "file_id": "6ee8bc972f98-0",
+    "type": "video",
+    "mime": "video/mp4",
+    "size": 603131,
+    "width": 864,
+    "height": 480,
+    "duration": 2.3333,
+    "fps": 24.0,
+    "frames": 56,
+    "audio": true,
+    "seed": 7,
+    "name": "92_0_MiniMax_H3_t2v_00001_.mp4"
+   }
+  ],
+  "ffprobe0": {
+   "streams": [
+    {
+     "codec_type": "video",
+     "codec_name": "h264",
+     "width": 864,
+     "height": 480,
+     "r_frame_rate": "24/1",
+     "nb_frames": "56",
+     "duration": "2.333333"
+    },
+    {
+     "codec_type": "audio",
+     "codec_name": "aac",
+     "width": null,
+     "height": null,
+     "r_frame_rate": "0/0",
+     "nb_frames": "74",
+     "duration": "2.325000"
+    }
+   ],
+   "duration": "2.333333"
+  },
+  "volume0": [
+   "[Parsed_volumedetect_0 @ 0xad86125f6ba0] mean_volume: -28.6 dB"
+  ]
+ },
+ "r2_zimage": {
+  "name": "r2_zimage",
+  "job": "1036882e204a",
+  "status": "completed",
+  "wall_s": 20.3,
+  "progress_monotonic": true,
+  "pfln": [
+   0.0,
+   1.0,
+   11
+  ],
+  "error": null,
+  "applied": {
+   "model": "z-image-turbo",
+   "mode": "txt2img",
+   "feature": "soul.t2i",
+   "width": 1024,
+   "height": 1024,
+   "output": {
+    "width": 1024,
+    "height": 1024
+   },
+   "sampler_steps_last": 8
+  },
+  "generations": [
+   {
+    "id": "1036882e204a-0",
+    "file_id": "1036882e204a-0",
+    "type": "image",
+    "mime": "image/png",
+    "size": 1086663,
+    "width": 1024,
+    "height": 1024,
+    "duration": null,
+    "fps": null,
+    "frames": null,
+    "audio": null,
+    "seed": 3,
+    "name": "9_0_z-image-turbo_00001_.png"
+   }
+  ]
+ }
+}
