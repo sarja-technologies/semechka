@@ -10,7 +10,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 import numpy as np
@@ -46,6 +46,26 @@ class EmbedConfig:
     model: str
     instruction: str
     min_score: float
+    api_key: str | None = None   # set when the address is a configured llama.cpp router backend: it wants the key, and (being a
+                                 # router) the model name on /props and /tokenize
+
+    @property
+    def router(self) -> bool:
+        return self.api_key is not None
+
+    def headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+
+
+def _router_key(st, s, url: str) -> str | None:
+    """The API key of the `llamacpp` backend whose address is `url` (with or without /v1), else None. The key lives with that
+    backend, encrypted; it is never a setting."""
+    from .models import Backend
+    want = url.rstrip("/").removesuffix("/v1")
+    for b in s.execute(select(Backend).where(Backend.adapter == "llamacpp")).scalars():
+        if b.base_url.rstrip("/").removesuffix("/v1") == want and b.api_key_enc:
+            return st.vault.decrypt(b.api_key_enc, "backend")
+    return None
 
 
 def config(st, s) -> EmbedConfig | None:
@@ -54,7 +74,7 @@ def config(st, s) -> EmbedConfig | None:
     if not url or not model:
         return None
     return EmbedConfig(url, model, (st.settings.deployment(s, "embeddings.query_instruction") or "").strip(),
-                       float(st.settings.deployment(s, "embeddings.min_score") or 0.47))
+                       float(st.settings.deployment(s, "embeddings.min_score") or 0.47), _router_key(st, s, url))
 
 
 def healthy(st, cfg: EmbedConfig) -> bool:
@@ -113,12 +133,12 @@ def _host(url: str) -> str:  # for logs: never the path, query or credentials of
     return f"{u.hostname or '?'}:{u.port}" if u.port else (u.hostname or "?")
 
 
-def _http_post(url: str, payload: dict, timeout: float):
-    return httpx.post(url, json=payload, timeout=timeout)
+def _http_post(url: str, payload: dict, timeout: float, headers: dict | None = None):
+    return httpx.post(url, json=payload, timeout=timeout, **({"headers": headers} if headers else {}))
 
 
-def _http_get(url: str, timeout: float):
-    return httpx.get(url, timeout=timeout)
+def _http_get(url: str, timeout: float, headers: dict | None = None):
+    return httpx.get(url, timeout=timeout, **({"headers": headers} if headers else {}))
 
 
 def _body_numbers(r: httpx.Response) -> dict:
@@ -140,7 +160,7 @@ def slot_limit(st, cfg: EmbedConfig) -> tuple[int, bool]:
         return (hit[1]["n_ctx"], True) if hit[1].get("n_ctx") else (DEFAULT_SLOT_TOKENS, False)
     n_ctx = None
     try:
-        r = _http_get(cfg.url + "/props", 5)
+        r = _http_get(cfg.url + "/props" + (f"?model={quote(cfg.model, safe='')}" if cfg.router else ""), 5, cfg.headers())
         r.raise_for_status()
         v = r.json()["default_generation_settings"]["n_ctx"]
         n_ctx = int(v) if isinstance(v, int) and not isinstance(v, bool) and v >= 64 else None
@@ -165,7 +185,7 @@ class _Run:
         """One /v1/embeddings request -> exactly len(texts) vectors of one dimension. Raises httpx.HTTPStatusError for
         a refusal (the caller decides whether it is an input problem), EmbedUnavailable for a malformed answer."""
         self.requests += 1
-        r = _http_post(self.cfg.url + "/v1/embeddings", {"input": texts, "model": self.cfg.model}, 120)
+        r = _http_post(self.cfg.url + "/v1/embeddings", {"input": texts, "model": self.cfg.model}, 120, self.cfg.headers())
         r.raise_for_status()
         rows = sorted(r.json()["data"], key=lambda d: d["index"])
         vecs = [d["embedding"] for d in rows]
@@ -184,7 +204,8 @@ class _Run:
         """-> (token ids, per-token bytes or None) from POST /tokenize, or None when the server cannot do it."""
         self.requests += 1
         try:
-            r = _http_post(self.cfg.url + "/tokenize", {"content": text, "with_pieces": True}, 30)
+            r = _http_post(self.cfg.url + "/tokenize", {"content": text, "with_pieces": True, **({"model": self.cfg.model} if self.cfg.router else {})},
+                           30, self.cfg.headers())
             r.raise_for_status()
             toks = r.json()["tokens"]
             if not isinstance(toks, list):

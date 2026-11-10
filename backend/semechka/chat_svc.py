@@ -255,7 +255,8 @@ def window_for(st, m: Model) -> tuple[int | None, float]:
     """(context tokens the model runs with, tokens per character) as far as Semechka knows."""
     admin = (m.defaults or {}).get("ctx")
     got = learned(st).get(m.id) or {}
-    return (int(admin) if admin else got.get("n_ctx")), got.get("ratio", DEFAULT_RATIO)
+    slot = (m.meta or {}).get("slot_ctx")  # a router reports the window one request gets (ctx-size / parallel)
+    return (int(admin) if admin else got.get("n_ctx") or (int(slot) if slot else None)), got.get("ratio", DEFAULT_RATIO)
 
 
 def fit(messages: list[dict], n_ctx: int | None, max_tokens: int, ratio: float) -> tuple[list[dict], int]:

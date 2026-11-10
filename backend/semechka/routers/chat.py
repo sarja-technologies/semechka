@@ -773,6 +773,9 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
                             if ev["reasoning"]:
                                 reasoning.append(ev["reasoning"])
                             yield _sse({"type": "delta", "content": ev["content"], "reasoning": ev["reasoning"]})
+                        elif ev["type"] == "status":  # a cold model is loading (llamacpp adapter): say so instead of going quiet
+                            yield _sse({"type": "engine", "state": ev.get("state"), "model": m_copy.alias,
+                                        "elapsed": ev.get("elapsed")})
                         elif ev["type"] == "done":
                             done_ev = ev
                         if ticket is not None and ticket.abort.is_set():  # an operator asked this request to stop

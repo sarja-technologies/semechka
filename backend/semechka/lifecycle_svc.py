@@ -44,7 +44,7 @@ def engine_id(real_id: str) -> str:
 def kind_of(m: Model) -> str:
     if m.real_id.startswith(MEDIA_PREFIXES):
         return "media"
-    if m.real_id.startswith(LLM_PREFIXES):
+    if m.real_id.startswith(LLM_PREFIXES) or (m.meta or {}).get("router"):  # `router`: a model of the llama.cpp router
         return "llm"
     return "other"
 
@@ -102,8 +102,8 @@ def loaded_ids(status: dict | None) -> set[str] | None:
     if not status:
         return None
     llm = status.get("llm") or {}
-    out = set((status.get("worker") or {}).get("loaded") or [])
-    if llm.get("model_id") and llm.get("state") in ("ready", "loading"):
+    out = set((status.get("worker") or {}).get("loaded") or []) | set(llm.get("loaded") or [])
+    if llm.get("model_id") and llm.get("loaded") is None and llm.get("state") in ("ready", "loading"):
         out.add(llm["model_id"])
     return out
 
@@ -126,6 +126,8 @@ def model_state(m: Model, status: dict | None) -> str | None:
     if not status or kind_of(m) == "other":
         return None
     eid, llm = engine_id(m.real_id), status.get("llm") or {}
+    if kind_of(m) == "llm" and llm.get("loaded") is not None:  # a router: every model has its own state
+        return "loaded" if eid in llm["loaded"] else "loading" if eid in (llm.get("loading") or []) else "idle"
     if kind_of(m) == "llm" and llm.get("model_id") == eid:
         return {"ready": "loaded", "loading": "loading", "error": "error"}.get(llm.get("state"), "idle")
     return "loaded" if eid in ((status.get("worker") or {}).get("loaded") or []) else "idle"
@@ -143,6 +145,8 @@ def check(st, m: Model, b: Backend, op: str, status: dict | None) -> dict:
         blockers.append("This model's engine is turned off in Semechka.")
     if not m.available:
         blockers.append("The engine no longer reports this model.")
+    if man is not None and man.multi_model and kind == "llm" and status is not None and man.model_load and man.model_unload:
+        return _check_router(st, m, b, op, status)
     if op == "load" and man is not None and man.exclusive_chat_model and kind == "llm":
         from .adapters.sarness import PRELOAD_OFF
         return {"allowed": False, "blockers": [PRELOAD_OFF], "warnings": warnings, "noop": None, "code": "unsupported"}
@@ -215,6 +219,45 @@ def check(st, m: Model, b: Backend, op: str, status: dict | None) -> dict:
     if cur and cur.get("state") == "running":
         blockers.append(f"A {cur['op']} of another model on this engine is in progress.")
     return {"allowed": not blockers, "blockers": blockers, "warnings": warnings, "noop": noop, "code": code}
+
+
+def _check_router(st, m: Model, b: Backend, op: str, status: dict) -> dict:
+    """load/unload on an engine that holds several chat models (llama.cpp's router). One model's load never touches another,
+    so the only rules are: not while this server is writing a reply from it, and not into memory that is not there."""
+    blockers: list[str] = []
+    warnings: list[str] = []
+    noop = None
+    llm, eid = status.get("llm") or {}, engine_id(m.real_id)
+    loaded, loading = list(llm.get("loaded") or []), list(llm.get("loading") or [])
+    here = st.scheduler.model_load(b.id).get(m.id, {"running": 0, "waiting": 0})
+    if not b.enabled:
+        blockers.append("This model's engine is turned off in Semechka.")
+    if not m.available:
+        blockers.append("The engine no longer reports this model.")
+    if op == "load":
+        if eid in loaded:
+            noop = "Already loaded."
+        elif eid in loading:
+            noop = "Already loading."
+        else:
+            ad = adapter_for(b, st)
+            refusal = ad.admission(eid, loaded) if hasattr(ad, "admission") else None
+            if refusal:
+                blockers.append(refusal)
+    else:
+        if eid not in loaded and eid not in loading:
+            noop = "Not loaded."
+        elif here["running"]:
+            blockers.append(f"It is writing {here['running']} repl{'y' if here['running'] == 1 else 'ies'} on this server right now.")
+        elif eid in loading:
+            blockers.append("It is still loading.")
+        if here["waiting"] and noop is None:
+            warnings.append(f"{here['waiting']} request{'s are' if here['waiting'] != 1 else ' is'} waiting for it and will load it again.")
+        warnings.append("Replies other programs are writing with this model right now would be cut off: the router does not show them to Semechka.")
+    cur = st.lifecycle.get(b.id)
+    if cur and cur.get("state") == "running":
+        blockers.append(f"A {cur['op']} of another model on this engine is in progress.")
+    return {"allowed": not blockers, "blockers": blockers, "warnings": warnings, "noop": noop, "code": "busy"}
 
 
 def public_op(op: dict | None) -> dict | None:
