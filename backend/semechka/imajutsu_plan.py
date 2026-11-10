@@ -61,10 +61,12 @@ def resolve_engine_mode(mode: str, entry_mode: str | None, *, has_source: bool, 
     return base
 
 
-def picture_cap(engine_mode: str | None, references: int) -> int:
-    """How many pictures (the source included) the engine takes for this mode."""
+def picture_cap(engine_mode: str | None, references: int, by_mode: dict | None = None) -> int:
+    """How many pictures (the source included) the engine takes for this mode. ``by_mode`` = what the engine published per mode (``mode_pictures``): it wins."""
     if engine_mode in (None, "txt2img"):
         return 0
+    if by_mode and isinstance(by_mode.get(engine_mode), int) and not isinstance(by_mode.get(engine_mode), bool) and by_mode[engine_mode] > 0:
+        return int(by_mode[engine_mode])
     if engine_mode in MODE_IMAGE_USE:
         return max(1, int(references or 0))
     return 1
@@ -248,7 +250,7 @@ def plan(spec: dict, ctx: dict) -> dict:
     if em == "inpaint" and mode == "replace_subject" and not has_mask:
         em = "edit"
     # ---- references --------------------------------------------------------------------------------------------------------------------------------------
-    cap = picture_cap(em, model.get("references") or 0)
+    cap = picture_cap(em, model.get("references") or 0, model.get("mode_pictures"))
     source_counts = has_source and em in ("edit", "inpaint", "img2img")
     allowed = md["refs_ok"] and em in MODE_IMAGE_USE and cap - (1 if source_counts else 0) > 0
     if not md["refs_ok"]:

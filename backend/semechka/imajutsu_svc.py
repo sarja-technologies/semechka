@@ -421,6 +421,7 @@ def model_facts(m: Model, b: Backend) -> dict:
     info = media_svc.media_info(m)
     return {"model_id": m.id, "alias": m.alias, "engine_id": m.real_id.split(":", 1)[1] if ":" in m.real_id else m.real_id,
             "modes": [x for x in info.get("modes") or [] if isinstance(x, str)], "references": int(info.get("references") or 0),
+            "mode_pictures": {k: v for k, v in (info.get("mode_pictures") or {}).items() if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)},
             "negative_prompt": bool(info.get("negative_prompt")), "schedulers": list(info.get("schedulers") or []), "limits": dict(info.get("limits") or {}),
             "defaults": dict(info.get("defaults") or {}), "license": (m.meta or {}).get("license"), "loaded": (m.meta or {}).get("loaded"),
             "description": (m.meta or {}).get("description")}
@@ -453,9 +454,10 @@ def operational(mode: str, f: dict, entry: dict | None) -> tuple[bool, str]:
     if em not in f["modes"]:
         return False, f"{f['alias']} does not offer {'instruction editing' if em == 'edit' else em} (it can do: {', '.join(f['modes']) or 'nothing it reports'})."
     if md["refs_min"]:
-        slots = plan_mod.picture_cap(em, f["references"]) - (1 if md["source"] else 0)
+        cap = plan_mod.picture_cap(em, f["references"], f.get("mode_pictures"))
+        slots = cap - (1 if md["source"] else 0)
         if slots < md["refs_min"]:
-            return False, f"{f['alias']} takes {plan_mod.picture_cap(em, f['references'])} picture{'s' if plan_mod.picture_cap(em, f['references']) != 1 else ''} and {md['label']} needs {md['refs_min'] + (1 if md['source'] else 0)}."
+            return False, f"{f['alias']} takes {cap} picture{'s' if cap != 1 else ''} and {md['label']} needs {md['refs_min'] + (1 if md['source'] else 0)}."
     return True, ""
 
 

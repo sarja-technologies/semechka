@@ -3,7 +3,7 @@
 
     cd backend && PYTHONPATH=$PWD <venv>/bin/python ../scripts/spark/migrate_media_to_engine.py <data-dir> \
         [--engine-url URL] [--token-file ~/opensfield/config/semechka-media.token | --token-value-from-env VAR] \
-        [--catalog-file caps.json] [--backend-name 'Spark media engine'] [--grant-profiles] [--allow-active] [--apply]
+        [--catalog-file caps.json] [--backend-name 'Spark media engine'] [--grant-profiles] [--enable-models REAL_ID,... [--like REAL_ID]] [--allow-active] [--apply]
     ... migrate_media_to_engine.py <data-dir> --rollback <data-dir>/pre-update-media-engine-<ts>/rollback.json
 
 Dry run by default (the database is opened read-only and nothing is written): it prints, per image/video model, what would happen.
@@ -17,6 +17,10 @@ Dry run by default (the database is opened read-only and nothing is written): it
      moved too, marked available=false with meta.media.unavailable_reason, and keeps its enabled flag;
   4. engine models/profiles without a row are added disabled with no grants (like any newly discovered model);
   5. with --grant-profiles, the grants of the old OpenJutsu row (video:openjutsu-minimax-h3) are copied to video:opensfield-video-edit, which is then enabled.
+  6. REFRESH (always, on rows already on the engine backend): a row whose engine model is offered now gets the engine's current meta/capabilities and available=1 (what the admin's
+     "Sync models" does), so modes the engine gained (Imajutsu: several reference pictures, masked edit, image-to-image restyle/refine) appear on instances migrated earlier.
+     enabled flags, grants, aliases and every other column are untouched. With --enable-models image:z-image-turbo,... the named engine models are ENABLED and, with --like <real id>,
+     given the same grants as that model (only grants the model does not have yet) -- an explicit choice per instance, never automatic.
 media_jobs, media_assets and the asset files are never touched; neither is any non-media model, any chat/LLM backend row, any user or conversation.
 Idempotent: a second --apply finds nothing to do. --rollback restores every touched row from rollback.json (and removes what was created); it is idempotent too.
 """
@@ -122,7 +126,7 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
     base = a.engine_url.rstrip("/")
     new_b = next((b for b in rows(con, "select * from backends where adapter = ? and base_url = ?", (NEW_ADAPTER, base))), None)
     plan: dict = {"backend": {"id": new_b["id"] if new_b else uid("b_"), "created": new_b is None, "name": a.backend_name, "base_url": base},
-                  "moves": [], "creates": [], "grants": [], "toggles": [], "notes": []}
+                  "moves": [], "creates": [], "grants": [], "toggles": [], "refreshes": [], "notes": []}
     bid = plan["backend"]["id"]
     clash = next((x for x in rows(con, "select * from backends where name = ?", (a.backend_name,)) if x["id"] != bid), None)
     if clash:
@@ -130,6 +134,7 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
     sarness = {b["id"] for b in rows(con, "select id from backends where adapter = ?", (OLD_ADAPTER,))}
     models = rows(con, "select * from models order by sort, id")
     have_new = {m["real_id"]: m for m in models if m["backend_id"] == bid}
+    left_over: list[str] = []
     for m in models:
         if m["backend_id"] not in sarness or not is_media(m["real_id"]):
             continue
@@ -138,7 +143,7 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
                  "old": {"meta": m["meta"], "capabilities": m["capabilities"], "available": m["available"]}}
         if m["real_id"] in have_new:
             entry["action"] = "skip: the engine backend already has a row with this real id"
-            plan["notes"].append(f"{m['real_id']}: a row already exists on the engine backend; {m['id']} left where it is")
+            left_over.append(m["id"])
             continue
         if d is not None:
             meta = dict(d.meta)
@@ -157,12 +162,55 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
             meta["media"] = media
             entry.update(action="move + mark unavailable", reason=why, new={"meta": meta, "capabilities": None, "available": 0})
         plan["moves"].append(entry)
+    if left_over:
+        plan["notes"].append(f"{len(left_over)} media row(s) on the old Sarness backend were left where they are: the engine backend already has a row for each (a rerun after an earlier migration)")
     moved_real = {e["real_id"] for e in plan["moves"]}
     for rid, d in found.items():
         if rid in have_new or rid in moved_real:
             continue
         plan["creates"].append({"id": uid("m_"), "real_id": rid, "alias": friendly_alias(rid), "capabilities": list(d.capabilities),
                                 "meta": {**d.meta, **({"loaded": d.loaded} if d.loaded is not None else {})}, "enabled": 0})
+    # refresh the rows that are already on the engine backend (the catalogue sync, done here with a rollback)
+    def _j(v):
+        try:
+            return json.loads(v) if isinstance(v, str) else v
+        except ValueError:
+            return v
+
+    def _stable(meta):
+        return {k: v for k, v in (meta or {}).items() if k != "loaded"} if isinstance(meta, dict) else meta
+    for rid, m in have_new.items():
+        d = found.get(rid)
+        if d is None:
+            continue
+        new_meta = {**d.meta, **({"loaded": d.loaded} if d.loaded is not None else {})}
+        old_meta, old_caps = _j(m["meta"]), _j(m["capabilities"])
+        if _stable(old_meta) != _stable(new_meta) or old_caps != list(d.capabilities) or not m["available"]:
+            plan["refreshes"].append({"id": m["id"], "real_id": rid, "enabled": bool(m["enabled"]), "was_available": bool(m["available"]),
+                                      "old": {"meta": m["meta"], "capabilities": m["capabilities"], "available": m["available"]},
+                                      "new": {"meta": new_meta, "capabilities": list(d.capabilities), "available": 1}})
+    # explicit enabling of restored engine models, with the grants of a named analogue
+    wanted = [x.strip() for x in (getattr(a, "enable_models", "") or "").split(",") if x.strip()]
+    if wanted:
+        like = next((m for m in models if m["real_id"] == a.like and m["backend_id"] == bid), None) if getattr(a, "like", None) else None
+        if getattr(a, "like", None) and like is None:
+            plan["notes"].append(f"--like {a.like}: no such row on the engine backend, so no grants are copied")
+        for rid in wanted:
+            row = have_new.get(rid)
+            target = row or next((c for c in plan["creates"] if c["real_id"] == rid), None)
+            if target is None:
+                plan["notes"].append(f"--enable-models {rid}: the engine does not offer it and there is no row, nothing to enable")
+                continue
+            tid = target["id"]
+            if row is not None and not row["enabled"]:
+                plan["toggles"].append({"id": tid, "old_enabled": row["enabled"], "new_enabled": 1})
+            elif row is None:
+                target["enabled"] = 1
+            if like is not None and tid != like["id"]:
+                have = {(g["subject_type"], g["subject_id"]) for g in rows(con, "select * from model_grants where model_id = ?", (tid,))} if row is not None else set()
+                for g in rows(con, "select * from model_grants where model_id = ? order by id", (like["id"],)):
+                    if (g["subject_type"], g["subject_id"]) not in have:
+                        plan["grants"].append({"model_id": tid, "subject_type": g["subject_type"], "subject_id": g["subject_id"], "effect": g["effect"], "modes": g["modes"]})
     # profile grants
     if a.grant_profiles:
         src = next((m for m in models if m["real_id"] == OPENJUTSU_OLD), None)
@@ -186,8 +234,8 @@ def make_plan(con: sqlite3.Connection, caps: dict, a) -> dict:
     else:
         if any(c["real_id"] == PROFILE_EDIT for c in plan["creates"]):
             plan["notes"].append(f"{PROFILE_EDIT} is added disabled with no grants (use --grant-profiles to copy the old OpenJutsu grants and enable it)")
-    plan["backend"]["needed"] = bool(plan["moves"] or plan["creates"])
-    plan["changes"] = bool(plan["moves"] or plan["creates"] or plan["grants"] or plan["toggles"])
+    plan["backend"]["needed"] = bool(plan["moves"] or plan["creates"] or plan["refreshes"])
+    plan["changes"] = bool(plan["moves"] or plan["creates"] or plan["grants"] or plan["toggles"] or plan["refreshes"])
     if not plan["backend"]["needed"] and plan["backend"]["created"]:
         plan["backend"]["created"] = False        # nothing to attach to it: do not create an empty backend
     return plan
@@ -204,6 +252,8 @@ def print_plan(plan: dict) -> None:
         print(f"  GRANT {g['subject_type']}:{g['subject_id']} {g['effect']} modes={g['modes']} -> {g['model_id']}")
     for t in plan["toggles"]:
         print(f"  ENABLE {t['id']}")
+    for r in plan["refreshes"]:
+        print(f"  REFRESH {r['id']}  {r['real_id']:<34} enabled={int(r['enabled'])}  -> engine meta/capabilities" + ("" if r["was_available"] else " (was unavailable, now available)"))
     for n in plan["notes"]:
         print("  note:", n)
     if not plan["changes"]:
@@ -249,6 +299,9 @@ def apply_plan(con: sqlite3.Connection, plan: dict, token: str | None, data: pat
             g["row_id"] = cur.lastrowid
         for t in plan["toggles"]:
             con.execute("update models set enabled=? where id=?", (t["new_enabled"], t["id"]))
+        for r in plan["refreshes"]:
+            n = r["new"]
+            con.execute("update models set meta=?, capabilities=?, available=1 where id=?", (_js(n["meta"]), _js(n["capabilities"]), r["id"]))
         after = fingerprint(con, orig_ids)
         bad = [k for k in INVARIANT_KEYS if before.get(k) != after.get(k)]
         if bad:
@@ -280,7 +333,8 @@ def rollback_doc(plan: dict, data: pathlib.Path, backup: pathlib.Path) -> dict:
             "moved": [{"id": e["id"], "old_backend_id": e["old_backend_id"], "old": e["old"]} for e in plan["moves"]],
             "created_models": [c["id"] for c in plan["creates"]],
             "grant_rows": [g["row_id"] for g in plan["grants"] if "row_id" in g],
-            "toggled": plan["toggles"]}
+            "toggled": plan["toggles"],
+            "refreshed": [{"id": r["id"], "old": r["old"]} for r in plan["refreshes"]]}
 
 
 def do_rollback(con: sqlite3.Connection, doc: dict) -> None:
@@ -293,6 +347,9 @@ def do_rollback(con: sqlite3.Connection, doc: dict) -> None:
             con.execute("delete from models where id=?", (mid,))
         for t in doc.get("toggled", []):
             con.execute("update models set enabled=? where id=?", (t["old_enabled"], t["id"]))
+        for r in doc.get("refreshed", []):
+            o = r["old"]
+            con.execute("update models set meta=?, capabilities=?, available=? where id=?", (o["meta"], o["capabilities"], o["available"], r["id"]))
         for m in doc.get("moved", []):
             o = m["old"]
             con.execute("update models set backend_id=?, meta=?, capabilities=?, available=? where id=?", (m["old_backend_id"], o["meta"], o["capabilities"], o["available"], m["id"]))
@@ -323,6 +380,8 @@ def main() -> int:
     ap.add_argument("--catalog-file")
     ap.add_argument("--backend-name", default="Spark media engine")
     ap.add_argument("--grant-profiles", action="store_true")
+    ap.add_argument("--enable-models", default="", metavar="REAL_ID,...", help="enable these engine models on this instance (for example image:z-image-turbo)")
+    ap.add_argument("--like", metavar="REAL_ID", help="copy the grants of this model (for example image:flux2-klein-4b) to the models named by --enable-models")
     ap.add_argument("--allow-active", action="store_true")
     a = ap.parse_args()
     data = pathlib.Path(a.data_dir).expanduser().resolve()
@@ -348,9 +407,11 @@ def main() -> int:
 
     caps = load_catalog(a)
     ro = connect_ro(db)
-    orig_ids = [r["id"] for r in rows(ro, "select id from models order by id")]
-    before = fingerprint(ro, orig_ids)
     plan = make_plan(ro, caps, a)
+    # rows whose enabled flag or grants this run changes on purpose are not part of the "unchanged identity/grants" invariants (everything else still is)
+    touched = {t["id"] for t in plan["toggles"]} | {g["model_id"] for g in plan["grants"]}
+    orig_ids = [r["id"] for r in rows(ro, "select id from models order by id") if r["id"] not in touched]
+    before = fingerprint(ro, orig_ids)
     active = rows(ro, "select id, kind, model_id, status from media_jobs where status in (?,?)", ACTIVE)
     ro.close()
     show("before", before)

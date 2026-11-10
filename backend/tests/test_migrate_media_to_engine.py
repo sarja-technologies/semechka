@@ -167,3 +167,54 @@ def test_an_instance_without_a_token_file_cannot_be_applied_but_can_be_planned(i
                        env={"PYTHONPATH": str(pathlib.Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
     assert r.returncode != 0 and "no engine token" in r.stderr + r.stdout
     assert not table(inst, "select * from backends where adapter='spark-media'")
+
+
+# ---------------------------------------------------------------- refresh of an instance that was migrated earlier (restored Imajutsu modes)
+def newer_caps():
+    c = caps()
+    for m in c["models"]:
+        if m["id"] == "flux2-klein-4b":
+            m.update(modes=["txt2img", "edit", "inpaint"], references=4, mode_pictures={"txt2img": 0, "edit": 4, "inpaint": 4})
+        if m["id"] == "z-image-turbo":
+            m.update(modes=["txt2img", "img2img"])
+    return c
+
+
+def test_a_later_run_refreshes_rows_already_on_the_engine_without_touching_flags_or_grants_and_rolls_back(inst):
+    run(inst, "--apply")
+    before = snapshot(inst)
+    (inst / "caps.json").write_text(json.dumps(newer_caps()))
+    out = run(inst)
+    assert "REFRESH" in out and "image:flux2-klein-4b" in out and "DRY RUN" in out
+    assert snapshot(inst) == before                                                                          # dry run writes nothing
+    run(inst, "--apply")
+    k = only(inst, "m_klein")
+    assert json.loads(k["meta"])["media"]["modes"] == ["txt2img", "edit", "inpaint"] and json.loads(k["meta"])["media"]["references"] == 4
+    assert json.loads(k["meta"])["media"]["mode_pictures"]["edit"] == 4
+    assert json.loads(only(inst, "m_zi")["meta"])["media"]["modes"] == ["txt2img", "img2img"]
+    after = snapshot(inst)
+    for t in ("model_grants", "media_jobs", "media_assets", "users"):
+        assert after[t] == before[t]
+    for mid in ("m_klein", "m_zi", "m_sdxl"):
+        a, b = only(inst, mid), next(m for m in before["models"] if m["id"] == mid)
+        assert {k_: v for k_, v in a.items() if k_ not in ("meta", "capabilities")} == {k_: v for k_, v in b.items() if k_ not in ("meta", "capabilities")}
+    assert "Nothing to change" in run(inst, "--apply")                                                       # idempotent
+    rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
+    assert "restored to the backed-up state: YES" in run(inst, "--rollback", str(rb))
+    assert snapshot(inst) == before
+
+
+def test_enable_models_enables_and_gives_them_the_grants_of_the_named_analogue_and_rolls_back(inst):
+    run(inst, "--apply")
+    before = snapshot(inst)
+    assert only(inst, "m_zi")["enabled"] == 0
+    run(inst, "--apply", "--enable-models", "image:z-image-turbo", "--like", "image:flux2-klein-4b")
+    assert only(inst, "m_zi")["enabled"] == 1
+    g = table(inst, "select subject_type,subject_id,effect,modes from model_grants where model_id='m_zi'")
+    assert g == [{"subject_type": "role", "subject_id": "member", "effect": "allow", "modes": '["image"]'}]
+    assert len(table(inst, "select * from model_grants")) == len(before["model_grants"]) + 1
+    assert only(inst, "m_klein") == next(m for m in snapshot(inst)["models"] if m["id"] == "m_klein")
+    assert "Nothing to change" in run(inst, "--apply", "--enable-models", "image:z-image-turbo", "--like", "image:flux2-klein-4b")
+    rb = sorted(inst.glob("pre-update-media-engine-*/rollback.json"))[-1]
+    assert "restored to the backed-up state: YES" in run(inst, "--rollback", str(rb))
+    assert snapshot(inst) == before
