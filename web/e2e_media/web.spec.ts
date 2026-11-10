@@ -306,7 +306,7 @@ async function mockRea(page: Page, analysis: any | null) {
     await route.fulfill({ json: { id: 'j_rea1', kind: 'video', status: 'completed', model: 'Reverse engineer', model_id: 'm_rea', prompt: '', params: {}, progress: 1, progress_text: 'Done', elapsed_s: 3, error: null, save: true,
       assets: [{ id: 'ma_none', kind: 'image', mime: 'image/jpeg', size: 10, width: 640, height: 360, saved: true }], conversation_id: null } });
   });
-  await page.route('**/api/media/jobs/j_rea1/reverse', (route) => analysis ? route.fulfill({ json: analysis }) : route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } }));
+  await page.route('**/api/media/jobs/j_rea1/analysis', (route) => analysis ? route.fulfill({ json: analysis }) : route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } }));
   await page.route('**/api/media/jobs/j_rea1', (route) => route.fulfill({ json: { id: 'j_rea1', kind: 'video', status: 'completed', model: 'Reverse engineer', prompt: '', params: {}, progress: 1, assets: [{ id: 'ma_none', kind: 'image', mime: 'image/jpeg', size: 10, width: 640, height: 360, saved: true }] } }));
   return posted;
 }

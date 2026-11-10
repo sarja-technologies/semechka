@@ -33,7 +33,7 @@ export function startAnalysis(p: ReaProfile, assetId: string): Promise<any> {
 export type Analysis = Record<string, unknown>;
 /** The full analysis of a finished job, or null when this server does not serve one (404/501). */
 export async function loadAnalysis(jobId: string): Promise<Analysis | null> {
-  try { return await get(`/api/media/jobs/${encodeURIComponent(jobId)}/reverse`); }
+  try { return await get(`/api/media/jobs/${encodeURIComponent(jobId)}/analysis`); }
   catch (e) { if (e instanceof ApiError && (e.status === 404 || e.status === 405 || e.status === 501)) return null; throw e; }
 }
 
