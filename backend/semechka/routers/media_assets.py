@@ -109,7 +109,7 @@ async def upload(request: Request, name: str = "", ephemeral: bool = False, ctx:
 @router.get("/assets")
 def list_assets(kind: str | None = None, origin: str | None = None, limit: int = 60, before: float | None = None, ctx: Ctx = Depends(current)):
     """The person's library, newest first: generated results, uploads and edited copies. ``before`` is a created_at to continue from."""
-    if kind not in (None, "image", "video") or origin not in (None, "generated", *media_lib.ORIGINS):
+    if kind not in (None, "image", "video", "audio", "3d") or origin not in (None, "generated", *media_lib.ORIGINS):
         raise HTTPException(422, {"code": "invalid", "message": "Unknown filter."})
     if not (library_ok(ctx)):
         raise HTTPException(403, {"code": "forbidden", "message": "Pictures and videos are not available to you."})
@@ -254,6 +254,9 @@ def _jpeg(data: bytes | None, cache: str = "private, max-age=600") -> Response:
 async def thumb(aid: str, ctx: Ctx = Depends(current)):
     """A small preview picture (about 480 px) of any picture or video; made on first request for older items."""
     st = ctx.st
+    a, mem = find(ctx, aid)
+    if (media_lib._mem(st)[mem]["meta"]["kind"] if mem else a.kind) not in ("image", "video"):     # a sound or a 3D mesh has no picture to show
+        raise HTTPException(404, {"code": "no_preview", "message": "This file has no preview picture."})
     return _jpeg(await _derived(ctx, aid, "thumb", lambda pr, src, out: media_lib.make_thumb(st, pr, src, out)))
 
 
@@ -286,6 +289,8 @@ async def start_edit(aid: str, body: EditIn, ctx: Ctx = Depends(current)):
     a, mem = find(ctx, aid)
     if a is not None:
         asset_gate(ctx, a.kind, media_lib.origin_of(ctx.st, a))
+    if (a.kind if a is not None else media_lib.mem_info(ctx.st, mem)["kind"]) not in ("image", "video"):   # sounds and 3D meshes (Experimental tools) are not edited here
+        raise HTTPException(422, {"code": "invalid", "message": "Only pictures and videos can be trimmed, cropped or rotated."})
     if not mem:
         quota = _val(ctx, "media.max_assets")
         if quota and media_svc.count_assets(ctx.s, ctx.user.id) >= quota:

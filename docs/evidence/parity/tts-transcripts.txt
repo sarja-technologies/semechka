@@ -1,0 +1,4 @@
+Parakeet (local ASR) transcripts of the Kokoro speech files; "end" is the last word's end time.
+engine job 1, af_heart 1.0x (7.325 s file): 7.12 s: Good evening. This is the Spark Media engine reading a short test sentence, number 42, at normal speed.   [exact]
+engine job 2, bf_emma 1.4x: 3.36 s: The quick brown fox jumps over the lazy dog, while the kettleball is in the kitchen.   [sent: "...while the kettle boils in the kitchen."; ASR mishears the fast speech]
+through Semechka, acme-eng (7.225 s file): 7.04 s: This speech was made by the experimental audio tool in Semechka. It runs on the Spark without a cloud service.   [exact]

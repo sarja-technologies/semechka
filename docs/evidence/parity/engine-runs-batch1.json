@@ -1,0 +1,207 @@
+[
+ {
+  "name": "src_mug",
+  "job": "d833bcedf79a",
+  "status": "completed",
+  "error": null,
+  "wall_s": 20.3,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 1 of 8",
+   "Generating, step 3 of 8",
+   "Generating, step 5 of 8",
+   "Generating, step 6 of 8",
+   "Generating, step 7 of 8",
+   "Generating, step 8 of 8",
+   "Preparing",
+   "Saving the result"
+  ],
+  "applied": {
+   "model": "z-image-turbo",
+   "mode": "txt2img",
+   "feature": "soul.t2i",
+   "width": 1024,
+   "height": 1024,
+   "output": {
+    "width": 1024,
+    "height": 1024
+   },
+   "sampler_steps_last": 8
+  },
+  "files": [
+   {
+    "file": "out/b1/src_mug.0.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 843107,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "src_style",
+  "job": "cd6b0442c104",
+  "status": "completed",
+  "error": null,
+  "wall_s": 8.2,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 1 of 8",
+   "Generating, step 3 of 8",
+   "Generating, step 4 of 8",
+   "Generating, step 5 of 8",
+   "Generating, step 6 of 8",
+   "Generating, step 8 of 8",
+   "Preparing"
+  ],
+  "applied": {
+   "model": "z-image-turbo",
+   "mode": "txt2img",
+   "feature": "soul.t2i",
+   "width": 1024,
+   "height": 1024,
+   "output": {
+    "width": 1024,
+    "height": 1024
+   },
+   "sampler_steps_last": 8
+  },
+  "files": [
+   {
+    "file": "out/b1/src_style.0.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 1683839,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "bgremove",
+  "job": "62baac6db228",
+  "status": "completed",
+  "error": null,
+  "wall_s": 3.4,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Preparing"
+  ],
+  "applied": {
+   "tool": "bg-remove",
+   "feature": "image.bg-remove",
+   "output": {
+    "width": 1024,
+    "height": 1024
+   }
+  },
+  "files": [
+   {
+    "file": "out/b1/bgremove.0.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 1180803,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   },
+   {
+    "file": "out/b1/bgremove.1.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 61305,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "style",
+  "job": "d32bab3e2a0d",
+  "status": "completed",
+  "error": null,
+  "wall_s": 47.2,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 1 of 8",
+   "Generating, step 2 of 8",
+   "Generating, step 3 of 8",
+   "Generating, step 4 of 8",
+   "Generating, step 5 of 8",
+   "Generating, step 6 of 8",
+   "Generating, step 7 of 8",
+   "Generating, step 8 of 8",
+   "Preparing"
+  ],
+  "applied": {
+   "tool": "style-reference",
+   "feature": "soul.styles",
+   "aspect": "1:1 (Square)",
+   "seed": 31,
+   "output": {
+    "width": 1024,
+    "height": 1024
+   },
+   "sampler_steps_last": 8
+  },
+  "files": [
+   {
+    "file": "out/b1/style.0.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 1855097,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "music",
+  "job": "731c93be0a5d",
+  "status": "completed",
+  "error": null,
+  "wall_s": 20.3,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating",
+   "Generating, step 1 of 8",
+   "Generating, step 26 of 100",
+   "Generating, step 56 of 100",
+   "Generating, step 83 of 100",
+   "Preparing",
+   "Saving the result"
+  ],
+  "applied": {
+   "tool": "ace-step-music",
+   "feature": "audio.music",
+   "duration": 20,
+   "bpm": 80,
+   "seed": 1234,
+   "output": {
+    "duration": 20.04
+   },
+   "sampler_steps_last": 8
+  },
+  "files": [
+   {
+    "file": "out/b1/music.0.mp3",
+    "type": "audio",
+    "mime": "audio/mpeg",
+    "size": 615640,
+    "width": null,
+    "height": null,
+    "duration": 20.04
+   }
+  ]
+ }
+]

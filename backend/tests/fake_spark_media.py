@@ -12,13 +12,19 @@ from . import fake_sarness as fs
 
 TOKEN = "fake-spark-media-token"
 CAPS = json.loads((Path(__file__).parent / "fixtures" / "spark_media_caps.json").read_text())
+# Experimental tools: a REAL capture of the engine's GET /v1/tools (fixtures/spark_media_tools.json, 2026-11-10; moge-relief still unverified there).
+# Served in /v1/capabilities only when a test sets STATE["tools"] (the capture of /v1/capabilities predates the list).
+TOOLS = json.loads((Path(__file__).parent / "fixtures" / "spark_media_tools.json").read_text())
+WAV = b"RIFF" + (36 + 8).to_bytes(4, "little") + b"WAVEfmt " + (16).to_bytes(4, "little") + bytes([1, 0, 1, 0]) + (24000).to_bytes(4, "little") + (48000).to_bytes(4, "little") + bytes([2, 0, 16, 0]) + b"data" + (8).to_bytes(4, "little") + bytes(8)
+GLB = b"glTF" + (2).to_bytes(4, "little") + (20 + 12).to_bytes(4, "little") + (12).to_bytes(4, "little") + b"JSON" + b'{"asset":{} }'[:12]
 app = FastAPI()
 STATE: dict = {}
 
 
 def reset():
     STATE.clear()
-    STATE.update(jobs={}, by_key={}, uploads={}, files={}, discards=[], submissions=[], profile_submissions=[], cancels=[], n=0, comfy=True, releases=[], upload_status=None)
+    STATE.update(jobs={}, by_key={}, uploads={}, files={}, discards=[], submissions=[], profile_submissions=[], cancels=[], n=0, comfy=True, releases=[], upload_status=None,
+                 tools=None, tool_submissions=[])
 
 
 reset()
@@ -43,7 +49,31 @@ def system():
 
 @app.get("/v1/capabilities", dependencies=[Depends(auth)])
 def capabilities():
-    return CAPS
+    return CAPS if STATE["tools"] is None else {**CAPS, "tools": STATE["tools"]}
+
+
+@app.post("/v1/tools/{tid}/jobs", status_code=202, dependencies=[Depends(auth)])
+async def submit_tool(tid: str, request: Request):
+    body = await request.json()
+    t = next((x for x in STATE["tools"] or [] if x["id"] == tid), None)
+    if t is None:
+        raise HTTPException(404, "unknown tool")
+    if not t["ready"]:
+        raise HTTPException(409, f"{t['name']} is not available on this server: {t['reason']}")
+    key = str(body.get("client_key") or "")
+    if key and key in STATE["by_key"]:
+        return _doc(STATE["jobs"][STATE["by_key"][key]])
+    for k, spec in t["inputs_schema"].items():
+        if spec["type"] == "file" and (body.get("inputs") or {}).get(k) not in STATE["uploads"]:
+            raise HTTPException(422, f"'{k}' is not an uploaded file")
+    STATE["n"] += 1
+    jid = f"{STATE['n']:012x}"
+    STATE["jobs"][jid] = {"id": jid, "client_key": key, "kind": t["output"], "model": tid, "status": "queued", "polls": 0, "simple": {"prompt": str((body.get("inputs") or {}).get("text") or (body.get("inputs") or {}).get("prompt") or "")},
+                          "profile": None, "tool": tid, "error": None}
+    STATE["tool_submissions"].append({"tool": tid, **(body.get("inputs") or {})})
+    if key:
+        STATE["by_key"][key] = jid
+    return _doc(STATE["jobs"][jid])
 
 
 @app.get("/v1/models/{mid}/estimate", dependencies=[Depends(auth)])
@@ -117,6 +147,8 @@ async def submit_profile(pid: str, request: Request):
 
 
 def _gen(j):
+    if j.get("tool"):
+        return _tool_gens(j)[0]
     if j["kind"] == "image":
         data, typ, w, h, extra = fs.make_png(), "image", 4, 4, {}
     else:
@@ -127,6 +159,18 @@ def _gen(j):
     gid = f"{j['id']}-0"
     STATE["files"][gid] = data
     return {"id": gid, "file_id": gid, "type": typ, "width": w, "height": h, "seed": j["simple"].get("seed"), **extra}
+
+
+def _tool_gens(j):
+    """What the real tools deliver: speech or music (one audio file), a 3D relief (a GLB and its depth picture), picture tools (PNGs)."""
+    out = []
+    files = {"audio": [(WAV, "audio", {"duration": 0.0002, "sample_rate": 24000, "channels": 1})], "3d": [(GLB, "3d", {}), (fs.make_png(), "image", {"width": 4, "height": 4})],
+             "image": [(fs.make_png(), "image", {"width": 4, "height": 4})] * (2 if j["tool"] == "bg-remove" else 1)}[j["kind"]]
+    for i, (data, typ, extra) in enumerate(files):
+        gid = f"{j['id']}-{i}"
+        STATE["files"][gid] = data
+        out.append({"id": gid, "file_id": gid, "type": typ, **extra})
+    return out
 
 
 def _doc(j):
@@ -142,7 +186,7 @@ def _doc(j):
         elif "boom" in text:
             j.update(status="failed", error="ComfyUI error: out of memory at /home/spark/opensfield/comfyui/x.py")
         else:
-            j.update(status="completed", progress=1.0, generations=[_gen(j)])
+            j.update(status="completed", progress=1.0, generations=_tool_gens(j) if j.get("tool") else [_gen(j)])
     return {"id": j["id"], "client_key": j["client_key"], "kind": j["kind"], "model": j["model"], "status": j["status"], "progress": j.get("progress"),
             "progress_text": "Queued (position 1)" if j["status"] == "queued" else "Generating, step 3 of 8", "queue_position": 1 if j["status"] == "queued" else None,
             "error": {"message": j["error"]} if j.get("error") else None, "applied": {}, "generations": j.get("generations", [])}
@@ -187,7 +231,8 @@ def get_file(fid: str):
     data = STATE["files"].get(fid)
     if data is None:
         raise HTTPException(404, "no such file")
-    return Response(data, media_type="image/png" if data.startswith(b"\x89PNG") else "video/mp4")
+    mime = "image/png" if data.startswith(b"\x89PNG") else "audio/wav" if data.startswith(b"RIFF") else "model/gltf-binary" if data.startswith(b"glTF") else "video/mp4"
+    return Response(data, media_type=mime)
 
 
 @app.delete("/v1/generations/{gid}", status_code=204, dependencies=[Depends(auth)])

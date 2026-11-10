@@ -47,6 +47,8 @@ def operations(ctx_s, st, p, g, modes: dict) -> dict:
     out["openjutsu"] = studio_svc.availability(st, ctx_s, p, modes["video"])  # the OpenJutsu Studio navigation entry (an editing model the person may use)
     from .. import imajutsu_svc
     out["imajutsu"] = imajutsu_svc.availability(st, ctx_s, p, modes["image"])  # the Imajutsu navigation entry (an image model with txt2img or edit the person may use)
+    from .. import media_extras
+    out["extras"] = media_extras.availability(st, ctx_s, p, modes)  # the Experimental Audio / Tools / 3D groups (tools an administrator enabled for this person)
     return out
 
 

@@ -3,7 +3,7 @@
   let { name, size = 18, label = '' }: { name: string; size?: number; label?: string } = $props();
   const P: Record<string, string> = {
     chat: 'M4 5h16v11H9l-5 4V5z', code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16', image: 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M9 9.5h.01',
-    video: 'M3 6h12v12H3zM15 10l6-3v10l-6-3', audio: 'M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2', knowledge: 'M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11',
+    video: 'M3 6h12v12H3zM15 10l6-3v10l-6-3', cube: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9', audio: 'M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2', knowledge: 'M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11',
     agents: 'M14 7l3-3 3 3-3 3zM4 20l9-9M4 14l3 3', usage: 'M4 20V10M10 20V4M16 20v-7M22 20H2', help: 'M12 17v.01M9.5 9a2.5 2.5 0 115 0c0 2-2.5 2-2.5 4M3 12a9 9 0 1018 0 9 9 0 10-18 0',
     settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6', users: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2 20c0-3.5 3-6 7-6s7 2.5 7 6M17 5a3 3 0 010 6M22 20c0-2.5-1.5-4.5-4-5.3',
     shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', cpu: 'M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4', list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',

@@ -15,7 +15,8 @@
   let filter = $state('all'), items = $state<Asset[]>([]), loading = $state(false), more = $state(true), error = $state(''), chosen = $state<Asset[]>([]), dlg: HTMLDivElement | undefined = $state();
   let opener: Element | null = null;
   const f = $derived(FILTERS.find((x) => x.id === filter)!);
-  const shown = $derived(accept === 'any' ? items : items.filter((a) => a.kind === accept));
+  // pictures and videos only: sounds and 3D meshes from Experimental tools are not sources for these flows
+  const shown = $derived(accept === 'any' ? items.filter((a) => a.kind === 'image' || a.kind === 'video') : items.filter((a) => a.kind === accept));
 
   async function load(reset: boolean) {
     if (loading) return;

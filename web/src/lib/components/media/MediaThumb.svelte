@@ -4,7 +4,7 @@
   import { thumbUrl, contentUrl, fmtDuration, isLibraryId } from '$lib/media/assets';
 
   let { id, kind, src, name = '', duration = null, fit = 'cover', badge = true, ratio }:
-    { id?: string; kind: 'image' | 'video' | 'file'; src?: string | null; name?: string; duration?: number | null; fit?: 'cover' | 'contain'; badge?: boolean; ratio?: string } = $props();
+    { id?: string; kind: 'image' | 'video' | 'file' | 'audio' | '3d'; src?: string | null; name?: string; duration?: number | null; fit?: 'cover' | 'contain'; badge?: boolean; ratio?: string } = $props();
 
   let failed = $state(false), loaded = $state(false), fallback = $state(false);
   const url = $derived.by(() => {
@@ -18,8 +18,8 @@
 </script>
 
 <div class="th" class:contain={fit === 'contain'} style:aspect-ratio={ratio}>
-  {#if kind === 'file' || failed || !url}
-    <span class="ph"><Icon name={kind === 'video' ? 'video' : kind === 'image' ? 'image' : 'file'} size={22} /></span>
+  {#if kind === 'file' || kind === 'audio' || kind === '3d' || failed || !url}
+    <span class="ph"><Icon name={kind === 'video' ? 'video' : kind === 'image' ? 'image' : kind === 'audio' ? 'audio' : kind === '3d' ? 'cube' : 'file'} size={22} /></span>
   {:else}
     <img src={url} alt={name} draggable="false" loading="lazy" class:in={loaded} onload={() => (loaded = true)} onerror={broke} />
     {#if !loaded}<span class="sk" aria-hidden="true"></span>{/if}

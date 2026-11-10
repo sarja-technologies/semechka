@@ -39,6 +39,10 @@ UNREACHABLE_GIVE_UP_S = 10 * 60
 MAX_FETCH_FAILURES = 5
 PROMPT_MAX = 4000
 SAFE_MIME = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm"}
+# Experimental tools (media_extras.py): speech/music and 3D results. Additive; image/video behaviour is unchanged.
+SAFE_MIME.update({"audio/wav": "wav", "audio/mpeg": "mp3", "audio/flac": "flac", "model/gltf-binary": "glb"})
+MAX_BYTES.update({"audio": 200 * 1024 * 1024, "3d": 300 * 1024 * 1024, "tool": 300 * 1024 * 1024})   # "tool": a job of media_extras (per file)
+OUTPUT_KINDS = ("image", "video", "audio", "3d")
 ACTIVE = ("queued", "running")
 
 
@@ -568,7 +572,7 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
                 for o, path, mime in fetched:  # files first (slow), the write lock only for the rows (fast)
                     aid = "ma_" + uuid.uuid4().hex[:24]
                     size = await media_lib.seal_to_store(st, user_id, aid, path)
-                    rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=kind, model_id=model_id, mime=mime,
+                    rows.append(MediaAsset(id=aid, user_id=user_id, job_id=job_id, kind=_asset_kind(kind, o, mime), model_id=model_id, mime=mime,
                                            size=size, width=o.get("width"), height=o.get("height"),
                                            duration=o.get("duration"), seed=o.get("seed"),
                                            prompt_enc=st.vault.encrypt(prompt, "media"), params_enc=params_enc or "",
@@ -589,12 +593,21 @@ async def _collect(st, job_id, ad, outputs, kind, user_id, model_id, save, promp
             for o, data, mime in fetched:
                 _mem(st)["me_" + uuid.uuid4().hex[:24]] = {
                     "user_id": user_id, "job_id": job_id, "data": data, "mime": mime, "expires": now + EPHEMERAL_TTL,
-                    "meta": {"kind": kind, "width": o.get("width"), "height": o.get("height"),
+                    "meta": {"kind": _asset_kind(kind, o, mime), "width": o.get("width"), "height": o.get("height"),
                              "duration": o.get("duration"), "seed": o.get("seed"), "created_at": now}}
     st.__dict__.setdefault("media_counters", {}).pop(f"fetch_fail:{job_id}", None)
     for o in outputs:  # the engine keeps no copy of the result file
         await _discard(ad, o)
     _finish(st, job_id, "completed")
+
+
+def _asset_kind(job_kind: str, o: dict, mime: str) -> str:
+    """What one stored result is. Image and video jobs keep their kind; an Experimental tool's job can deliver more than one kind of file (a 3D mesh AND its
+    depth picture), so each file is filed by what the engine says it is (checked against its MIME type)."""
+    if job_kind in ("image", "video"):
+        return job_kind
+    by_mime = "image" if mime.startswith("image/") else "audio" if mime.startswith("audio/") else "3d" if mime == "model/gltf-binary" else "video" if mime.startswith("video/") else job_kind
+    return by_mime if by_mime in OUTPUT_KINDS else job_kind
 
 
 async def _discard(ad, o) -> None:
@@ -725,4 +738,4 @@ def count_assets(s, user_id: str) -> int:
 def generations_today(s, user_id: str) -> int:
     return s.execute(select(func.count()).select_from(UsageEvent).where(
         UsageEvent.user_id == user_id, UsageEvent.ts >= time.time() - 86400,
-        UsageEvent.kind.in_(MEDIA_KINDS))).scalar() or 0
+        UsageEvent.kind.in_(MEDIA_KINDS + ("tool",)))).scalar() or 0      # Experimental tool jobs count towards the same daily limit

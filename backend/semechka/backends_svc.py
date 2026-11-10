@@ -18,7 +18,7 @@ def adapter_for(b: Backend, st) -> adapters.Adapter:
 def friendly_alias(real_id: str) -> str:
     base = real_id.split("/")[-1]
     base = re.sub(r"\.(gguf|bin)$", "", base, flags=re.I)
-    base = base.split(":", 1)[-1] if base.startswith(("local:", "endpoint:", "image:", "video:")) else base
+    base = base.split(":", 1)[-1] if base.startswith(("local:", "endpoint:", "image:", "video:", "tool:")) else base
     a, _, b = base.partition(":")
     if a and a == b:  # endpoint:trinodal:trinodal -> trinodal (an endpoint and its one model share a name)
         base = b

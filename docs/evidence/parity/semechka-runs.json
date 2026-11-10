@@ -1,0 +1,129 @@
+[
+ {
+  "name": "moge",
+  "job": "mj_1293b6e73c864dc7acb57923",
+  "kind": "tool",
+  "status": "completed",
+  "error": null,
+  "wall_s": 72.4,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 1 of 1",
+   "Preparing",
+   "Queued (position 2)"
+  ],
+  "assets": [
+   {
+    "file": "out/sem/moge.0.glb",
+    "id": "ma_3d991bfb12bb421b8a8dc944",
+    "kind": "3d",
+    "mime": "model/gltf-binary",
+    "size": 12074448,
+    "width": null,
+    "height": null,
+    "duration": null
+   },
+   {
+    "file": "out/sem/moge.1.png",
+    "id": "ma_34065a23af2544a296e57b29",
+    "kind": "image",
+    "mime": "image/png",
+    "size": 273908,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "bgremove",
+  "job": "mj_caf628369ba14b3b901586e4",
+  "kind": "tool",
+  "status": "completed",
+  "error": null,
+  "wall_s": 2.4,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Preparing"
+  ],
+  "assets": [
+   {
+    "file": "out/sem/bgremove.0.png",
+    "id": "ma_4759a917df6944718c9ff1ed",
+    "kind": "image",
+    "mime": "image/png",
+    "size": 1180803,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   },
+   {
+    "file": "out/sem/bgremove.1.png",
+    "id": "ma_ef0586c424df4a399226f937",
+    "kind": "image",
+    "mime": "image/png",
+    "size": 61305,
+    "width": 1024,
+    "height": 1024,
+    "duration": null
+   }
+  ]
+ },
+ {
+  "name": "smooth",
+  "job": "mj_4c0bab1cc7f44456a3b1fb28",
+  "kind": "video",
+  "status": "completed",
+  "error": null,
+  "wall_s": 4.4,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 19 of 35",
+   "Generating, step 32 of 35",
+   "Generating, step 9 of 35"
+  ],
+  "assets": [
+   {
+    "file": "out/sem/smooth.0.mp4",
+    "id": "ma_06aa15a469294a439f71b688",
+    "kind": "video",
+    "mime": "video/mp4",
+    "size": 342123,
+    "width": 640,
+    "height": 360,
+    "duration": 2.958
+   }
+  ]
+ },
+ {
+  "name": "music",
+  "job": "mj_86660494a2d441288d4f0a84",
+  "kind": "tool",
+  "status": "completed",
+  "error": null,
+  "wall_s": 16.9,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 11 of 60",
+   "Generating, step 3 of 8",
+   "Generating, step 38 of 60",
+   "Preparing"
+  ],
+  "assets": [
+   {
+    "file": "out/sem/music.0.mp3",
+    "id": "ma_5f6feb8c6e534608b24e6690",
+    "kind": "audio",
+    "mime": "audio/mpeg",
+    "size": 381490,
+    "width": null,
+    "height": null,
+    "duration": 12.024
+   }
+  ]
+ }
+]

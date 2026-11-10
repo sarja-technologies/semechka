@@ -102,15 +102,13 @@ def load_pic(st, s, user_id: str, aid, what: str, *, missing: int = 422) -> Pic:
         if missing == 404:
             raise ImajutsuError(404, "not_found", "Not found.")
         raise ImajutsuError(422, "asset_missing", f"{what} is no longer in your library.")
+    if (media_lib.mem_info(st, got)["kind"] if isinstance(got, str) else got.kind) != "image":   # before reading a size: a sound or 3D mesh has none
+        raise ImajutsuError(422, "invalid", f"{what} must be a picture.")
     if isinstance(got, str):
         info = media_lib.mem_info(st, got)
         pic = Pic(got, got, True, info["mime"], int(info["width"]), int(info["height"]), media_lib.clean_name(info.get("name"), "image"), info["size"])
-        kind = info["kind"]
     else:
         pic = Pic(got.id, got, False, got.mime, int(got.width), int(got.height), media_lib.display_name(media_lib.meta_of(st, got), got.kind, got.id), got.size)
-        kind = got.kind
-    if kind != "image":
-        raise ImajutsuError(422, "invalid", f"{what} must be a picture.")
     if pic.mime == "image/gif":
         raise ImajutsuError(422, "unsupported_type", f"{what} is an animated GIF; save a frame as PNG first.")
     return pic
