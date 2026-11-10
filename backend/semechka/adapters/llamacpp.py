@@ -55,6 +55,7 @@ DEFAULT_HEADROOM_MIB = 8192
 DEFAULT_LOAD_TIMEOUT = 300.0
 POLL_SECONDS = 1.0
 STATUS_EVERY = 2.0
+DIED_AFTER = 8.0  # a model still `unloaded` this long after its load was requested has failed to start
 
 _FILE_CACHE: dict[str, tuple[float, object]] = {}
 _LOAD_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
@@ -353,7 +354,7 @@ class LlamaCppAdapter(Adapter):
                 st = _state({m["id"]: m for m in await self._models_raw()}.get(model, {}))
                 if st == "loaded":
                     return
-                if st == "unloaded" and elapsed > 8:
+                if st == "unloaded" and elapsed > DIED_AFTER:
                     raise AdapterError("The model stopped while it was loading. Try again in a moment; if it keeps happening an "
                                        "administrator should look at the model service.", kind="load_failed")
                 if elapsed > timeout:
@@ -370,9 +371,14 @@ class LlamaCppAdapter(Adapter):
         for k in _SAMPLING + _EXTRA:
             if params.get(k) is not None:
                 body[k] = params[k]
-        entry = models_table(self.options).get(model) or {}
-        if isinstance(params.get("thinking"), bool) and entry.get("reasoning") and not model.startswith("gpt-oss"):
-            body["chat_template_kwargs"] = {"enable_thinking": params["thinking"]}
+        if isinstance(params.get("thinking"), bool):
+            # Reasoning on/off. Qwen-family templates read `enable_thinking` (whatever models.json says: the 0.8B model thinks by
+            # default although it is not listed as a reasoning model); gpt-oss has effort levels instead; other templates ignore it.
+            if model.startswith("gpt-oss"):
+                if not params["thinking"]:
+                    body["chat_template_kwargs"] = {"reasoning_effort": "low"}
+            else:
+                body["chat_template_kwargs"] = {"enable_thinking": params["thinking"]}
         tools = params.get("tools")
         if tools:
             if not tools_verified(model, self.options):
