@@ -62,10 +62,11 @@ def options(kind: str, ctx: Ctx = Depends(current)):
     _gate(ctx, kind)
     vmax = _val(ctx, "media.video_max_seconds")
     size = _val(ctx, "media.default_image_size")
+    from ..media_extras import display_name
     models = []
     for m, b in services.accessible_models(ctx.s, ctx.principal, ctx.st, kind):
         info = media_svc.media_info(m)
-        models.append({"id": m.id, "alias": m.alias, "pinned": m.pinned, "external": services.is_external(m, b),
+        models.append({"id": m.id, "alias": m.alias, "display_name": display_name(m), "pinned": m.pinned, "external": services.is_external(m, b),
                        "description": (m.meta or {}).get("description"), "negative_prompt": bool(info.get("negative_prompt")),
                        "modes": info.get("modes") or [], "audio": bool(info.get("audio")),
                        "references": int(info.get("references") or 0),

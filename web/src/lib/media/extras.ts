@@ -29,7 +29,7 @@ export function videoTools(options: any): Tool[] {
   for (const m of options?.models ?? []) {
     const p = m.profile;
     if (!p || !VIDEO_TOOL.test(String(p.id ?? ''))) continue;
-    out.push({ id: m.id, alias: m.alias, description: m.description ?? p.description ?? null, license: p.license ?? null, caution: p.caution ?? null, group: 'video', output: 'video',
+    out.push({ id: m.id, alias: m.display_name ?? m.alias, description: m.description ?? p.description ?? null, license: p.license ?? null, caution: p.caution ?? null, group: 'video', output: 'video',
       ready: p.ready !== false, reason: p.reason ?? null, inputs_schema: p.inputs_schema ?? {}, outputs: ['video (MP4)'], typical_seconds: p.typical_seconds ?? null, via: 'profile' });
   }
   return out;

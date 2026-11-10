@@ -95,12 +95,17 @@ def availability(st, s, p, modes: dict | None = None) -> dict:
     return {"enabled": bool(groups), "reason": "" if groups else "No Experimental tool is enabled for you.", "groups": groups}
 
 
+def display_name(m: Model) -> str:
+    """The engine's own name ("Smooth motion (FILM interpolation)") unless an administrator renamed the row; else the alias."""
+    from .backends_svc import friendly_alias
+    eng = (m.meta or {}).get("engine_name")
+    return eng if eng and m.alias == friendly_alias(m.real_id) else m.alias
+
+
 def tool_out(s, p, m: Model, b: Backend, grants=None) -> dict:
     t = tool_info(m) or {}
     meta = m.meta or {}
-    from .backends_svc import friendly_alias
-    name = meta.get("engine_name") if m.alias == friendly_alias(m.real_id) and meta.get("engine_name") else m.alias   # the engine's own name unless an administrator renamed it
-    return {"id": m.id, "alias": name, "description": meta.get("description"), "license": meta.get("license"),
+    return {"id": m.id, "alias": display_name(m), "description": meta.get("description"), "license": meta.get("license"),
             "caution": media_svc.media_info(m).get("caution"), "tool": t.get("id"), "group": t.get("group"), "output": t.get("output"),
             "ready": bool(t.get("ready")), "reason": t.get("reason"), "inputs_schema": t.get("inputs_schema") or {}, "outputs": t.get("outputs") or [],
             "typical_seconds": t.get("typical_seconds"), "external": services.is_external(m, b),

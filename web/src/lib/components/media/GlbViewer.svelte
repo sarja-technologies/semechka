@@ -111,8 +111,8 @@
 
   onMount(() => {
     let stop = false, raf = 0, gl: WebGLRenderingContext | null = null;
-    let yaw = 0, pitch = 0, dist = 2.5, center = [0, 0, 0], radius = 1;
-    const reset = () => { yaw = 0; pitch = 0; dist = 2.6; draw(); };
+    let yaw = 0, pitch = 0, dist = 2.6, center = [0, 0, 0], radius = 1, unit = 1, home = 2.6, photo: { tx: number; ty: number } | null = null;
+    const reset = () => { yaw = 0; pitch = 0; dist = home; draw(); };
     let draw = () => {};
     const ptrs = new Map<number, { x: number; y: number }>();
     let pinch = 0;
@@ -170,6 +170,21 @@
         });
         center = [0, 1, 2].map((a) => (lo[a] + hi[a]) / 2);
         radius = Math.max(1e-6, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2);
+        unit = radius;
+        // A relief made from one picture (MoGe) is in that picture's camera frame: camera at the origin looking down -Z.
+        // Then open from the photo's own viewpoint (it looks like the picture) and orbit a point at the middle depth,
+        // instead of framing a bounding box that the far background makes huge.
+        if (hi[2] < 0) {
+          const zs: number[] = [], txs: number[] = [], tys: number[] = [];
+          for (const p of prims) { const step = Math.max(3, Math.floor(p.pos.length / 3 / 20000) * 3); for (let i = 0; i + 2 < p.pos.length; i += step) { const z = -p.pos[i + 2]; if (z > 0) { zs.push(z); txs.push(Math.abs(p.pos[i] / z)); tys.push(Math.abs(p.pos[i + 1] / z)); } } }
+          const q = (a: number[], f: number) => { const b = [...a].sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(f * b.length))] ?? 0; };
+          const mz = q(zs, 0.5), tx = q(txs, 0.995), ty = q(tys, 0.995);
+          if (mz > 0 && tx > 0.02 && ty > 0.02 && tx < 3 && ty < 3) {
+            photo = { tx: tx * 1.03, ty: ty * 1.03 };
+            center = [0, 0, -mz]; unit = mz; home = 1; dist = 1;
+            radius = Math.max(...[[lo[0], lo[1], lo[2]], [hi[0], hi[1], hi[2]], [lo[0], hi[1], lo[2]], [hi[0], lo[1], lo[2]]].map((c) => Math.hypot(c[0] - center[0], c[1] - center[1], c[2] - center[2])));
+          }
+        }
         hasColour = objs.some((o) => o.tex || o.cb);
         if (!hasColour) mode = 'shape';
         stats = [`${Math.round(verts).toLocaleString()} points`, `${Math.round(tris).toLocaleString()} triangles`, texInfo].filter(Boolean).join(' · ');
@@ -182,8 +197,10 @@
             if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
             g.viewport(0, 0, w, h);
             g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);   // transparent: the canvas's own (theme) background shows through
-            const d = dist * radius, eye = [center[0] + d * Math.sin(yaw) * Math.cos(pitch), center[1] + d * Math.sin(pitch), center[2] + d * Math.cos(yaw) * Math.cos(pitch)];
-            const mvp = mul(persp(0.75, w / h, Math.max(1e-4, d - radius * 2), d + radius * 2), lookAt(eye, center));
+            const d = dist * unit, eye = [center[0] + d * Math.sin(yaw) * Math.cos(pitch), center[1] + d * Math.sin(pitch), center[2] + d * Math.cos(yaw) * Math.cos(pitch)];
+            const fov = photo ? 2 * Math.atan(Math.max(photo.ty, photo.tx / (w / h))) : 0.75;
+            const near = photo ? Math.max(unit * 0.01, d - radius) : Math.max(1e-4, d - radius * 2), far = photo ? d + radius : d + radius * 2;
+            const mvp = mul(persp(fov, w / h, near, far), lookAt(eye, center));
             g.uniformMatrix4fv(loc.m, false, mvp);
             const ex = eye[0] - center[0], ey = eye[1] - center[1], ez = eye[2] - center[2], el = Math.hypot(ex, ey, ez) || 1;
             g.uniform3f(loc.l, ex / el, ey / el, ez / el);

@@ -241,3 +241,19 @@ def test_sounds_and_meshes_are_not_edited_previewed_or_used_as_pictures(ex):
         assert r.status_code == 422                                          # not a picture: refused before anything is sent
     lib = ex.get("/api/media/assets").json()
     assert {x["kind"] for x in lib} >= {"audio", "3d", "image"}
+
+
+def test_video_tools_show_the_engines_name_unless_an_administrator_renamed_them(ex, app, st):
+    from semechka.models import Model
+    from sqlalchemy import select
+    with st.db.session() as s:
+        m = s.execute(select(Model).where(Model.real_id == "video:minimax-h3")).scalar_one()
+        m.meta = {**(m.meta or {}), "engine_name": "MiniMax H3 (engine name)"}
+        s.commit()
+        mid = m.id
+    shown = lambda: {x["id"]: x for x in ex.get("/api/media/options", params={"kind": "video"}).json()["models"]}[mid]  # noqa: E731
+    assert shown()["display_name"] == "MiniMax H3 (engine name)" and shown()["alias"] == "minimax-h3"   # the raw id is never the title
+    with st.db.session() as s:
+        s.get(Model, mid).alias = "Our video model"
+        s.commit()
+    assert shown()["display_name"] == "Our video model"                                                 # an administrator's name wins
