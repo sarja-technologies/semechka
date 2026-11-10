@@ -76,7 +76,7 @@ Engine-only extras that exist in OpenSfield but Semechka does not use (kept avai
 | `qwen-image-2512` | 512-1664, multiple of 16 | n/a | seed; `steps` <= 8 = **Fast** (Lightning, default), > 8 = **Quality** (the workflow's own full-step branch; its step count is the workflow's, reported in `applied.sampler_steps_last`) |
 | `flux2-klein-4b` | any width/height 512-1536, multiple of 16: the engine sets the verified graph's two size values (`PrimitiveInt` nodes `75:68`/`75:69`), nothing else changes; the render is checked by eye in the Evidence section | n/a | seed |
 | `krea2-turbo` | fixed shapes (8 aspects, about 1 MP): a request snaps to the nearest shape within 4 % (otherwise 422 listing the shapes) and the job reports `applied.size_snapped_from` | n/a | seed |
-| `qwen-image-edit-2511`, `qwen-image-2.1`, `flux1-fill-dev` | the output follows the source picture (`size_policy: source_shape`); width/height are ignored and `applied.size_ignored` says so | n/a | edit: `steps` Fast/Quality; inpaint: mask white = repaint |
+| `qwen-image-edit-2511`, `qwen-image-2.1`, `flux1-fill-dev` | the output follows the source picture (`size_policy: source_shape`): width/height are ignored, the workflow picks its own size (about 1 MP, close to the source's shape: measured 720x1280 -> 752x1392 for Qwen-Image-Edit) and the asset records the real size; `applied.size_ignored` says so | n/a | edit: `steps` Fast/Quality; inpaint: mask white = repaint |
 | `ltx-2.3` | 24 sizes (aspect x quality, 384-1344 px) | whole seconds 1-10 -> **24 s + 1 frames at 24 fps** (1.042 s ... 10.042 s) | seed; audio generated |
 | `wan2.2-ti2v-5b` | 16 sizes (448-1376 px) | 1-8 s -> **24 s + 1 frames at 24 fps** (1.042 ... 8.042 s) | seed |
 | `wan2.2-i2v-a14b` | 24 sizes (416-1440 px) | 1-8 s -> **16 s + 1 frames at 16 fps** (1.062 ... 8.062 s) | seed; Fast/Quality |
@@ -229,7 +229,7 @@ before relying on H3 alongside LLMs.
   (Qwen-Image 2512, Qwen-Image-Edit, Wan 14B, H3): label it "Fast / Quality" (<= 8 = Fast), not a step count. Imajutsu's draft/high step numbers therefore map to Fast/Quality and the
   plan text "N steps" is not what the workflow does.
 * **Sizes**: free sizes (Z-Image, Qwen-Image, FLUX.2 klein) vs fixed shapes (Krea: `limits.sizes`, `size_policy: snap_to_shape`; the result states its real size) vs `size_policy: source_shape`
-  (edit and inpaint: the output follows the picture; width/height are ignored).
+  (edit and inpaint: the workflow picks its own size from the picture; width/height are ignored).
 * **Imajutsu**: modes `restyle`, `replace_subject`, `reference` and the refine pass of `upscale` have no model (the page already says "no model" when the routing finds none);
   `edit` takes one picture; `inpaint`/`outpaint` run on FLUX.1 Fill (non-commercial licence, `caution` on the model).
 * **Studio**: the new profiles carry no Studio `modes`, so `/studio` lists them as not offering operations; the Composer's profile tray (video + one reference picture + prompt) is the
@@ -248,4 +248,26 @@ The job's delivered file is the contact sheet (JPEG); `GET /v1/reverse/{job}` re
 
 ## 8. Evidence
 
-(Filled in from the real runs; see the final report.)
+Real runs 2026-11-10, dev Semechka (port 8792, fresh data dir, backend `spark-media` through an SSH tunnel) -> engine (`semechka-media-dev`, 127.0.0.1:8780 from worktree
+`~/opensfield/wt-engine`) -> the live ComfyUI (8190), under `~/spark-reset/gpu-media`. Every output was fetched through Semechka's own asset API and looked at (stills) or
+contact-sheeted (video); progress was polled every second through `GET /api/media/jobs/{id}` and was monotonic in every job (series saved with the proof).
+
+| Job (through Semechka) | Wall time | Result checked |
+|---|---|---|
+| Z-Image 1024x1024 (cold) / 720x1280 (warm) | 25 s / 7 s | exact sizes, sharp, correct |
+| FLUX.2 klein 720x1280 (graph size override) | 29 s | exact 720x1280, clean |
+| Krea 2 Turbo 1368x768; request 1000x1000 snapped | 29 s / 19 s | 1368x768; second reported 1024x1024 |
+| Qwen-Image 2512 Fast 1024 | 30 s | legible "OPEN" sign |
+| Qwen-Image-Edit (chat flow, source picture) | 29 s | door yellow, rest unchanged; output 752x1392 from a 720x1280 source |
+| FLUX.1 Fill inpaint via Imajutsu (mask white = repaint) | 39 s | cat inside the mask only, 720x1280 |
+| SeedVR2 upscale 720x1280 -> 1440x2560 (narrow API on the engine) | 10 s | sharp, faithful |
+| MiniMax H3 text-to-video 5 s | 145 s (cold load) | API told 124 frames at 24 fps = 5.1667 s; ffprobe 864x480, 124 frames, 5.166688 s, audio track; frames coherent, colours correct |
+| Wan 2.2 14B image-to-video 5 s from the klein picture | 111 s | told 81 frames at 16 fps = 5.0625 s; ffprobe 81 frames, 5.0625 s; leaves and traffic move, colours correct |
+| LTX-2.3 text-to-video 5 s, **engine restarted mid-job** | 75 s | told 121 frames at 24 fps = 5.0417 s; ffprobe 121 frames, 5.041667 s, audio; the engine log says "resumed 1 unfinished job(s)", the job kept its ComfyUI prompt id and finished; progress stayed monotonic across the restart |
+| Reverse Engineer Video on an uploaded 5 s two-shot clip (made from the H3 and Wan outputs) | 1 s | 2 shots, one measured hard cut, contact sheet stored, analysis served at `/api/media/jobs/{id}/analysis` |
+| Cancel an H3 job at 21 % (step 3 of 8) | ComfyUI queue empty 8.2 s after the request, GPU utilisation 0 % | engine job `cancelled`, no output |
+| `POST /v1/release` after the runs | MemAvailable 71.0 -> 115.6 GiB (idle baseline 115.6) | 44.6 GB freed |
+
+Not proven on the GPU: Wan 5B text-to-video, LTX/H3 image-to-video and H3 reference-to-video, first/last frame, Qwen-Image 2.1, the `opensfield-video-edit` / video upscale / smooth-motion
+profiles (their tests use fakes; the workflows themselves are verified by OpenSfield's own `config/verified.json`), Imajutsu outpaint, the browser UI (nothing was clicked), a Roasted/Salted
+deployment. Live sampler previews do not exist (ComfyUI runs without a preview method).
