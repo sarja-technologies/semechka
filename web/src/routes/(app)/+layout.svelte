@@ -8,17 +8,16 @@
   import { list, loadList, loadFolders, resetCatalogs } from '$lib/chat/store.svelte';
   import AppHeader from '$lib/components/chat/AppHeader.svelte';
   import Sidebar from '$lib/components/chat/Sidebar.svelte';
+  import BottomNav from '$lib/components/BottomNav.svelte';
   import Palette from '$lib/components/Palette.svelte';
   import MediaViewer from '$lib/components/media/MediaViewer.svelte';
   let { children } = $props();
 
   const path = $derived(page.url.pathname);
-  const workspace = $derived<'chat' | 'code'>(path.startsWith('/code') ? 'code' : 'chat');
-  const base = $derived(`/${workspace}`);
+  const base = '/chat';
   const flags = $derived(app.me?.ui.ui ?? {});
-  // Workspaces and organisation pages have their own navigation: the conversation list would only be in the way.
-  const ownNav = $derived(path.startsWith('/workspaces') || path.startsWith('/organisation'));
-  const hasSidebar = $derived(flags.sidebar !== false && !ownNav && !!app.me?.ui.modes?.[workspace]?.enabled);
+  // The conversation list belongs to Chat; Images, Videos and Experimental have their own screens and a Library for what they made.
+  const hasSidebar = $derived(flags.sidebar !== false && (path === '/chat' || path.startsWith('/chat/')) && !!app.me?.ui.modes?.chat?.enabled);
   const brand = $derived<any>({ ...app.brand, ...(app.me?.ui.brand ?? {}) });
 
   // collapsed on wide screens: the person's last choice, else the administrator's default
@@ -31,11 +30,11 @@
     try { localStorage.setItem('sem.sidebar', collapsed ? '1' : '0'); } catch { /* storage unavailable */ }
   }
 
-  // the list follows the workspace (chat or code) and the account
+  // the list follows the account
   $effect(() => {
-    const w = workspace, uid = app.me?.user.id;
+    const uid = app.me?.user.id;
     if (!uid || !hasSidebar) return;
-    untrack(() => { list.workspace = w; list.q = ''; list.archived = false; loadList(true); if (flags.folders) loadFolders(); });
+    untrack(() => { list.workspace = 'chat'; list.q = ''; list.archived = false; loadList(true); if (flags.folders) loadFolders(); });
   });
   $effect(() => { app.me?.user.id; untrack(resetCatalogs); }); // another account sees other models
 
@@ -73,6 +72,7 @@
     <div class="col">
       <AppHeader sidebar={hasSidebar} {collapsed} ontoggle={toggle} onnew={newChat} title={list.title} />
       <main id="main" tabindex="-1">{@render children()}</main>
+      <BottomNav />
       {#if brand.footer_text || brand.powered_by}
         <footer class="tiny muted">
           {#if brand.footer_text}<span>{brand.footer_text}</span>{/if}
