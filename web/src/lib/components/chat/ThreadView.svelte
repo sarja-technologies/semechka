@@ -9,8 +9,8 @@
   import ModelIcon from './ModelIcon.svelte';
   import type { Thread, Msg, MsgActions } from '$lib/chat/thread.svelte';
 
-  let { thread, labelFor, act, canBranch, techOn, showSources, selected = null, empty }:
-    { thread: Thread; labelFor: (m: { model: string | null }) => string; act: MsgActions; canBranch: boolean; techOn: boolean; showSources: boolean;
+  let { thread, labelFor, act, canBranch, techOn, showSources, selected = null, empty, modelState }:
+    { modelState?: (id: string | undefined) => string | null | undefined; thread: Thread; labelFor: (m: { model: string | null }) => string; act: MsgActions; canBranch: boolean; techOn: boolean; showSources: boolean;
       selected?: string | null; empty: Snippet } = $props();
 
   let scroller: HTMLDivElement | undefined = $state(), inner: HTMLDivElement | undefined = $state(), top: HTMLDivElement | undefined = $state();
@@ -64,7 +64,13 @@
     : q.reason === 'model_switch' ? 'Waiting for replies from another model to finish'
     : `In queue, position ${q.position}`;
   const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
-  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
+  // How long the wait for the first word has lasted, measured here. A model that is not in memory has to be loaded first (25 to 90 seconds on the Spark).
+  let now = $state(Date.now()), t0 = 0;
+  $effect(() => { if (!live) { t0 = 0; return; } if (!t0) { t0 = Date.now(); now = t0; } const i = setInterval(() => (now = Date.now()), 1000); return () => clearInterval(i); });
+  const waited = $derived(live && t0 ? Math.max(0, Math.round((now - t0) / 1000)) : 0);
+  const mstate = $derived(live?.status === 'sending' ? modelState?.(live.modelId) : null);
+  const cold = $derived(live?.status === 'sending' && !live.queue && (mstate === 'idle' || mstate === 'loading'));
+  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? (cold ? `Loading ${live.model} into memory · ${waited} s` : waited >= 6 ? `Waiting for the model · ${waited} s` : 'Waiting for the model') : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
 </script>
 
 <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
@@ -101,6 +107,7 @@
           <ModelIcon icon={act.icon(null)} label={live.model} size={20} /><span>{labelFor({ model: live.model })}</span>
           {#if liveWord}<span class="state"><span class="dot" aria-hidden="true"></span>{liveWord}</span>{/if}
         </div>
+        {#if live.status === 'sending' && !live.queue && (cold || waited >= 6)}<p class="small muted" data-testid="model-loading">{cold ? 'This model is not in memory yet, so it is being loaded first. That takes 25 to 90 seconds. Your message is sent as soon as it is ready.' : 'The model has not started answering yet. If it was not in memory it is being loaded, which takes 25 to 90 seconds.'}</p>{/if}
         {#if live.queue}<p class="small muted">{live.queue.running} of {live.queue.limit} reply slot{live.queue.limit === 1 ? '' : 's'} in use; {live.queue.waiting} waiting. Your request starts when it reaches the front. Stop leaves the queue.</p>{/if}
         {#if showSources && (live.sources?.length || live.skipped)}<Sources sources={live.sources ?? []} skipped={live.skipped ?? 0} />{/if}
         {#if live.trimmed}<p class="tiny muted"><Icon name="info" size={13} /> The {live.trimmed} oldest message{live.trimmed === 1 ? '' : 's'} did not fit in this model's context window and {live.trimmed === 1 ? 'is' : 'are'} left out of this reply.</p>{/if}

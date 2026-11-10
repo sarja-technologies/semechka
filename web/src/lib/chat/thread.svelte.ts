@@ -20,7 +20,7 @@ export type MsgActions = {
 };
 export type Live = {
   mode: 'send' | 'regenerate' | 'edit'; anchor: string | null; userText: string; userAttachments: Attachment[];
-  text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; model: string;
+  text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; model: string; modelId?: string;
   queue: null | { position: number; ahead: number; waiting: number; running: number; limit: number };
   sources?: any[]; skipped?: number; trimmed?: number;
 };
@@ -124,7 +124,8 @@ export class Thread {
     await patch(`/api/chat/conversations/${this.id}`, { assistant_id: assistantId, collection_ids: collectionIds });
   }
 
-  private async ensure(modelId: string, ctx: { assistantId: string | null; collectionIds: string[] }, onCreated: (id: string) => void) {
+  /** Save the conversation if it is still new (Work Mode needs one before its first prompt) and return its id. */
+  async ensure(modelId: string, ctx: { assistantId: string | null; collectionIds: string[] }, onCreated: (id: string) => void) {
     if (this.id) return this.id;
     const c = await post('/api/chat/conversations', { model_id: modelId || null, mode: this.workspace, assistant_id: ctx.assistantId, collection_ids: ctx.collectionIds });
     this.id = c.id; this.head = { ...c, context: { assistant_id: ctx.assistantId, collection_ids: ctx.collectionIds } };
@@ -174,7 +175,7 @@ export class Thread {
     this.sendError = ''; this.outcome = '';
     const mine = this.epoch, noSave = this.ephemeral;
     const live: Live = { mode, anchor: anchor?.id ?? null, userText: turn.content, userAttachments: turn.attachments, text: '',
-      reasoning: '', status: 'sending', error: '', model: turn.modelLabel, queue: null };
+      reasoning: '', status: 'sending', error: '', model: turn.modelLabel, modelId: turn.modelId, queue: null };
     this.live = live;
     const cur = this.live; // the proxied object: writes below update the view
     let final: any = null;
