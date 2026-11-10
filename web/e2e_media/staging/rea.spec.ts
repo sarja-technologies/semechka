@@ -22,7 +22,9 @@ test('REA: upload a video, analyse it with scene descriptions, read per-shot des
   const t0 = Date.now();
   await go.click();
   const vis = page.getByTestId('rea-vision');
-  await expect(vis).toBeVisible({ timeout: 3_000_000 });
+  const failed = page.locator('.res [role="alert"], .pick [role="alert"]');
+  await expect(vis.or(failed).first()).toBeVisible({ timeout: 3_000_000 });
+  if (await failed.count()) { await shot(page, 'rea-error'); throw new Error('REA failed: ' + (await failed.first().innerText())); }
   console.log('analysis visible after', Math.round((Date.now() - t0) / 1000), 's:', (await vis.innerText()).trim());
   const shots = page.getByTestId('rea-shot');
   const n = await shots.count();
@@ -58,4 +60,7 @@ test('REA: upload a video, analyse it with scene descriptions, read per-shot des
   console.log('horizontal overflow at 390 px:', overflow);
   expect(overflow).toBeLessThanOrEqual(0);
   await shot(page, 'rea-3-mobile');
+  await shots.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(OUT, 'rea-4-mobile-shot.png') });
+  if (await clipCard.count()) { await clipCard.scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(OUT, 'rea-5-mobile-prompt.png') }); }
 });

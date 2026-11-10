@@ -16,8 +16,9 @@ export function findReaProfile(options: any): ReaProfile | null {
     const ops: string[] = schema.operation?.values ?? p.operations ?? [];
     const isRea = /reverse/i.test(`${p.id ?? ''} ${p.family ?? ''} ${p.name ?? ''} ${m.alias ?? ''}`) || ops.includes('analyse');
     if (!isRea) continue;
+    // only a schema with an `operation` input takes one (reverse-video has none: sending it made Semechka refuse every analysis)
     const fileInput = Object.entries(schema).find(([, s]: [string, any]) => s?.type === 'file')?.[0] ?? 'video';
-    return { modelId: m.id, alias: m.alias, fileInput, operation: ops.includes('analyse') ? 'analyse' : ops[0] ?? null, ready: p.ready !== false, reason: p.reason ?? null,
+    return { modelId: m.id, alias: m.alias, fileInput, operation: schema.operation ? (ops.includes('analyse') ? 'analyse' : ops[0] ?? null) : null, ready: p.ready !== false, reason: p.reason ?? null,
       vision: Array.isArray(schema.vision?.values) && schema.vision.values.includes('off') };
   }
   return null;
@@ -84,7 +85,7 @@ export function reaView(doc: any): ReaView | null {
     const sv = s.vision ?? {};
     const own: ReaFrame[] = Array.isArray(sv.frames) ? sv.frames.filter((f: any) => str(f?.file)).map((f: any) => ({ name: f.file, t: num(f.t), key: str(f.key) })) : [];
     const saved: ReaFrame[] = Object.entries(s.frames ?? {}).filter(([, f]: [string, any]) => str(f?.file)).map(([k, f]: [string, any]) => ({ name: f.file, t: num(f.t), key: k }));
-    const frames = (own.length ? own : saved.filter((f) => f.key === 'mid').concat(saved.filter((f) => f.key !== 'mid'))).slice(0, 5);
+    const frames = (own.length ? own : saved).slice().sort((x, y) => x.t - y.t).slice(0, 5);
     const cam = (val(s, 'camera', 'movements') as any[] | undefined)?.map((m) => str(m?.label) || str(m?.kind)).filter(Boolean).join(', ');
     const pal = (val(s, 'grade', 'palette') as any[] | undefined)?.slice(0, 5).map((p) => str(p?.hex)).filter(Boolean);
     const facts: [string, string][] = ([['Shot size', str(sv.shot_size)], ['Angle', str(sv.angle)], ['Light', str(sv.lighting)], ['Mood', str(sv.mood)],
