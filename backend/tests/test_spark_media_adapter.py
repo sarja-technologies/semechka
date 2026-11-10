@@ -185,3 +185,16 @@ def test_reverse_analysis_is_read_from_the_engine_for_reverse_jobs_only(sp):
     j = sp.post("/api/media/jobs", json={"kind": "image", "model_id": img["id"], "prompt": "x", "width": 512, "height": 512}).json()["id"]
     finish(sp, j)
     assert sp.get(f"/api/media/jobs/{j}/analysis").status_code == 404
+
+
+def test_reverse_keyframes_are_proxied_for_the_owner_only_and_only_as_pictures(sp):
+    rv = models(sp, "video")["reverse-video"]
+    files = [("file:video", ("v.mp4", b"\x00\x00\x00\x18ftypmp42" + b"0" * 64, "video/mp4"))]
+    jid = sp.c.post("/api/media/profile-jobs", data={"model_id": rv["id"], "inputs": "{}"}, files=files, headers={"x-csrf-token": sp.csrf}).json()["id"]
+    assert sp.get(f"/api/media/jobs/{jid}/analysis/files/shot_001_mid.jpg").status_code == 404    # not finished yet
+    finish(sp, jid)
+    r = sp.get(f"/api/media/jobs/{jid}/analysis/files/shot_001_mid.jpg")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg" and r.content.startswith(b"\xff\xd8")
+    assert sp.get(f"/api/media/jobs/{jid}/analysis/files/shot_002_mid.jpg").status_code == 404       # the engine has no such file
+    for bad in ("notes.json", "analysis.json", "..%2Fsecret.jpg", "shot_1_mid.jpg"):
+        assert sp.get(f"/api/media/jobs/{jid}/analysis/files/{bad}").status_code == 404

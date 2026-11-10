@@ -210,3 +210,13 @@ def reverse(jid: str):
     if j is None or j.get("profile") != "reverse-video":
         raise HTTPException(404, "not an analysis job")
     return {"id": jid, "analysis": {"shots": [{"index": 0}], "source": {"duration_s": 2.0}}, "plan": {"shots": []}}
+
+
+@app.get("/v1/reverse/{jid}/files/{name}", dependencies=[Depends(auth)])
+def reverse_file(jid: str, name: str):
+    j = STATE["jobs"].get(jid)
+    if j is None or j.get("profile") != "reverse-video" or name not in ("shot_001_mid.jpg", "notes.json"):
+        raise HTTPException(404, "no such file")
+    if name.endswith(".json"):
+        return Response(b"{}", media_type="application/json")
+    return Response(b"\xff\xd8\xff\xe0fake-jpeg", media_type="image/jpeg")
