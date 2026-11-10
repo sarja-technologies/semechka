@@ -1,0 +1,21 @@
+{"seq": 517, "type": "turn_start", "ts": 1794299620.420706, "turn_id": "t_4d459efe11ee", "text": "Without running any tool: in one sentence, what was the bug in shop/pricing.py that you looked at earlier in this session?"}
+{"seq": 518, "type": "state", "ts": 1794299620.48926, "turn_id": "t_4d459efe11ee", "state": "loading_model"}
+{"seq": 519, "type": "model_loading", "ts": 1794299620.4901752, "turn_id": "t_4d459efe11ee", "model": "qwen3.6-35b-a3b", "phase": "loading"}
+{"seq": 520, "type": "model_loading", "ts": 1794299634.6572795, "turn_id": "t_4d459efe11ee", "model": "qwen3.6-35b-a3b", "phase": "ready"}
+{"seq": 521, "type": "state", "ts": 1794299634.6579838, "turn_id": "t_4d459efe11ee", "state": "starting"}
+{"seq": 522, "type": "notice", "ts": 1794299635.2433722, "turn_id": "t_4d459efe11ee", "code": "resumed", "message": "Resumed the earlier Goose session."}
+{"seq": 523, "type": "usage", "ts": 1794299665.2465365, "turn_id": "t_4d459efe11ee", "used": 9619, "size": 65536}
+{"seq": 524, "type": "state", "ts": 1794299665.3573484, "turn_id": "t_4d459efe11ee", "state": "running"}
+{"seq": 525, "type": "reasoning_delta", "ts": 1794299669.5381515, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": "The user is asking me to recall from"}
+{"seq": 526, "type": "reasoning_delta", "ts": 1794299669.661714, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " memory what the bug was, without running"}
+{"seq": 527, "type": "reasoning_delta", "ts": 1794299669.7858398, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " any tools.\n"}
+{"seq": 528, "type": "assistant_delta", "ts": 1794299669.7897933, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": "The"}
+{"seq": 529, "type": "assistant_delta", "ts": 1794299669.9142537, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " bug was that the `total()` function"}
+{"seq": 530, "type": "assistant_delta", "ts": 1794299670.0375075, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " added the `tax_rate` as a"}
+{"seq": 531, "type": "assistant_delta", "ts": 1794299670.1617217, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " flat value to the subtotal instead of multiplying"}
+{"seq": 532, "type": "assistant_delta", "ts": 1794299670.2849808, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " it as a percentage (changing `"}
+{"seq": 533, "type": "assistant_delta", "ts": 1794299670.4179034, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": "subtotal + tax_rate` to `subtotal"}
+{"seq": 534, "type": "assistant_delta", "ts": 1794299670.5502946, "turn_id": "t_4d459efe11ee", "message_id": "chatcmpl-ocJWRWG1AuPUQRFeoRPbPhQ3rvNfPjPq", "text": " * (1 + tax_rate)`)."}
+{"seq": 535, "type": "usage", "ts": 1794299670.5718517, "turn_id": "t_4d459efe11ee", "used": 9782, "size": 65536}
+{"seq": 536, "type": "usage", "ts": 1794299670.5745926, "turn_id": "t_4d459efe11ee", "used": 9782, "size": 65536}
+{"seq": 537, "type": "turn_end", "ts": 1794299670.7779577, "turn_id": "t_4d459efe11ee", "stop_reason": "end_turn", "usage": {"input": 9711, "output": 71, "total": 9782}}

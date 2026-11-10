@@ -856,7 +856,7 @@ DEFS: list[Def] = [
         "Allowlist: id -> {label, description, command, args, env, enabled}. The command runs inside the session container, so it must exist "
         "in the Goose image. Sessions can only choose from this list.", "json", {
             "repo-stats": {"label": "Repository statistics", "description": "Counts files and lines per extension in the workspace (read only).",
-                           "command": "/usr/local/bin/python3", "args": ["-I", "/opt/semechka/mcp/repo_stats.py"], "enabled": True}},
+                           "command": "/usr/local/bin/python3", "args": ["-I", "/opt/semechka/mcp/repo_stats.py"], "env": {}, "enabled": True}},
         scopes=["deployment"], edit_perm="admin.settings.edit", validator=lambda v: _goose_mcp(v),
         effect="Each enabled server is code that runs inside the session container with the agent."),
     Def("goose.memory_mb", GW, "Container memory (MB)", "Hard limit per session container.", "int", 4096, min=512, max=65536,

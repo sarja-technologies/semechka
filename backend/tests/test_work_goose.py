@@ -373,3 +373,15 @@ def test_member_without_the_mode_permission_is_refused(gk, app):
     bob = make_user(gk, app, "bob2@example.test")
     r = bob.get("/api/work/goose/status")
     assert r.status_code == 403 and r.json()["detail"]["code"] == "forbidden"      # the default member role has no mode.work
+
+
+def test_changing_tools_between_prompts_restarts_goose_quietly_and_resumes_the_session(gk):
+    cid = conv(gk)
+    gk.post(f"/api/work/goose/conversations/{cid}/session", json={})
+    run_turn(gk, cid, "one")
+    assert gk.patch(f"/api/work/goose/conversations/{cid}/session", json={"mcp": ["repo-stats"]}).status_code == 200
+    ev = run_turn(gk, cid, "two")
+    assert not any(e["type"] == "error" for e in ev)                          # ending the old process on purpose is not a failure
+    assert any(e["type"] == "notice" and e["code"] == "resumed" for e in ev)
+    assert gk.get(f"/api/work/goose/conversations/{cid}/session").json()["goose_session_id"] == "fake_1"
+    assert gk.patch(f"/api/work/goose/conversations/{cid}/session", json={"mcp": ["nope"]}).status_code == 422

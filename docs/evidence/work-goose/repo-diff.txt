@@ -1,0 +1,8 @@
+--- a/shop/pricing.py
++++ b/shop/pricing.py
+@@ -1,4 +1,4 @@
+ def total(prices, tax_rate):
+     """Sum of prices with tax applied once."""
+     subtotal = sum(prices)
+-    return round(subtotal + tax_rate, 2)
++    return round(subtotal * (1 + tax_rate), 2)

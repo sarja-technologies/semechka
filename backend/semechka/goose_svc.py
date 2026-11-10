@@ -588,8 +588,10 @@ class Live:
             argv, denv = rt.goose_argv(self.name, env)
             self.set_state("starting")
             try:
+                box: list = []
                 self.peer = AcpPeer(argv, env=denv, on_notification=self._on_notification, on_request=self._on_request,
-                                    on_stderr=lambda l: log.debug("goose[%s]: %s", self.wid, l[:300]), on_close=self._on_close)
+                                    on_stderr=lambda l: log.debug("goose[%s]: %s", self.wid, l[:300]), on_close=lambda code: self._on_close(code, box))
+                box.append(self.peer)
                 init = self.peer.request("initialize", {"protocolVersion": 1, "clientCapabilities": {}, "clientInfo": {"name": "semechka", "version": "work-goose"}},
                                          timeout=60)
             except (AcpError, OSError) as e:
@@ -635,6 +637,7 @@ class Live:
     def drop_process(self) -> None:
         p, self.peer = self.peer, None
         if p is not None:
+            p.expected_close = True
             try:
                 p.close(grace=2.0)
             except Exception:  # noqa: BLE001
@@ -666,7 +669,9 @@ class Live:
             self.state = "idle"
         self.mgr.live.pop(self.wid, None) if reason in ("idle", "stop") else None
 
-    def _on_close(self, code) -> None:
+    def _on_close(self, code, box=()) -> None:
+        if box and (box[0] is not self.peer or getattr(box[0], "expected_close", False)):
+            return   # we ended this process on purpose (restart for a new model/tools/skills, idle stop, shutdown)
         if self.turn is not None and not self.cancelled:
             self.emit("error", {"code": "goose_exited", "message": f"Goose stopped unexpectedly (exit {code}).", "retryable": True})
 

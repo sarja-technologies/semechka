@@ -220,3 +220,8 @@ See the removal recommendation in `docs/WORK_MODE_GOOSE_SECURITY.md`.
   * `session.container` may also be `"unknown"` when the container has not been touched since the Semechka process started (no Docker call is made on a plain GET).
   * `tool_end.diff` is present for `edit` calls only; `files_changed` (turn-level checkpoint diff) is the general mechanism and also covers files written by `shell`/`write`.
   * Cancel while a shell tool runs: `turn_end` with `stop_reason: "cancelled"` arrived 0.4 s after `POST .../cancel` and the tool's process was gone.
+  * `GET .../events?format=json` returns at most 500 events per call; loop on `last_seq` until `events` is empty. The SSE stream sends everything (`retry: 2000` first, then `id`/`event`/`data` frames).
+  * `attachments` on `POST .../prompt` is accepted and ignored in v1 (upload files into the workspace with `PUT .../files` instead; Goose sees them at `/work/...`).
+  * `files[].modified` in `GET .../files` is an epoch number (seconds), not an ISO string.
+  * `GET .../session` after a Semechka restart shows `pending_approvals: []` and the earlier turn closed with `turn_end{stop_reason:"interrupted"}` plus `approval_resolved{by:"restart"}`.
+  * Skills appear to Goose as its own `load_skill` tool (`extension: ""`, `tool: "load_skill"`, `input: {"name": "<skill>"}`); show it like any tool call.
