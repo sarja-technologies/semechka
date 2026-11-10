@@ -63,8 +63,9 @@
   const queueText = (q: any) => q.reason === 'engine_busy' ? 'Waiting for the engine to finish another reply'
     : q.reason === 'model_switch' ? 'Waiting for replies from another model to finish'
     : `In queue, position ${q.position}`;
-  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
-  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
+  const loadingText = (l: { elapsed: number }) => `Loading the model${l.elapsed >= 1 ? ` (${Math.round(l.elapsed)} s)` : ''}`;
+  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.loading ? loadingText(live.loading) : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
+  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.loading ? loadingText(live.loading) : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
 </script>
 
 <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
@@ -101,6 +102,7 @@
           <ModelIcon icon={act.icon(null)} label={live.model} size={20} /><span>{labelFor({ model: live.model })}</span>
           {#if liveWord}<span class="state"><span class="dot" aria-hidden="true"></span>{liveWord}</span>{/if}
         </div>
+        {#if live.loading}<p class="small muted">This model was not in memory, so it is being started. The first reply after that takes up to about a minute; later ones are quick.</p>{/if}
         {#if live.queue}<p class="small muted">{live.queue.running} of {live.queue.limit} reply slot{live.queue.limit === 1 ? '' : 's'} in use; {live.queue.waiting} waiting. Your request starts when it reaches the front. Stop leaves the queue.</p>{/if}
         {#if showSources && (live.sources?.length || live.skipped)}<Sources sources={live.sources ?? []} skipped={live.skipped ?? 0} />{/if}
         {#if live.trimmed}<p class="tiny muted"><Icon name="info" size={13} /> The {live.trimmed} oldest message{live.trimmed === 1 ? '' : 's'} did not fit in this model's context window and {live.trimmed === 1 ? 'is' : 'are'} left out of this reply.</p>{/if}

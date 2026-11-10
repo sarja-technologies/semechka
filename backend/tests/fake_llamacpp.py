@@ -17,11 +17,11 @@ CALLS: list[tuple[str, dict]] = []
 CFG = {"load_delay": 0.4, "fail_load": set()}
 
 IDS = {
-    "chat-small": dict(vision=False),
-    "chat-vision": dict(vision=True),
-    "chat-notools": dict(vision=False),
-    "chat-big": dict(vision=False),
-    "embed-test": dict(vision=False),
+    "chat-small": {"vision": False},
+    "chat-vision": {"vision": True},
+    "chat-notools": {"vision": False},
+    "chat-big": {"vision": False},
+    "embed-test": {"vision": False},
 }
 
 

@@ -22,6 +22,8 @@ export type Live = {
   mode: 'send' | 'regenerate' | 'edit'; anchor: string | null; userText: string; userAttachments: Attachment[];
   text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; model: string;
   queue: null | { position: number; ahead: number; waiting: number; running: number; limit: number };
+  /** The model is being loaded into memory (a cold start takes 25-90 s on the Spark's router): set by `engine` events, cleared by the first words. */
+  loading?: null | { elapsed: number };
   sources?: any[]; skipped?: number; trimmed?: number;
 };
 export type Turn = { content: string; attachments: Attachment[]; operation: 'text' | 'image' | 'video'; modelId: string;
@@ -199,7 +201,8 @@ export class Thread {
       this.ctrl = stream(url, body, (ev) => {
         if (mine !== this.epoch) return;
         if (ev.type === 'start') cur.status = 'streaming';
-        else if (ev.type === 'delta') { if (ev.content) cur.text += ev.content; if (ev.reasoning) cur.reasoning += ev.reasoning; }
+        else if (ev.type === 'delta') { cur.loading = null; if (ev.content) cur.text += ev.content; if (ev.reasoning) cur.reasoning += ev.reasoning; }
+        else if (ev.type === 'engine') cur.loading = ev.state === 'loading' ? { elapsed: Number(ev.elapsed) || 0 } : null;
         else if (ev.type === 'queue') cur.queue = ev.running === true ? null : ev;
         else if (ev.type === 'sources') { cur.sources = ev.sources; cur.skipped = ev.skipped; }
         else if (ev.type === 'trimmed') cur.trimmed = ev.dropped;

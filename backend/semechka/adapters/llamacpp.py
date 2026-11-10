@@ -175,7 +175,7 @@ class LlamaCppAdapter(Adapter):
     @property
     def root(self) -> str:
         """The router's address without /v1: /models/load and /health live there."""
-        return self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
+        return self.base_url.removesuffix("/v1")
 
     @property
     def v1(self) -> str:
@@ -365,8 +365,6 @@ class LlamaCppAdapter(Adapter):
 
     # ---- chat ----------------------------------------------------------------------------------------------------------
     async def chat_stream(self, model, messages, params):
-        async for ev in self.ensure_loaded(model):
-            yield ev
         body = {"model": model, "messages": messages, "stream": True, "stream_options": {"include_usage": True}}
         for k in _SAMPLING + _EXTRA:
             if params.get(k) is not None:
@@ -387,6 +385,8 @@ class LlamaCppAdapter(Adapter):
             body["tools"] = tools
             if params.get("tool_choice"):
                 body["tool_choice"] = params["tool_choice"]
+        async for ev in self.ensure_loaded(model):  # only now: a request that will be refused must not load a model
+            yield ev
         usage = timings = finish = None
         calls: dict[int, dict] = {}
         try:

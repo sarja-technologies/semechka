@@ -8,8 +8,17 @@ import sys
 from pathlib import Path
 
 import pytest
-from semechka.models import Backend, Conversation, Message, Model, ModelGrant, UsageEvent, User
 from sqlalchemy import select
+
+from semechka.models import (
+    Backend,
+    Conversation,
+    Message,
+    Model,
+    ModelGrant,
+    UsageEvent,
+    User,
+)
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "spark" / "migrate_to_llamacpp.py"
 KEYTEXT = "router-key-not-to-be-printed"

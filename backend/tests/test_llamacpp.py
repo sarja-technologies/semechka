@@ -8,12 +8,13 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from sqlalchemy import select
+
 from semechka import embed_svc
 from semechka.adapters import REGISTRY, AdapterError
 from semechka.adapters import llamacpp as lc
 from semechka.adapters.llamacpp import LlamaCppAdapter
 from semechka.models import Backend, Model
-from sqlalchemy import select
 
 from . import fake_llamacpp as fr
 from .conftest import PW, Api, Server, _free_port
@@ -210,11 +211,11 @@ TOOLS = [{"type": "function", "function": {"name": "get_weather", "description":
 
 
 def test_tools_go_only_to_a_model_whose_round_trip_was_verified(router_url, spark):
-    fr.reset(loaded=["chat-small", "chat-notools"])
+    fr.reset(loaded=["chat-small"])  # chat-notools is NOT loaded: refusing it must not load it (a refused request loads nothing)
     with pytest.raises(AdapterError) as e:
         run(collect(adapter(router_url), "chat-notools", [{"role": "user", "content": "weather in Sydney"}], {"tools": TOOLS}))
     assert e.value.kind == "unsupported" and e.value.status == 422
-    assert not [c for c in fr.CALLS if c[0] == "chat"]
+    assert not [c for c in fr.CALLS if c[0] in ("chat", "load")]
     evs = run(collect(adapter(router_url), "chat-small", [{"role": "user", "content": "weather in Sydney"}], {"tools": TOOLS, "tool_choice": "auto"}))
     calls = next(e for e in evs if e["type"] == "tool_calls")["calls"]
     assert calls == [{"id": "call_1", "name": "get_weather", "arguments": '{"city": "Sydney"}'}]
