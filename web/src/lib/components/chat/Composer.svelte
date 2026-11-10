@@ -22,8 +22,8 @@
   import { autoAssign, currentOperation, evaluate, opLabel, plainSlots, profileSlots, type Slot } from '$lib/media/roles';
   import { isLibraryId, type Asset } from '$lib/media/assets';
 
-  let { thread, workspace, assistantId = $bindable(null), collectionIds = $bindable([]), onsend, onstop, onctx, onprotect }:
-    { thread: Thread; workspace: 'chat' | 'code'; assistantId: string | null; collectionIds: string[]; onsend: (t: Turn) => void; onstop: () => void;
+  let { thread, workspace, textOnly = false, assistantId = $bindable(null), collectionIds = $bindable([]), onsend, onstop, onctx, onprotect }:
+    { thread: Thread; workspace: 'chat' | 'code'; /** Chat is for conversation: pictures and videos are made on their own screens */ textOnly?: boolean; assistantId: string | null; collectionIds: string[]; onsend: (t: Turn) => void; onstop: () => void;
       onctx: () => void; onprotect: () => void } = $props();
 
   const ui = $derived(app.me.ui);
@@ -33,8 +33,8 @@
   const textOp = $derived<Operation>(workspace === 'code' ? 'code' : 'text');
   const ops = $derived<{ id: Op; label: string; icon: string }[]>([
     { id: 'text' as Op, label: workspace === 'code' ? 'Code' : 'Chat', icon: workspace === 'code' ? 'code' : 'chat' },
-    ...(workspace === 'chat' && ui.operations?.image?.enabled ? [{ id: 'image' as Op, label: 'Picture', icon: 'image' }] : []),
-    ...(workspace === 'chat' && ui.operations?.video?.enabled ? [{ id: 'video' as Op, label: 'Video', icon: 'video' }] : [])
+    ...(!textOnly && workspace === 'chat' && ui.operations?.image?.enabled ? [{ id: 'image' as Op, label: 'Picture', icon: 'image' }] : []),
+    ...(!textOnly && workspace === 'chat' && ui.operations?.video?.enabled ? [{ id: 'video' as Op, label: 'Video', icon: 'video' }] : [])
   ]);
   const showOps = $derived(flags.mode_selector !== false && ops.length > 1);
   $effect(() => { if (!ops.some((o) => o.id === op)) op = 'text'; });

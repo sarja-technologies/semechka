@@ -10,8 +10,8 @@
   import Icon from '$lib/components/Icon.svelte';
   import ModelIcon from './ModelIcon.svelte';
 
-  let { catalog, op = 'text', value = $bindable(), disabled = false, label = 'Model', needVision = false }:
-    { catalog: any; op?: Operation; value: string | undefined; disabled?: boolean; label?: string; needVision?: boolean } = $props();
+  let { catalog, op = 'text', value = $bindable(), disabled = false, label = 'Model', needVision = false, placement = 'up' }:
+    { catalog: any; op?: Operation; value: string | undefined; disabled?: boolean; label?: string; needVision?: boolean; /** the composer sits at the foot of the screen, so its list opens upward; a form higher up opens it downward */ placement?: 'up' | 'down' } = $props();
 
   let open = $state(false), q = $state(''), sel = $state(0), arrange = $state(false), note = $state('');
   let btn: HTMLButtonElement | undefined = $state(), box: HTMLInputElement | undefined = $state();
@@ -103,7 +103,7 @@
     <Icon name="chevdown" size={14} />
   </button>
   {#if open}
-    <div class="pop pop-in" role="dialog" aria-label={`Choose ${label.toLowerCase()}`}>
+    <div class="pop pop-in" class:down={placement === 'down'} role="dialog" aria-label={`Choose ${label.toLowerCase()}`}>
       <div class="search"><Icon name="search" size={15} />
         <input bind:this={box} bind:value={q} oninput={() => (sel = 0)} onkeydown={key} placeholder="Search models" aria-label="Search models"
           role="combobox" aria-expanded="true" aria-controls={`mc-${uid}-list`} aria-activedescendant={flat[sel] ? `mc-${uid}-${sel}` : undefined} />
@@ -185,6 +185,7 @@
   .trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .trigger:disabled { color: var(--fg-muted); cursor: default; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pop.down { bottom: auto; top: calc(100% + 6px); right: auto; left: 0; }
   .pop { position: absolute; bottom: calc(100% + 10px); right: -44px; z-index: 50; width: min(400px, calc(100vw - 24px)); max-height: min(520px, 64vh);
     display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-menu); box-shadow: var(--shadow); }
   .search { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--border); color: var(--fg-muted); }
@@ -227,7 +228,7 @@
   .empty { padding: 12px; color: var(--fg-muted); font-size: 13px; margin: 0; }
   .foot { margin: 0; padding: 6px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--fg-muted); }
   @media (max-width: 719px) {
-    .pop { position: fixed; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 72vh; }
+    .pop, .pop.down { position: fixed; left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; max-height: 72vh; }
     .trigger { max-width: min(220px, 52vw); }
     .foot { display: none; }
   }

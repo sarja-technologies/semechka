@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Conversation history: new conversation, search, pinned, folders, date groups, and the secondary pages.
+  // Conversation history: new conversation, search, pinned, folders and date groups.
   // Every action here is a request the server checks; switches the administrator turned off are not offered.
   import { onMount, tick } from 'svelte';
   import { page } from '$app/state';
@@ -9,7 +9,6 @@
   import { toast } from '$lib/toast.svelte';
   import { list, loadList, loadFolders, dateGroups, drop, upsert, type ConvRow } from '$lib/chat/store.svelte';
   import { errText } from '$lib/chat/thread.svelte';
-  import { navHref, navPages, trinodalLinks } from '$lib/nav';
   import Icon from '$lib/components/Icon.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Wordmark from '$lib/components/Wordmark.svelte';
@@ -18,11 +17,8 @@
 
   const ui = $derived(app.me.ui);
   const f = $derived(ui.ui ?? {});
-  const base = $derived(list.workspace === 'code' ? '/code' : '/chat');
+  const base = '/chat';
   const path = $derived(page.url.pathname);
-  const tnl = $derived(trinodalLinks(app.trinodal));
-  let tnlOpen = $state(false);
-  const pages = $derived<any[]>(navPages(ui).filter((p: any) => p.available && !(list.workspace === 'code' && p.id === 'code')));
 
   // ---- list --------------------------------------------------------------------------------------------------
   let timer: ReturnType<typeof setTimeout>;
@@ -47,7 +43,7 @@
     if (open[id]) await loadFolder(id);
   }
   async function loadFolder(id: string) {
-    try { inFolder[id] = await get(`/api/chat/conversations${qs({ folder_id: id, mode: list.workspace === 'code' ? 'code' : undefined, limit: 200 })}`); }
+    try { inFolder[id] = await get(`/api/chat/conversations${qs({ folder_id: id, limit: 200 })}`); }
     catch (e) { toast(errText(e), 'bad'); }
   }
   $effect(() => { if (f.folders) for (const fd of list.folders) if (open[fd.id] && !inFolder[fd.id]) loadFolder(fd.id); });
@@ -224,23 +220,7 @@
     <div bind:this={sentinel} class="sent">{#if list.loading}<span class="tiny muted" role="status">Loading…</span>{/if}</div>
   </div>
 
-  {#if pages.length || app.me.admin || retention || tnl.length}
-    <nav class="pages" aria-label="More">
-      {#if retention}<p class="tiny muted ret">{retention}</p>{/if}
-      {#each pages as p (p.id)}
-        <a href={navHref(p)} class="pg" class:on={path.startsWith(navHref(p))} aria-current={path.startsWith(navHref(p)) ? 'page' : undefined} onclick={close}><Icon name={p.id} size={16} />{p.label}</a>
-      {/each}
-      {#if tnl.length}
-        <!-- Trinodal AI: its own interface, served by Semechka at /trinodal/. Full page loads, so SvelteKit must not route them. -->
-        <button class="pg tn" aria-expanded={tnlOpen} aria-controls="tnl-links" onclick={() => (tnlOpen = !tnlOpen)}><Icon name="network" size={16} />Trinodal<span class="tc" class:open={tnlOpen}><Icon name="chevdown" size={14} /></span></button>
-        {#if tnlOpen}
-          <ul id="tnl-links" class="tnl" aria-label="Trinodal AI">
-            {#each tnl as l (l.id)}<li><a href={l.href} class="pg sub" data-sveltekit-reload onclick={close}>{l.label}</a></li>{/each}
-          </ul>
-        {/if}
-      {/if}
-    </nav>
-  {/if}
+  {#if retention}<p class="tiny muted ret foot">{retention}</p>{/if}
   <!-- a focusable splitter (WAI-ARIA window splitter): arrow keys resize it -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div class="grip" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" aria-valuemin={220} aria-valuemax={420} aria-valuenow={width} aria-valuetext={`${width} pixels wide`} tabindex="0" onpointerdown={startResize} onkeydown={resizeKey}></div>
@@ -315,15 +295,7 @@
   .linkish { all: unset; cursor: pointer; color: var(--fg-muted); text-underline-offset: 2px; margin: 8px 8px 4px; }
   .linkish:hover { color: var(--fg); text-decoration: underline; } .linkish:focus-visible { outline: 2px solid var(--accent); }
   .back { margin: 4px 0; } .flip { display: grid; transform: rotate(180deg); }
-  .pages { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 4px; display: grid; gap: 1px; }
-  .ret { margin: 0 8px 6px; }
-  .pg { display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: var(--side-row); color: var(--fg-2); text-decoration: none; border-radius: var(--radius-sm); font-size: 14px; }
-  .pg:hover { background: var(--hover); color: var(--fg); } .pg.on { background: var(--selected); color: var(--fg); }
-  button.pg { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 8px; min-height: var(--side-row); color: var(--fg-2); border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; width: 100%; }
-  button.pg:hover { background: var(--hover); color: var(--fg); } button.pg:focus-visible, .pg:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .tc { margin-left: auto; display: grid; } .tc.open { transform: rotate(180deg); }
-  .tnl { list-style: none; margin: 0; padding: 0 0 0 26px; display: grid; gap: 1px; }
-  .pg.sub { min-height: 32px; }
+  .ret { margin: 0 8px 6px; } .foot { border-top: 1px solid var(--border); padding-top: 6px; }
   .grip { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 2; }
   .grip:hover { background: var(--border-strong); }
   .grip:focus-visible { background: var(--accent); outline: 2px solid var(--accent); outline-offset: 0; }
@@ -342,5 +314,5 @@
     .scrim { display: block; position: fixed; inset: 0; background: rgba(10, 12, 12, 0.5); z-index: 55; }
   }
   @media (prefers-reduced-motion: no-preference) { .side { transition: transform 160ms ease-out, visibility 160ms; } }
-  @media (pointer: coarse) { .ci, .pg, .row-btn, .search { min-height: 44px; } .more { width: 40px; height: 40px; } .kb { display: none; } }
+  @media (pointer: coarse) { .ci, .row-btn, .search { min-height: 44px; } .more { width: 40px; height: 40px; } .kb { display: none; } }
 </style>

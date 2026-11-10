@@ -6,7 +6,8 @@
     spec: DurationSpec; seconds: number; fps?: number | null; maxSeconds?: number | null; disabled?: boolean; id?: string; onuser?: () => void;
   } = $props();
 
-  const listed = $derived(listedDurations(spec, fps));
+  // a few specific lengths read best as buttons; many close ones read best as a slider (the typed box and the slider both snap to a length the model really makes)
+  const listed = $derived((() => { const l = listedDurations(spec, fps); return l && l.length <= 8 ? l : null; })());
   const plan = $derived(planDuration(seconds, spec, { fps, maxSeconds }));
   // what is typed in the box while it is being edited; it becomes the (honest) actual length when the person leaves the box or presses Enter
   let typed = $state<string | null>(null);
@@ -49,7 +50,7 @@
     </div>
     <p class="tiny note" class:warn={plan?.adjusted} data-testid="duration-note">{describePlan(plan, spec)}</p>
     <p class="tiny muted" data-testid="duration-limits">
-      {#if listed}This model makes {listed.map(fmtSeconds).join(', ')}.{:else}This model makes {fmtSeconds(lo)} to {fmtSeconds(hi)}, in steps of {fmtSeconds(spec.step)}.{/if}
+      {#if listed}This model makes {listed.map(fmtSeconds).join(', ')}.{:else}This model makes {fmtSeconds(lo)} to {fmtSeconds(hi)}{#if spec.options?.length && spec.declared}, at {spec.options.length} fixed lengths{:else}, in steps of {fmtSeconds(spec.step)}{/if}.{/if}
       {#if maxSeconds && maxSeconds < spec.max} Your organisation allows at most {maxSeconds} s.{/if}
     </p>
   {/if}
@@ -67,7 +68,7 @@
   .chips button[aria-checked='true'] { background: var(--accent, #2a6df4); color: var(--on-accent, #fff); border-color: transparent; }
   .numwrap { display: inline-flex; align-items: center; gap: 6px; }
   .num { width: 5.5em; text-align: right; font-variant-numeric: tabular-nums; }
-  .u { opacity: 0.7; }
-  .note.warn { color: var(--warn, #b45309); }
-  .muted { opacity: 0.7; }
+  .u { color: var(--fg-muted); }
+  .note.warn { color: var(--warn); }
+  .muted { color: var(--fg-muted); }
 </style>

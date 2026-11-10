@@ -14,7 +14,7 @@
   import MediaProtection from '$lib/components/media/MediaProtection.svelte';
   import { contentUrl, facts, listAssets, type Asset } from '$lib/media/assets';
   import { Upload, isMedia, precheck } from '$lib/media/upload.svelte';
-  import { trayFor } from '$lib/media/tray.svelte';
+  import { handoff } from '$lib/media/handoff.svelte';
   import { openViewer } from '$lib/media/viewer.svelte';
 
   const ui = $derived(app.me.ui);
@@ -48,13 +48,13 @@
   }
   function pick(e: Event) { const i = e.currentTarget as HTMLInputElement; if (i.files) addFiles([...i.files]); i.value = ''; }
 
-  const openAsset = (a: Asset, edit = false) => openViewer(a, { edit, siblings: items, useLabel: 'Use in a new message', onsaved: (n) => { items = [n, ...items.filter((x) => x.id !== n.id)]; }, onuse: (n) => useIn(n) });
-  /** Start a new message with this file attached. The tray is kept for the whole session, so it is waiting when the composer opens. */
+  const openAsset = (a: Asset, edit = false) => openViewer(a, { edit, siblings: items, useLabel: 'Use as reference', onsaved: (n) => { items = [n, ...items.filter((x) => x.id !== n.id)]; }, onuse: (n) => useIn(n) });
+  /** A picture becomes the reference on the Images screen; a video goes to the video editor (Experimental). */
   function useIn(a: Asset) {
-    trayFor('chat:new', app.me.user.id).addAsset(a, []);
-    const op = a.kind === 'video' && ops.video?.enabled ? 'video' : ops.image?.enabled ? 'image' : '';
-    goto(`/chat?new=${Date.now()}${op ? `&op=${op}` : ''}`);
+    if (a.kind === 'video') { if (ops.openjutsu?.enabled) { handoff.video = a; goto('/openjutsu?new=1'); } return; }
+    if (ops.image?.enabled) { handoff.image = a; goto('/image'); }
   }
+  const canUse = (a: Asset) => (a.kind === 'video' ? !!ops.openjutsu?.enabled : !!ops.image?.enabled);
   async function remove() {
     const a = confirm; confirm = null; if (!a) return;
     try {
@@ -120,7 +120,7 @@
               <p class="pr" title={label(a)}>{label(a)}</p>
               <p class="tiny muted">{[...facts(a).slice(0, 2), when(a.created_at)].filter(Boolean).join(' · ')}</p>
               <div class="acts">
-                <button class="btn ghost sm" onclick={() => useIn(a)} title="Start a message with this"><Icon name="plus" size={14} /> Use</button>
+                {#if canUse(a)}<button class="btn ghost sm" onclick={() => useIn(a)} title={a.kind === 'video' ? 'Open it in the video editor (Experimental)' : 'Use it as the reference picture on Images'}><Icon name="plus" size={14} /> {a.kind === 'video' ? 'Edit' : 'Use'}</button>{/if}
                 {#if a.mime !== 'image/gif'}<button class="btn ghost icon sm" onclick={() => openAsset(a, true)} aria-label="Edit" title={a.kind === 'video' ? 'Trim or crop' : 'Crop or rotate'}><Icon name={a.kind === 'video' ? 'scissors' : 'crop'} size={15} /></button>{/if}
                 {#if a.job?.conversation_id}<a class="btn ghost icon sm" href={`/chat/${a.job.conversation_id}`} aria-label="Open its conversation" title="Conversation"><Icon name="chat" size={15} /></a>{/if}
                 <a class="btn ghost icon sm" href={contentUrl(a, { download: true })} download aria-label="Download" title="Download"><Icon name="download" size={15} /></a>
