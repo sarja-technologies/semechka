@@ -56,7 +56,7 @@ def unavailable_reason(s, mode: str) -> str | None:
     if backend_supports_media(s):
         return None
     what = "images" if mode == "image" else "video"
-    return (f"No connected inference backend can generate {what}. Connect a Sarness Engine that has {mode} models "
+    return (f"No connected inference backend can generate {what}. Connect a media engine that has {mode} models "
             "installed (Administration, Backends).")
 
 
