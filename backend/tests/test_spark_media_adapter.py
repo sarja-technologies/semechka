@@ -67,7 +67,7 @@ def test_discovery_publishes_real_limits_in_the_shape_the_pages_read(sp, st):
     assert {"image:z-image-turbo", "video:minimax-h3", "video:reverse-video"} <= set(rows)
     h3 = rows["video:minimax-h3"].meta["media"]
     assert h3["modes"] == ["t2v", "i2v", "r2v"] and h3["audio"] is True and h3["limits"]["fps"] == [24, 24] and 6.583 in h3["limits"]["durations"]
-    assert rows["image:qwen-image-edit-2511"].meta["media"]["references"] == 1
+    assert rows["image:qwen-image-edit-2511"].meta["media"]["references"] == 3 and rows["image:flux2-klein-4b"].meta["media"]["mode_pictures"]["inpaint"] == 4
     assert rows["video:opensfield-video-edit"].meta["media"]["profile"]["ready"] is True
     assert "sdxl-turbo" not in " ".join(rows)                                # the engine does not offer it, so there is no row to enable
 

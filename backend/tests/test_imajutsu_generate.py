@@ -162,12 +162,13 @@ def test_replace_subject_sentence_and_inpaint_path_with_a_selection(im, tmp_path
     bike = up(im, solid_png((20, 200, 40), 48, 48), "motorcycle.png")
     spec = {"prompt": "the red car", "source_asset": src["id"], "aspect": {"id": "source"}, "references": [{"asset": bike["id"], "role": None, "active": True, "label": "a green motorcycle"}],
             "selection": {"box": {"x": 0.25, "y": 0.4, "w": 0.5, "h": 0.3}, "feather": 0, "invert": False, "keep_outside": None}}
-    d = generate(im, mkproject(im, "replace_subject", spec)["id"])
+    d = generate(im, mkproject(im, "replace_subject", {**spec, "model": model_id(im, "qwen-image-edit-2511")})["id"])
     sub = last_submission()
     assert sub["model"] == "qwen-image-edit-2511" and sub["engine_mode"] == "edit" and sub["mask"] is None       # qwen-edit cannot inpaint: the box is not sent
     assert "Replace the subject in image 1 with the subject from image 2 (it shows: a green motorcycle)" in sub["simple"]["prompt"]
-    k = generate(im, mkproject(im, "replace_subject", {**spec, "model": model_id(im, "flux2-klein-4b")})["id"])
+    k = generate(im, mkproject(im, "replace_subject", spec)["id"])          # the recommended model (FLUX.2 klein) repaints only the selection
     sub = last_submission()
+    assert sub["model"] == "flux2-klein-4b"
     assert sub["engine_mode"] == "inpaint" and sub["mask"] is not None and len(sub["pictures"]) == 2 and sub["simple"]["denoise"] == 1.0
     assert k["accounting"]["mask"]["box"] == spec["selection"]["box"] and d["accounting"]["mask"] is None
 
