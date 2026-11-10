@@ -1,0 +1,82 @@
+# Real run on the Spark, 2026-11-10: dev Semechka (port 8794, fresh data dir) + rootless-Docker containers + upstream Goose 1.58.1 + router model qwen3.6-35b-a3b
+# Output of scripts/spark/goose_e2e.py, phase by phase (verbatim).
+
+## phase: isolation (first run, before any prompt: gateway socket not yet created)
+(see isolation block below for the run after prompts)
+
+== repo task (ask mode: approve everything, deny the first edit)
+  [repo] approval tree {"path": "/work", "depth": 3} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && find . -name \"*.py\" -path \"*/test*\" -o -name \"test_*.py\" -o -> allow_once (HTTP 200)
+  [repo] approval read_image {"source": "/work/shop/pricing.py"} -> allow_once (HTTP 200)
+  [repo] approval read_image {"source": "/work/tests/test_pricing.py"} -> allow_once (HTTP 200)
+  [repo] approval read_image {"source": "/work/README.md"} -> allow_once (HTTP 200)
+  [repo] approval read_image {"source": "/work/alice-secret.txt"} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && cat shop/pricing.py"} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && cat tests/test_pricing.py"} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && cat README.md"} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && cat alice-secret.txt"} -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && python3 -m pytest tests/test_pricing.py -v"} -> allow_once (HTTP 200)
+  [repo] approval write {"content": "def total(prices, tax_rate):\n    \"\"\"Sum of prices with tax applied once.\ -> deny (HTTP 200)
+  [repo] approval edit {"path": "/work/shop/pricing.py", "before": "    return round(subtotal + tax_rate, 2)", "a -> allow_once (HTTP 200)
+  [repo] approval shell {"command": "cd /work && python3 -m pytest tests/test_pricing.py -v"} -> allow_once (HTTP 200)
+  turn took 90s; events=276; tools=['tree', 'shell', 'read_image', 'read_image', 'read_image', 'read_image', 'shell', 'shell', 'shell', 'shell', 'shell', 'write', 'edit', 'shell']
+  approvals resolved: [('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('allow_once', 'user'), ('deny', 'user'), ('allow_once', 'user'), ('allow_once', 'user')]
+  turn_end: end_turn usage={'input': 6912, 'output': 297, 'total': 7209}
+  assistant said: I'll start by exploring the repository structure and then run the tests to understand what's failing.  Let me read the text files properly:  Now let me run the tests to confirm what fails:  The issue is clear. The `total()` function is **adding** `tax_rate` as a flat value instead of **applying it as a percentage** of the subtotal.  - Current: `round(15.0 + 0.2, 2)` = `15.2` (wrong — adds 0.2 as a flat amount) - Expected: `round(15.0 * 1.2, 2)` = `18.0` (tax is 20% of 15.0 = 3.0, total = 18.0)  Let me fix the code:  Let me use edit instead:  Now let me run the tests again:  All tests pass now. Here's a summary:  ## Root Cause  The `total()` function in `shop/pricing.py` was **adding** the `t
+  files_changed: [('shop/pricing.py', 'modified', 1, 1)]
+  independent pytest run in the container after the task: rc=0 -> 2 passed in 0.00s
+== done
+[exited with code 0]
+
+== cancel
+  sleep processes before cancel=1 after=0; turn_end=cancelled 0.4s after cancel; session state=idle
+== done
+== MCP tool
+  tool calls (extension, tool): [('repo-stats', 'repo-stats__repo_stats')]
+  assistant said: Here's the breakdown by file extension in the workspace:  | Extension | Files | Lines | |-----------|-------|-------| | (none)    | 3     | 7     | | .TAG      | 1     | 4     | | .md       | 2     | 10    | | **.py**   | **3** | **13**| | .txt      | 1     | 1     |  The **Python line count is 13 lines** across 3 `.py` files.
+== done
+== skill
+  tool calls: [('', 'load_skill')]
+  skill sign-off line present: True; assistant said: ## Pricing Review: `shop/pricing.py`  ### 1. Module & Test Review  **Module** (`shop/pricing.py`): ```python def total(prices, tax_rate):     """Sum of prices with tax applied once."""     subtotal = sum(prices)     return round(subtotal * (1 + tax_rate), 2) ```  **Tests** (`tests/test_pricing.py`): - `test_total_applies_tax_rate_as_a_fraction`: `total([10.0, 5.0], 0.2) == 18.0` - `test_total_with
+== done
+== isolation
+  sessions: alice=wg_2fa3e136a94d4becb93d bob=wg_e95a00c0cc2a4ee4bbf2
+  bob GET alice's /session -> HTTP 404
+  bob GET alice's /transcript -> HTTP 404
+  bob GET alice's /events -> HTTP 404
+  bob GET alice's /files -> HTTP 404
+  bob GET alice's /files/content -> HTTP 404
+  bob POST prompt on alice's conversation -> HTTP 404
+  [whoami / uid] rc=0: 'uid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)'
+  [see own file] rc=0: 'ALICE-SECRET-1'
+  [see bob's file (path guess)] rc=0: 'find-done\ncat: /work/../gwork-e95a00c0cc2a4ee4bbf2/bob-secret.txt: No such file or directory'
+  [read /home/spark] rc=0: "done\nls: cannot access '/home/spark': No such file or directory\ncat: /home/spark/.bash_history: No such file or directory"
+  [read host semechka data] rc=0: "ls: cannot access '/home/spark/semechka-deploy': No such file or directory\nls: cannot access '/run/user': No such file or directory\ndone"
+  [mounts of interest] rc=0: '/dev/nvme0n1p2 on /work type ext4 (rw,relatime,errors=remount-ro)\n/dev/nvme0n1p2 on /run/llm type ext4 (rw,relatime,errors=remount-ro)'
+  [network devices] rc=0: 'Inter-|   Receive             \n face |bytes    packets errs d\n    lo: 1583828    6974    0'
+  [reach router/LAN/internet] rc=0: '<spark-lan-ip> 8080 blocked: OSError\n127.0.0.1 8080 blocked: ConnectionRefusedError\n127.0.0.1 22 blocked: ConnectionRefusedError\n8.8.8.8 53 blocked: OSError\n<spark-lan-ip> 8830 blocked: OSError'
+  [environment has no router key] rc=0: 'DEBIAN_FRONTEND GOOSE_DISABLE_KEYRING GOOSE_PATH_ROOT GOOSE_TELEMETRY_ENABLED GPG_KEY HOME HOSTNAME LANG MPLBACKEND PATH PIP_DISABLE_PIP_VERSION_CHECK PWD PYTHONDONTWRITEBYTECODE PYTHONUNBUFFERED PYTHON_SHA256 PYTHON_VERSION'
+  [model gateway: embeddings path] rc=0: 'HTTP/1.1 404 Not Found'
+  [model gateway: another model] rc=0: 'HTTP/1.1 403 Forbidden|Server: semechka-gateway |Date: Tue, 10 Nov 2026 08:32:05 GMT|Content-Type: application/json|Content-Length: 98|Connection: close||{"error": {"message": "model \'gpt-oss-120b\' is not available to this session", "type": "gateway"}}'
+  [model gateway: model list] rc=0: '{"object": "list", "data": [{"id": "qwen3.6-35b-a3b", "object": "model", "owned_by": "semechka"}]}'
+  [bob's container: own files, then alice's] rc=1: 'bob-secret.txt\n---\ncat: /work/alice-secret.txt: No such file or directory'
+  [container flags] none readonly=true caps_drop=[ALL] pids=512 mem=4294967296 user=65534:65534 privileged=false
+== done
+
+
+== the AGENT itself tries to leave its workspace (auto mode: Goose does not ask)
+  goose ran: shell {"command": "ls -la /home/spark"}
+    -> failed: "ls: cannot access '/home/spark': No such file or directory\n\nCommand exited with code 2"
+  goose ran: shell {"command": "cat /home/spark/.bash_history"}
+    -> failed: 'cat: /home/spark/.bash_history: No such file or directory\n\nCommand exited with code 1'
+  goose ran: shell {"command": "find / -name bob-secret.txt 2>/dev/null; echo find-finished"}
+    -> completed: 'find-finished'
+  goose ran: shell {"command": "cat /work/../bob-secret.txt"}
+    -> failed: 'cat: /work/../bob-secret.txt: No such file or directory\n\nCommand exited with code 1'
+
+== after dev-instance restart (systemctl --user restart work-dev)
+  session after restart: state=idle goose_session_id=20261110_1 last_seq=516
+  transcript items kept across the restart: 66 (['approval', 'assistant', 'error', 'files', 'notice', 'tool', 'turn_end', 'user'])
+  notices: ['resumed']; tools used: []
+  goose session id now: 20261110_1
+  assistant said: The bug was that the `total()` function added the `tax_rate` as a flat value to the subtotal instead of multiplying it as a percentage (changing `subtotal + tax_rate` to `subtotal * (1 + tax_rate)`).
