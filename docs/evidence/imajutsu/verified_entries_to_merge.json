@@ -1,0 +1,167 @@
+{
+ "image.edit-qwen-2": {
+  "at": "2026-11-10T22:24:32",
+  "job": "d5ab7c24f61e",
+  "seconds": 41.4,
+  "outputs": [
+   {
+    "w": 752,
+    "h": 1392,
+    "mode": "RGB",
+    "name": "195_0_Qwen_Edit_2511_00012.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: man replaced by the woman of picture 2, background kept (A4); output 752x1392 from a 720x1280 source"
+ },
+ "image.edit-qwen-3": {
+  "at": "2026-11-10T22:24:32",
+  "job": "33d241695780",
+  "seconds": 48.9,
+  "outputs": [
+   {
+    "w": 1392,
+    "h": 752,
+    "mode": "RGB",
+    "name": "195_0_Qwen_Edit_2511_00013.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: teapot and dog from two references placed in the kitchen (A6, B2)"
+ },
+ "image.img2img-zimage": {
+  "at": "2026-11-10T22:24:33",
+  "job": "9d1c8ef65035",
+  "seconds": 17.3,
+  "outputs": [
+   {
+    "w": 1280,
+    "h": 720,
+    "mode": "RGB",
+    "name": "9_0_z-image-img2img_00005_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: works as a low-strength refine pass (0.25-0.3 on 2048 px pictures keeps content and adds texture, but can change fine facial detail: eye colour, freckles); as a restyle it is weak (0.55 barely restyles, 0.75 re-invents objects): use klein edit for restyle"
+ },
+ "image.edit-klein-1": {
+  "at": "2026-11-10T22:24:32",
+  "job": "49fc69724fc7",
+  "seconds": 10.9,
+  "outputs": [
+   {
+    "w": 1280,
+    "h": 720,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit_00007_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed 2026-11-10: red jacket -> dark green, face/background unchanged (A1); watercolour restyle of a kitchen keeps content (B6); output keeps the source size exactly (720x1280)"
+ },
+ "image.edit-klein-2": {
+  "at": "2026-11-10T22:24:32",
+  "job": "4523c6c3b25a",
+  "seconds": 13.3,
+  "outputs": [
+   {
+    "w": 720,
+    "h": 1280,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit_00008_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: man replaced by the woman of picture 2 (curly hair, yellow raincoat), street/lighting of picture 1 kept (A3)"
+ },
+ "image.edit-klein-3": {
+  "at": "2026-11-10T22:24:32",
+  "job": "75540a366ffa",
+  "seconds": 10.1,
+  "outputs": [
+   {
+    "w": 1280,
+    "h": 720,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit_00006_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: kitchen kept, teapot of picture 2 and dog of picture 3 added (A5, B1)"
+ },
+ "image.edit-klein-4": {
+  "at": "2026-11-10T22:24:32",
+  "job": "361647f8995c",
+  "seconds": 19.5,
+  "outputs": [
+   {
+    "w": 1280,
+    "h": 720,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit_00004_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: kitchen kept, teapot, dog and woman from three references added (A7)"
+ },
+ "image.inpaint-klein-0": {
+  "at": "2026-11-10T22:24:33",
+  "job": "ca5091231e5f",
+  "seconds": 4.3,
+  "outputs": [
+   {
+    "w": 720,
+    "h": 1280,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit-masked_00002_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: selection repainted from words only (old fisherman, blue jacket); outside the selection identical to the source (mean abs diff 0.003, max 1)"
+ },
+ "image.inpaint-klein-1": {
+  "at": "2026-11-10T22:24:33",
+  "job": "0d59044fefb5",
+  "seconds": 13.2,
+  "outputs": [
+   {
+    "w": 720,
+    "h": 1280,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit-masked_00003_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: man replaced inside the selection by the reference woman; outside identical to the source (mean diff 0.001, max 2)"
+ },
+ "image.inpaint-klein-2": {
+  "at": "2026-11-10T22:24:33",
+  "job": "53f4a148a4ce",
+  "seconds": 15.7,
+  "outputs": [
+   {
+    "w": 720,
+    "h": 1280,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit-masked_00004_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: woman holding the teapot reference inside the selection; outside identical"
+ },
+ "image.inpaint-klein-3": {
+  "at": "2026-11-10T22:24:33",
+  "job": "6d2c58668028",
+  "seconds": 13.7,
+  "outputs": [
+   {
+    "w": 720,
+    "h": 1280,
+    "mode": "RGB",
+    "name": "9_0_Flux2-Klein-edit-masked_00005_.png",
+    "kind": "image"
+   }
+  ],
+  "note": "reviewed: woman + teapot + dog from three references inside the selection; outside identical (mean diff 0.003, max 2)"
+ }
+}
