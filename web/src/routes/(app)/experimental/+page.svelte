@@ -3,6 +3,7 @@
   import { app } from '$lib/session.svelte';
   import Icon from '$lib/components/Icon.svelte';
   const o = $derived(app.me?.ui?.operations ?? {});
+  const x = $derived<Record<string, number>>(o.extras?.enabled ? o.extras.groups ?? {} : {});
   type Tool = { href: string; icon: string; title: string; what: string; on: boolean };
   const groups = $derived<{ title: string; tools: Tool[] }[]>([
     { title: 'Pictures', tools: [
@@ -17,7 +18,18 @@
     { title: 'Videos', tools: [
       { href: '/openjutsu', icon: 'film', title: 'Video editor', what: 'Replace or edit an object in a video you upload, with reference pictures, masks and a step-by-step plan (OpenJutsu Studio).', on: !!o.openjutsu?.enabled },
       { href: '/experimental/video', icon: 'sliders', title: 'Advanced video', what: 'The Videos screen with the model’s own controls: resolution, frame rate, seed, negative prompt and steps.', on: !!o.video?.enabled },
-      { href: '/experimental/rea', icon: 'search', title: 'REA, video reverse engineer', what: 'Upload a video and the engine measures what is visible in it: shots, camera, light, colour and transitions, with a plan you can read.', on: !!o.video?.enabled }
+      { href: '/experimental/rea', icon: 'search', title: 'REA, video reverse engineer', what: 'Upload a video and the engine measures what is visible in it: shots, camera, light, colour and transitions, with a plan you can read.', on: !!o.video?.enabled },
+      { href: '/experimental/video-tools', icon: 'zoomin', title: 'Video tools', what: 'Make a video sharper and larger, or smoother with in-between frames, where the server offers it.', on: !!o.video?.enabled }
+    ] },
+    // tools an administrator enabled for this person (speech, music, picture tools, 3D); a group with none is not listed
+    { title: 'Audio', tools: [
+      { href: '/experimental/audio', icon: 'audio', title: 'Speech and music', what: 'Read text aloud with a preset voice, or make music from a description of its style.', on: !!x.audio }
+    ] },
+    { title: 'Tools', tools: [
+      { href: '/experimental/tools', icon: 'image', title: 'Picture tools', what: 'Cut out the subject of a picture, split it into layers, or make a new picture in the look of a reference.', on: !!x.tools }
+    ] },
+    { title: '3D', tools: [
+      { href: '/experimental/3d', icon: 'cube', title: 'Picture to 3D relief', what: 'Turn one picture into a 3D relief you can turn around and download (GLB). Only the surfaces the camera saw.', on: !!x['3d'] }
     ] }
   ].map((g) => ({ ...g, tools: g.tools.filter((t) => t.on) })).filter((g) => g.tools.length));
 </script>

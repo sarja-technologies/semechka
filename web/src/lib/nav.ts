@@ -19,7 +19,7 @@ const ALL: PrimaryEntry[] = [
 /** True when the server offers any experimental tool: advanced generation, the picture studio, the video editor, or analysing a video. */
 export function experimentalAvailable(ui: any): boolean {
   const o = ui?.operations ?? {};
-  return !!(o.image?.enabled || o.video?.enabled || o.imajutsu?.enabled || o.openjutsu?.enabled);
+  return !!(o.image?.enabled || o.video?.enabled || o.imajutsu?.enabled || o.openjutsu?.enabled || o.extras?.enabled);
 }
 
 /** The four primary places this person may use. A place the server does not offer is left out entirely (no dead link). */

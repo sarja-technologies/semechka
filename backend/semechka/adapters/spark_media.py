@@ -60,6 +60,21 @@ def profile_meta(p: dict) -> dict:
                               "operation_status": p.get("operation_status") or {}}}})
 
 
+TOOL_CAPABILITY = "media_tool"     # Experimental tools (audio, picture tools, 3D): never offered by the chat/image/video choosers, only by /api/media/extras
+
+
+def tool_meta(t: dict) -> dict:
+    """An engine Experimental tool (``tools`` in /v1/capabilities) -> ``Model.meta``. ``media.tool`` carries what the Experimental pages and
+    ``media_extras`` need; ``media.kind`` is what the tool produces (audio | image | 3d)."""
+    return _drop_none({
+        "engine_name": t.get("name"), "license": t.get("license"), "description": t.get("description"), "runtime": "comfyui",
+        "media": {"kind": t.get("output") or "image", "modes": [], "negative_prompt": False, "schedulers": [], "defaults": {}, "limits": {},
+                  **({"caution": clean_error(t["caution"])} if t.get("caution") else {}),
+                  "tool": {"id": t["id"], "group": t.get("group"), "output": t.get("output"), "ready": bool(t.get("ready")), "state": t.get("state"),
+                           "reason": clean_error(t["reason"]) if t.get("reason") else None, "inputs_schema": t.get("inputs_schema") or {},
+                           "outputs": list(t.get("outputs") or []), "typical_seconds": t.get("typical_seconds")}}})
+
+
 def discovered_from_capabilities(doc: dict) -> list[DiscoveredModel]:
     """Everything the engine currently offers as Semechka media models. Models the engine lists but cannot run now are NOT returned (the catalog sync then marks
     an existing row unavailable)."""
@@ -71,6 +86,9 @@ def discovered_from_capabilities(doc: dict) -> list[DiscoveredModel]:
         if isinstance(p, dict) and p.get("id") and (p.get("readiness") or {}).get("ready"):
             kind = p.get("category") or "video"
             out.append(DiscoveredModel(f"{kind}:{p['id']}", [kind], profile_meta(p), loaded=False))
+    for t in doc.get("tools") or []:      # Experimental tools: an engine without this list (older) simply offers none
+        if isinstance(t, dict) and t.get("id") and t.get("ready"):
+            out.append(DiscoveredModel(f"tool:{t['id']}", [TOOL_CAPABILITY], tool_meta(t), loaded=False))
     return out
 
 
@@ -104,6 +122,11 @@ class SparkMediaMixin(SarnessMediaMixin):
 
     async def media_submit_profile(self, profile_id: str, inputs: dict, client_key: str, title: str | None = None) -> str:
         r = await self._call("POST", f"/v1/profiles/{profile_id}/jobs", json={"inputs": inputs, "client_key": client_key, "title": title or f"semechka {profile_id}"})
+        return r.json()["id"]
+
+    async def media_submit_tool(self, tool_id: str, inputs: dict, client_key: str, title: str | None = None) -> str:
+        """An Experimental tool job (text to speech, music, picture tools, 3D): POST /v1/tools/{id}/jobs; file inputs are upload ids."""
+        r = await self._call("POST", f"/v1/tools/{tool_id}/jobs", json={"inputs": inputs, "client_key": client_key, "title": title or f"semechka {tool_id}"})
         return r.json()["id"]
 
     async def media_upload(self, data, mime: str, name: str) -> str:

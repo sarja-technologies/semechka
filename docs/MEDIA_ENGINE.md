@@ -118,6 +118,10 @@ only where a reviewed run exists (the table above) and say so.
 | Live job inspector / workflow graph / history / segments (Studio trace) | **not offered** | those traces belong to the old engine's node graph; the routes answer 404 and Semechka shows "no trace" |
 | Cancel | works | `POST /v1/jobs/{id}/cancel` -> ComfyUI `/interrupt` + queue delete (verified on the GPU in the evidence section) |
 | Release memory | works | `POST /v1/release` -> ComfyUI `/osf/unload` |
+| Speech from text (Kokoro), music (ACE-Step 1.5) | **works, Experimental > Audio** (2026-11-10, section 9) | tools `kokoro-tts`, `ace-step-music` (`POST /v1/tools/{id}/jobs`) |
+| Remove background, split into layers, style from a picture | **works, Experimental > Tools** (section 9) | tools `bg-remove`, `image-layers`, `style-reference` |
+| Picture to 3D relief (MoGe-2, GLB + depth map) | **Experimental > 3D** (section 9) | tool `moge-relief` (new feature `scene3d.moge-mesh`) |
+| Video upscale, smooth motion | **Experimental > Video tools** (page added 2026-11-10) | profiles `opensfield-video-upscale`, `opensfield-smooth-motion` |
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -142,6 +146,7 @@ absent or empty file = 503, never open). Independent of the browser UI's access 
 | `POST /release {force?}` | free ComfyUI models; returns MemAvailable before/after |
 | `GET /reverse/{job}` `GET /reverse/{job}/files/{name}` | REA analysis + plan, frames, contact sheet |
 | `/api/internal/upscale*` | the narrow upscale API (own token file `upscale.token`), unchanged |
+| `GET /tools` `POST /tools/{id}/jobs {inputs, client_key, title}` `GET /tools-runtime` | Experimental tools (section 9): the list with `inputs_schema` and readiness; a job (file inputs are upload ids; idempotent by `client_key`); the speech child process state |
 
 Durability: the job list and prompt ids are saved (`OPENSFIELD_JOBS_FILE`); after an engine restart queued jobs run again and a running job whose ComfyUI prompt is still in
 ComfyUI is **re-attached** (no resubmission, no second memory-gate wait). Retention: uploads 2 days, output folders 3 days, job records 30 days (env overridable), results are
@@ -271,3 +276,46 @@ contact-sheeted (video); progress was polled every second through `GET /api/medi
 Not proven on the GPU: Wan 5B text-to-video, LTX/H3 image-to-video and H3 reference-to-video, first/last frame, Qwen-Image 2.1, the `opensfield-video-edit` / video upscale / smooth-motion
 profiles (their tests use fakes; the workflows themselves are verified by OpenSfield's own `config/verified.json`), Imajutsu outpaint, the browser UI (nothing was clicked), a Roasted/Salted
 deployment. Live sampler previews do not exist (ComfyUI runs without a preview method).
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## 9. Experimental tools: audio, picture tools, 3D (consolidation phase 2, 2026-11-10)
+
+What the retired OpenSfield studio could do that Semechka did not offer yet, recovered where the weights and dependencies were already on the Spark and a real run worked.
+The full before/after list of every studio tool is in [FEATURE_PARITY_OPENSFIELD.md](FEATURE_PARITY_OPENSFIELD.md).
+
+**Engine** (`app/semechka_extras.py`, branch `consol2/imajutsu-parity` of `~/opensfield`): `tools` in `/v1/capabilities`, next to `models` and `profiles`, so an older Semechka sees
+nothing new. Same rule as the models: a tool is `ready` only when its registry feature is runnable here AND is in `config/verified.json`; otherwise it is listed with `state`/`reason`
+and refused (409). Jobs are ordinary engine jobs (`kind` = `audio` | `image` | `3d`; each generation has `type` and `mime`: WAV/MP3, PNG, GLB).
+
+| Tool | Feature | Output | Licence | Runs on |
+|---|---|---|---|---|
+| `kokoro-tts` Text to speech (Kokoro) | `audio.tts-kokoro` | WAV 24 kHz mono | Apache-2.0 | CPU, a **child process** of the engine (below) |
+| `ace-step-music` Music (ACE-Step 1.5) | `audio.music` | MP3, exactly the asked length (5-120 s) | Apache-2.0 | GPU (ComfyUI) |
+| `bg-remove` Remove background (BiRefNet) | `image.bg-remove` | cut-out PNG with alpha + the mask | MIT | GPU (ComfyUI) |
+| `image-layers` Split into layers (Qwen-Image Layered) | `image.decompose` | one transparent PNG per layer (2-8) | Apache-2.0 | GPU, about 50 GB |
+| `style-reference` Style from a picture (Krea 2) | `soul.styles` | PNG | Krea-2 community (`caution`) | GPU (ComfyUI) |
+| `moge-relief` Picture to 3D relief (MoGe-2) | `scene3d.moge-mesh` (**new**) | textured GLB + colour depth PNG | MIT | GPU (ComfyUI core nodes) |
+
+*Text to speech without a standing service.* The old `opensfield-tts` sidecar on :8770 is retired and stays retired. With `OPENSFIELD_TTS_URL` **unset** the engine starts
+`ops/tts/osf_tts_worker.py` in `~/opensfield/venv-tts` on the first speech request (JSON lines over a pipe, no port), CPU only (`CUDA_VISIBLE_DEVICES` empty, so no CUDA context
+on the shared memory), offline (`HF_HUB_OFFLINE=1`), and stops it after `OPENSFIELD_TTS_IDLE` seconds without a request (default 300) or when its resident memory passes
+`OPENSFIELD_TTS_MAX_MB` (default 4096; measured 1.8 GB with one English pipeline, 2.4 GB with both). Only voices already in the Hugging Face cache are offered (on this Spark:
+`af_heart`, `bf_emma`); nothing is downloaded. Setting `OPENSFIELD_TTS_URL` restores the old HTTP-sidecar behaviour.
+
+*3D, honestly.* No image-to-3D object model is installed (Hunyuan3D is licence-restricted and opt-in only; TRELLIS, TripoSG, SF3D, Depth Anything 3 weights are absent although ComfyUI
+has their nodes). MoGe-2 (0.66 GB, already on disk) estimates the geometry visible in **one** picture; `scene3d.moge-mesh` triangulates that point map into a textured mesh. It is a
+relief seen from the camera, not a closed object. The old studio's `app.3d-figure-open` is a Qwen-Image-Edit picture preset (a picture of a figurine), not 3D.
+
+**Semechka** (`media_extras.py`, `routers/media_extras.py`): ready tools are discovered as models `tool:<id>` with the single capability `media_tool`, so no chat, Images or Videos
+chooser ever lists them. A catalog sync adds them **disabled with no grants**; an administrator enables each and grants it (a grant limited to modes applies when it includes
+`image`). A person sees a tool when they can use Images or Videos AND the tool is enabled and granted to them (owners with `models.use_all` also reach disabled ones, marked
+restricted, as on Images). `GET /api/media/extras?group=audio|tools|3d`, `POST /api/media/extras/jobs` (multipart: `model_id`, `inputs` JSON, `file:<input>` or `asset:<input>` = a
+Library id, `save`), `GET /api/media/extras/jobs`. Jobs are `MediaJob(kind="tool")` and share the Images/Videos daily limit, concurrency cap, retention and no-save rules; each stored
+file is filed by what it is (`audio`, `image`, `3d`), the Library shows sounds and 3D meshes (player / 3D viewer) and filters by them. `GET /api/me` reports
+`ui.operations.extras = {enabled, groups: {audio, tools, 3d}}`; the Experimental hub lists only the groups that have a tool for this person.
+
+**Web**: `/experimental/audio`, `/experimental/tools`, `/experimental/3d` (one page, `ExtrasPage.svelte`, whose form is built from the engine's `inputs_schema`) and
+`/experimental/video-tools` (the existing upscale and smooth-motion profiles through `/api/media/profile-jobs`). Results: pictures on a checkerboard (transparency is visible),
+an audio player, a dependency-free WebGL GLB viewer (`GlbViewer.svelte`: drag, pinch or scroll, double-click to reset, keyboard; Picture/Shape views), always with a download.
+The Images and Videos pages are unchanged.

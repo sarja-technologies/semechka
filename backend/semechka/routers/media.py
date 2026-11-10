@@ -22,6 +22,10 @@ router = APIRouter(prefix="/api/media")
 
 
 def _gate(ctx: Ctx, kind: str) -> None:
+    if kind in ("tool", "audio", "3d"):      # an Experimental tool job or its speech/music/3D file (media_extras): generated media must still be available
+        from ..media_extras import gate
+        gate(ctx)
+        return
     st = services.mode_state(ctx.s, ctx.principal, ctx.st, kind)
     if st["enabled"]:
         return

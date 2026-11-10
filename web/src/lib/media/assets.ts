@@ -4,7 +4,7 @@ import { get, qs } from '$lib/api';
 
 export type Asset = {
   id: string;
-  kind: 'image' | 'video';
+  kind: 'image' | 'video';   // the Library also lists 'audio' and '3d' results of Experimental tools; library/+page.svelte handles those
   mime: string;
   size: number;
   width?: number | null;
