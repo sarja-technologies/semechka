@@ -1,0 +1,245 @@
+{
+ "via": "Semechka dev instance (staging copy) GET /api/media/jobs/{id}/analysis",
+ "vision": {
+  "available": true,
+  "used": true,
+  "router": "spark-llm (llama.cpp)",
+  "model": "qwen3.6-35b-a3b",
+  "described": 4,
+  "total": 4,
+  "frames_sent": 14,
+  "loaded_by_us": true,
+  "unloaded": true,
+  "clip": {
+   "summary": "The video presents a sequence of four distinct scenes, beginning with a neon-lit bicycle on a wet street at night, followed by a golden retriever running on a beach during sunset. It then transitions to a snowy cabin nestled among pine trees and concludes with a still shot of oranges in a ceramic bowl on a kitchen counter.",
+   "style": "Cinematic medium wide shots with varied atmospheric lighting",
+   "prompt": "A red bicycle is parked against a brick wall on a wet street at night illuminated by blue and pink neon lights reflecting on the pavement. Cut to a golden retriever running happily along wet sand towards the camera bathed in warm sunset light with ocean waves in the background. Cut to a wooden cabin nestled among snow-covered pine trees with white smoke drifting from the chimney and a large mountain in the background. Cut to a light blue ceramic bowl filled with bright oranges sitting on a wooden countertop in a kitchen with natural light coming from a window.",
+   "basis": "vision model, from the shot descriptions"
+  },
+  "note": "Scene descriptions and prompts are a vision model's reading of the keyframes, not ground truth. The reconstructed prompt is a NEW prompt meant to produce a similar clip; it is not the prompt or the model that made this video, which cannot be recovered from the pictures.",
+  "memory_gb": {
+   "before": 93.5,
+   "loaded": 21.7,
+   "after": 45.3
+  },
+  "load_s": 23.3,
+  "reason": "ok",
+  "unload_note": "unloaded",
+  "elapsed_s": 972.6
+ },
+ "shots": [
+  {
+   "index": 0,
+   "start": 0,
+   "end": 5.167,
+   "transition_in": {
+    "type": "start",
+    "label": "start of the video"
+   },
+   "camera_measured": [
+    "slow push-in / zoom in (a lens zoom and moving the camera look the same in 2D)"
+   ],
+   "vision": {
+    "text": "A red bicycle is parked against a brick wall on a wet street at night. The scene is illuminated by the blue and pink neon lights from a shop in the background, which reflect on the slick pavement.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_001_first.jpg",
+      "t": 0,
+      "key": "first"
+     },
+     {
+      "file": "shot_001_mid.jpg",
+      "t": 2.534,
+      "key": "mid"
+     },
+     {
+      "file": "shot_001_last.jpg",
+      "t": 5.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "red bicycle",
+     "brick wall",
+     "wet street",
+     "shop sign"
+    ],
+    "action": "The camera slowly pushes in towards the stationary bicycle, bringing the details of the bike and the reflections on the ground closer to the viewer.",
+    "setting": "An urban street at night, outside a shop with a blue sign.",
+    "mood": "Atmospheric, quiet, moody",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "low key lighting with cool blue and pink neon accents from the background",
+    "changes": "nothing notable",
+    "prompt": "A cinematic medium wide shot of a red bicycle parked against a dark brick wall on a wet city street at night. The background features a shop with a blue sign and glowing neon lights in pink and blue that cast colorful reflections on the wet asphalt. The camera performs a slow push-in towards the bicycle. The mood is atmospheric and quiet, with dramatic lighting highlighting the bike's silhouette against the dark surroundings.",
+    "elapsed_s": 6.4,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 1,
+   "start": 5.167,
+   "end": 9.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0,
+    "basis": "measured",
+    "confidence": 1
+   },
+   "camera_measured": [
+    "moderate push-in / zoom in (a lens zoom and moving the camera look the same in 2D)"
+   ],
+   "vision": {
+    "text": "A golden retriever runs happily along the wet sand of a beach, moving towards the camera. The scene is bathed in the warm, golden light of a sunset, with ocean waves rolling in the background.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_002_first.jpg",
+      "t": 5.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_002_mid.jpg",
+      "t": 7.177,
+      "key": "mid"
+     },
+     {
+      "file": "shot_002_last.jpg",
+      "t": 9.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "golden retriever",
+     "beach",
+     "ocean waves"
+    ],
+    "action": "The dog trots forward along the shoreline with its tail held high, approaching the camera position.",
+    "setting": "A sandy beach at sunset or sunrise.",
+    "mood": "Joyful and serene",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "warm backlight from the setting sun",
+    "changes": "The dog moves closer to the camera, and the background waves shift slightly.",
+    "prompt": "A medium wide shot of a golden retriever running joyfully along a wet sandy beach towards the camera. The sun is setting in the background, casting a warm golden glow on the dog's fur and creating a backlight effect. The ocean waves are crashing gently behind the dog. The camera performs a moderate push-in as the dog approaches. The mood is happy and peaceful.",
+    "elapsed_s": 5.2,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 2,
+   "start": 9.167,
+   "end": 22.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0,
+    "basis": "measured",
+    "confidence": 1
+   },
+   "camera_measured": [
+    "slow pan right (or sideways track)"
+   ],
+   "vision": {
+    "text": "A wooden cabin sits nestled among snow-covered pine trees with a large mountain in the background. White smoke drifts steadily from the cabin's chimney into the cool air. The scene is quiet and still, evoking a sense of peaceful isolation.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_003_first.jpg",
+      "t": 9.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_003_q1.jpg",
+      "t": 12.472,
+      "key": "q1"
+     },
+     {
+      "file": "shot_003_mid.jpg",
+      "t": 15.677,
+      "key": "mid"
+     },
+     {
+      "file": "shot_003_q3.jpg",
+      "t": 18.842,
+      "key": "q3"
+     },
+     {
+      "file": "shot_003_last.jpg",
+      "t": 22.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "wooden cabin",
+     "snow-covered trees",
+     "mountain",
+     "chimney smoke"
+    ],
+    "action": "Smoke continuously rises and disperses from the chimney of the cabin while the camera slowly pans to the right.",
+    "setting": "A snowy mountain landscape during the day, likely at dawn or dusk.",
+    "mood": "Serene and tranquil",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "soft ambient light with warm highlights on the mountain peak",
+    "changes": "The smoke plume changes shape and position as it rises, and the camera view shifts slightly to the right, revealing more of the trees on the right side of the frame.",
+    "prompt": "A medium wide shot of a rustic wooden cabin in a snowy forest with a majestic mountain in the background. Smoke billows gently from the chimney. The camera performs a slow pan to the right. The lighting is soft and cool with a touch of warmth on the distant peak, creating a serene and peaceful winter mood.",
+    "elapsed_s": 6.7,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 3,
+   "start": 22.167,
+   "end": 25.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0,
+    "basis": "measured",
+    "confidence": 1
+   },
+   "camera_measured": [
+    "static camera"
+   ],
+   "vision": {
+    "text": "A light blue ceramic bowl filled with several bright oranges sits on a wooden countertop in a kitchen. The scene is still and quiet, with natural light coming from a window on the left. The background shows a blurred kitchen environment with white cabinetry.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_004_first.jpg",
+      "t": 22.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_004_mid.jpg",
+      "t": 23.677,
+      "key": "mid"
+     },
+     {
+      "file": "shot_004_last.jpg",
+      "t": 25.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "blue bowl",
+     "oranges",
+     "wooden countertop"
+    ],
+    "action": "nothing notable",
+    "setting": "a kitchen during the day",
+    "mood": "fresh and calm",
+    "shot_size": "medium close-up",
+    "angle": "eye level",
+    "lighting": "soft natural light from the left",
+    "changes": "nothing notable",
+    "prompt": "A static medium close-up shot of a light blue bowl filled with fresh oranges resting on a wooden kitchen counter. Soft natural daylight illuminates the scene from the left, highlighting the texture of the fruit. The background is a softly blurred kitchen with white cabinets and a window, creating a calm and fresh atmosphere.",
+    "elapsed_s": 4.5,
+    "basis": "vision model"
+   }
+  }
+ ]
+}

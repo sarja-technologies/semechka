@@ -63,7 +63,7 @@ Profiles (video in, video out; same `inputs_schema` contract as before, **no** S
 | `opensfield-video-edit` | `replace_object` -> `genjutsu.replace-object` (SCAIL-2; video, reference picture, prompt, target); `motion_transfer` -> `genjutsu.motion-control` (Wan Animate 2; driving video, character picture, character prompt, motion prompt); `restyle` -> `genjutsu.styles` (LTX; video, picture, prompt); `edit_video` -> `video.edit` (Wan 2.2 Bernini-R; video, picture, prompt) | measured 439 / 364 / 177 / 664 s. Size and length follow the source; no mask, box or size control. Replace and motion produce two videos, only the last is delivered |
 | `opensfield-video-upscale` | `upscale` -> `video.upscale` (SeedVR2) | 192 s |
 | `opensfield-smooth-motion` | `interpolate` -> `video.interpolate` (FILM, 2x/4x) | 6 s |
-| `reverse-video` | `analyse` -> `video.reverse` (REA, Reverse Engineer Video) | 3 s; CPU only; see section 7 |
+| `reverse-video` | `analyse` -> `video.reverse` (REA, Reverse Engineer Video) | 1-2 s CPU analysis; with scene descriptions (default) plus the vision model's time, see section 7 |
 
 Engine-only extras that exist in OpenSfield but Semechka does not use (kept available in the engine, no Semechka surface): background removal (`image.bg-remove`), image layers
 (`image.decompose`), style reference (`soul.styles`), ACE-Step music, Kokoro TTS, camera/effects LTX presets, `iphone-photo` finish (Semechka has its own finish and it is off by default).
@@ -114,7 +114,7 @@ only where a reviewed run exists (the table above) and say so.
 | Reference-to-video (two pictures) | **works at the engine level** | `minimax-h3` r2v (`extra_references` = 2 ids). Semechka's composer sends it only if the web part exposes two references for video |
 | Video editing profile (Composer "profile" tray) | **works, different models** | `opensfield-video-edit` operations above |
 | OpenJutsu Studio (8 modes, SAM mask/box, H3 context loop, size presets, live trace) | **unavailable** | see section 5: not an OpenSfield workflow. The new profiles publish no Studio `modes`, so the Studio lists them as "does not say which operations it can do" instead of pretending |
-| Reverse Engineer Video (REA) | **works** | profile `reverse-video`; analysis served at `GET /v1/reverse/{job}` |
+| Reverse Engineer Video (REA) | **works**, scene descriptions + reconstructed prompt **restored** (llama.cpp router vision model) | profile `reverse-video`; analysis served at `GET /v1/reverse/{job}`; Semechka Experimental -> Video -> REA |
 | Live job inspector / workflow graph / history / segments (Studio trace) | **not offered** | those traces belong to the old engine's node graph; the routes answer 404 and Semechka shows "no trace" |
 | Cancel | works | `POST /v1/jobs/{id}/cancel` -> ComfyUI `/interrupt` + queue delete (verified on the GPU in the evidence section) |
 | Release memory | works | `POST /v1/release` -> ComfyUI `/osf/unload` |
@@ -239,12 +239,35 @@ before relying on H3 alongside LLMs.
 
 ## 7. Reverse Engineer Video (REA)
 
-Profile `reverse-video`, operation `analyse`, input `video` (+ `vision` off/auto; **off by default**: the optional scene descriptions use a vision model that is already loaded on a
-Sarness engine, which is being retired; re-pointing that hook at the llama.cpp router is not done). The upload is validated like OpenSfield's own (ffprobe, 500 MB, 10 minutes, 4K).
-The job's delivered file is the contact sheet (JPEG); `GET /v1/reverse/{job}` returns the full analysis (shots, camera, light, colour, transitions) and the editable plan; frames at
-`/v1/reverse/{job}/files/{name}`. It measures what is visible; it does not recover how a video was made.
+Profile `reverse-video`, operation `analyse`, input `video` (+ `vision` `auto` | `off`, **`auto` by default**). The upload is validated like OpenSfield's own (ffprobe,
+500 MB, 10 minutes, 4K). The job's delivered file is the contact sheet (JPEG); `GET /v1/reverse/{job}` returns the full analysis (shots, camera, light, colour,
+transitions) and the editable plan; keyframes and the contact sheet at `/v1/reverse/{job}/files/{name}`.
 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+**Scene descriptions (restored, now on the llama.cpp router).** With `vision=auto` the engine sends every shot's keyframes (1 for a shot under 3 s, first/mid/last
+from 3 s, 5 from 12 s) in one request to a vision model on `spark-llm` (`qwen3.6-35b-a3b` preferred, `qwen3.8-27b` second) and gets a JSON answer per shot:
+description, subjects, action, setting, mood, shot size, angle, light, what changes, and a prompt for that shot; then one text-only request writes a
+**reconstructed prompt** for the whole clip from those descriptions. Fields are additive (`shot.vision.*`, `analysis.vision.{model, described, frames_sent,
+clip: {summary, style, prompt}, loaded_by_us, unloaded, memory_gb, reason, note}`), so older readers keep working. The reconstructed prompt is a NEW prompt for a
+similar clip; the page and the analysis say that it is not the prompt or the model that made the video.
+
+**Etiquette** (engine `docs/REVERSE_VIDEO.md`, "Vision etiquette"): dedicated router key from `OPENSFIELD_VISION_KEY_FILE` (default `~/spark-llm/media.key`, never
+logged or returned); shared GPU lock (`~/spark-reset/gpu.lock`, the `gpu-llm` lock) taken by the engine itself, bounded wait (120 s) while a heavy media run holds it;
+an already loaded vision model is reused and left loaded; otherwise admission first (MemAvailable minus a 6 GB reserve must cover the measured 25.3 GB + 4 GB headroom;
+never Flash-Next; never past the router's 3-model limit, so nobody's model is pushed out); unloaded afterwards only if REA loaded it and no stream is running on it;
+cancel works mid-description and still unloads. When it cannot run, the analysis is complete without descriptions and `vision.reason` says why in plain words (no key,
+key refused, router down, not enough memory with the numbers, lock busy).
+
+**Semechka.** Experimental -> Video -> REA (`/experimental/rea`): upload or pick a video, "Describe the scenes with a vision model" (on by default; sends
+`vision=auto|off`), Analyse. The result shows the vision note ("Vision used: qwen3.6-35b-a3b, N keyframes from M shots ..." or the reason), the reconstructed prompt
+(read-only text box + Copy), one card per shot (keyframe thumbnails, description, subjects, shot size/angle/light/mood/setting, the measured camera/light/colours, the
+shot's prompt + Copy), and every measurement under "All measurements". Keyframes come through `GET /api/media/jobs/{id}/analysis/files/{name}` (owner only, completed
+`reverse-video` jobs only, JPEG names from a fixed pattern, proxied from the engine).
+
+**Measured** (evidence `docs/evidence/rea/`): H3 5 s clip, 1 shot, 3 keyframes, qwen3.6 loaded by REA in 23 s, whole job 33 s, MemAvailable 111.7 -> 87.8 -> 112.2 GB;
+4-shot clip, 14-16 keyframes, about 5 s per shot, 41 s job; cancel during "Describing shot 2" ends the job in 1.5 s and unloads; wrong key / router down / no key /
+lock busy each return the full measurements with a plain reason. Descriptions were checked against the frames: subjects, settings, light and pan direction were
+right; mismatches recorded there (a measured push-in called "static" before the camera fact was enforced, a background bicycle omitted, a garbled sign transcribed).
+Under a busy GPU-lock queue (other teams' heavy runs) the step waits; with the default 120 s it then skips with the reason.
 
 ## 8. Evidence
 

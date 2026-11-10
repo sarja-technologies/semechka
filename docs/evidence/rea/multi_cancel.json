@@ -1,0 +1,153 @@
+{
+ "engine_job": "aeaea11ca2cd",
+ "status": "cancelled",
+ "elapsed_s": 25.7,
+ "mem_available_gb": {
+  "before": 111.9,
+  "min": 87.4,
+  "after": 111.6
+ },
+ "progress_series": [
+  [
+   12.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   12.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   15.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   15.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   16.1,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   16.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   17.2,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   17.7,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   18.2,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   18.7,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   19.2,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   19.7,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   20.2,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   20.7,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   21.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   21.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   22.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   22.7,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   23.2,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   23.7,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   24.2,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   24.7,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   25.2,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   25.7,
+   0,
+   "Cancelled"
+  ]
+ ],
+ "note": "cancelled: no analysis document"
+}

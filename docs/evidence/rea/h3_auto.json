@@ -1,0 +1,410 @@
+{
+ "engine_job": "fc584354e493",
+ "status": "completed",
+ "elapsed_s": 32.9,
+ "mem_available_gb": {
+  "before": 111.7,
+  "min": 87.8,
+  "after": 112.2
+ },
+ "progress_series": [
+  [
+   1.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   1.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   2.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   2.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   3.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   3.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   4.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   4.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   5.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   5.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   6.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   6.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   7.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   7.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   8.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   8.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   9.2,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   9.7,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   10.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   10.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   11.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   11.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   12.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   12.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   15.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   15.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   16.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   16.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   17.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   17.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   18.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   18.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   19.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   19.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   20.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   20.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   21.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   21.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   22.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   22.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   23.3,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   23.8,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   24.3,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   24.8,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   25.3,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   25.8,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   26.3,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   26.8,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   27.4,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   27.9,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   28.4,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   28.9,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   29.4,
+   0.9035,
+   "Analysing: Describing shot 1 of 1 with qwen3.6-35b-a3b"
+  ],
+  [
+   29.9,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   30.4,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   30.9,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   31.4,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   31.9,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   32.4,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   32.9,
+   1.0,
+   "Done"
+  ]
+ ],
+ "vision": {
+  "available": true,
+  "used": true,
+  "router": "spark-llm (llama.cpp)",
+  "model": "qwen3.6-35b-a3b",
+  "described": 1,
+  "total": 1,
+  "frames_sent": 3,
+  "loaded_by_us": true,
+  "unloaded": true,
+  "clip": {
+   "summary": "A red bicycle is parked against a brick wall on a wet street at night. The pavement displays colorful reflections of neon signs from a nearby shop, illuminated by the ambient glow of city lights.",
+   "style": "Nighttime urban atmosphere with neon reflections",
+   "prompt": "A red bicycle is parked against a brick wall on a wet street at night, with the colorful reflections of neon signs from a nearby shop visible on the pavement. The scene is quiet and still, illuminated by the ambient glow of the city lights.",
+   "basis": "vision model, from the shot descriptions"
+  },
+  "note": "Scene descriptions and prompts are a vision model's reading of the keyframes, not ground truth. The reconstructed prompt is a NEW prompt meant to produce a similar clip; it is not the prompt or the model that made this video, which cannot be recovered from the pictures.",
+  "memory_gb": {
+   "before": 111.6,
+   "loaded": 88.5,
+   "after": 112.2
+  },
+  "load_s": 23.1,
+  "reason": "ok",
+  "unload_note": "unloaded",
+  "elapsed_s": 31.8
+ },
+ "shots": [
+  {
+   "index": 0,
+   "start": 0.0,
+   "end": 5.167,
+   "transition_in": {
+    "type": "start",
+    "label": "start of the video"
+   },
+   "camera_measured": [
+    "slow push-in / zoom in (a lens zoom and moving the camera look the same in 2D)"
+   ],
+   "vision": {
+    "text": "A red bicycle is parked against a brick wall on a wet street at night, with the colorful reflections of neon signs from a nearby shop visible on the pavement. The scene is quiet and still, illuminated by the ambient glow of the city lights.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_001_first.jpg",
+      "t": 0.0,
+      "key": "first"
+     },
+     {
+      "file": "shot_001_mid.jpg",
+      "t": 2.534,
+      "key": "mid"
+     },
+     {
+      "file": "shot_001_last.jpg",
+      "t": 5.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "red bicycle",
+     "brick wall",
+     "wet pavement",
+     "shopfront"
+    ],
+    "action": "The bicycle remains stationary throughout the shot, leaning against the wall while the camera slowly pushes in towards it.",
+    "setting": "An urban street at night, outside a shop with a blue sign.",
+    "mood": "Atmospheric, quiet, nocturnal",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "mixed artificial light from street lamps and neon signs, creating strong reflections",
+    "changes": "nothing notable",
+    "prompt": "A static shot of a red bicycle parked against a dark brick wall on a wet city street at night. In the background, a shop with a blue sign and glowing neon lights is visible, casting colorful reflections onto the wet pavement. The camera performs a slow, subtle push-in towards the bicycle. The mood is atmospheric and quiet, lit by the mix of streetlights and neon glow.",
+    "elapsed_s": 5.7,
+    "basis": "vision model"
+   }
+  }
+ ]
+}
