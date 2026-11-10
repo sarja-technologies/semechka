@@ -221,6 +221,22 @@ before relying on H3 alongside LLMs.
   and copies the old OpenJutsu row's grants to `opensfield-video-edit` as disabled-by-default (`--grant-profiles` opts in). `media_jobs`/`media_assets` are never modified,
   old assets still open (the store is local and encrypted). Idempotent; the rollback file restores every touched row. The LLM backend row is not touched.
 
+## 6b. Handoff to the web part (what the pages must say or hide)
+
+* **Length**: show `duration.options` (the exact clip lengths, e.g. H3 5.167 s / 6.583 s) and the asset's own `duration` after the run; never the length that was asked for.
+  `GET /api/media/options` already returns it per model (`duration.options`, `declared: true`, `fps` fixed).
+* **Controls that do not exist**: negative prompt (`negative_prompt: false` on every model), scheduler, guidance, frame rate. **Steps** exist only on models with `speed_switch: true`
+  (Qwen-Image 2512, Qwen-Image-Edit, Wan 14B, H3): label it "Fast / Quality" (<= 8 = Fast), not a step count. Imajutsu's draft/high step numbers therefore map to Fast/Quality and the
+  plan text "N steps" is not what the workflow does.
+* **Sizes**: free sizes (Z-Image, Qwen-Image, FLUX.2 klein) vs fixed shapes (Krea: `limits.sizes`, `size_policy: snap_to_shape`; the result states its real size) vs `size_policy: source_shape`
+  (edit and inpaint: the output follows the picture; width/height are ignored).
+* **Imajutsu**: modes `restyle`, `replace_subject`, `reference` and the refine pass of `upscale` have no model (the page already says "no model" when the routing finds none);
+  `edit` takes one picture; `inpaint`/`outpaint` run on FLUX.1 Fill (non-commercial licence, `caution` on the model).
+* **Studio**: the new profiles carry no Studio `modes`, so `/studio` lists them as not offering operations; the Composer's profile tray (video + one reference picture + prompt) is the
+  way to run them. OpenJutsu's H3 swap is unavailable (section 5).
+* **Reverse Engineer Video** has no page yet: `GET /api/media/jobs/{id}/analysis` returns the analysis and plan; the library item is the contact sheet.
+* **Live previews** do not exist while a job runs (ComfyUI has no preview method enabled); progress is real: queue position, then "Loading the model", "Generating, step N of M".
+
 ## 7. Reverse Engineer Video (REA)
 
 Profile `reverse-video`, operation `analyse`, input `video` (+ `vision` off/auto; **off by default**: the optional scene descriptions use a vision model that is already loaded on a
