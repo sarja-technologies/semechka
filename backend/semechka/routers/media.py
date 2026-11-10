@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Literal
 
@@ -303,6 +304,32 @@ async def job_analysis(jid: str, ctx: Ctx = Depends(current)):
         return await ad.media_reverse(j.remote_id)
     except AdapterError as e:
         raise HTTPException(404 if e.status in (404, 409) else 502, {"code": e.kind, "message": str(e)}) from e
+
+
+_REA_FILE = re.compile(r"shot_\d{3}_(first|mid|last|q1|q3)\.jpg|contact_sheet\.jpg")
+
+
+@router.get("/jobs/{jid}/analysis/files/{name}")
+async def job_analysis_file(jid: str, name: str, ctx: Ctx = Depends(current)):
+    """REA keyframes (``shot_001_mid.jpg`` ...) and the contact sheet of the person's own finished analysis job, proxied from the media engine. Pictures
+    only (JPEG names from a fixed pattern), so nothing else on the engine can be read through this route."""
+    from ..backends_svc import adapter_for
+    if not _REA_FILE.fullmatch(name):
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    j = _own_job(ctx, jid)
+    _gate(ctx, j.kind)
+    b = ctx.s.get(Backend, j.backend_id)
+    ad = adapter_for(b, ctx.st) if b is not None else None
+    if ad is None or not hasattr(ad, "media_reverse_file") or not j.remote_id or j.status != "completed":
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    ctx.s.commit()
+    try:
+        code, data, mime = await ad.media_reverse_file(j.remote_id, name)
+    except AdapterError as e:
+        raise HTTPException(502, {"code": e.kind, "message": str(e)}) from e
+    if code != 200 or data is None or mime != "image/jpeg":
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/jobs/{jid}/cancel")

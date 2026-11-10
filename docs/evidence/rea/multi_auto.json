@@ -1,0 +1,571 @@
+{
+ "engine_job": "6ac1206309d6",
+ "status": "completed",
+ "elapsed_s": 40.8,
+ "mem_available_gb": {
+  "before": 112.1,
+  "min": 86.9,
+  "after": 111.9
+ },
+ "progress_series": [
+  [
+   10.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   11.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   11.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   12.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   12.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   13.6,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.1,
+   0.9014,
+   "Analysing: Loading the vision model qwen3.6-35b-a3b (about 25 GB)"
+  ],
+  [
+   14.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   15.1,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   15.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   16.1,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   16.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   17.1,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   17.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   18.1,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   18.6,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   19.2,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   19.7,
+   0.9035,
+   "Analysing: Describing shot 1 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   20.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   20.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   21.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   21.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   22.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   22.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   23.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   23.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   24.2,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   24.7,
+   0.9184,
+   "Analysing: Describing shot 2 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   25.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   25.7,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   26.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   26.7,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   27.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   27.7,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   28.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   28.7,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   29.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   29.7,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   30.2,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   30.8,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   31.3,
+   0.9333,
+   "Analysing: Describing shot 3 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   31.8,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   32.3,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   32.8,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   33.3,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   33.8,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   34.3,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   34.8,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   35.3,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   35.8,
+   0.9481,
+   "Analysing: Describing shot 4 of 4 with qwen3.6-35b-a3b"
+  ],
+  [
+   36.3,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   36.8,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   37.3,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   37.8,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   38.3,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   38.8,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   39.3,
+   0.9644,
+   "Analysing: Writing the reconstructed prompt"
+  ],
+  [
+   39.8,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   40.3,
+   0.9679,
+   "Analysing: Unloading qwen3.6-35b-a3b"
+  ],
+  [
+   40.8,
+   1.0,
+   "Done"
+  ]
+ ],
+ "vision": {
+  "available": true,
+  "used": true,
+  "router": "spark-llm (llama.cpp)",
+  "model": "qwen3.6-35b-a3b",
+  "described": 4,
+  "total": 4,
+  "frames_sent": 16,
+  "loaded_by_us": true,
+  "unloaded": true,
+  "clip": {
+   "summary": "The video presents a sequence of four distinct, serene scenes ranging from an urban night setting to natural landscapes and domestic interiors. It transitions from a wet street with a bicycle to a beach at sunset, then to a snowy cabin, and finally to a bowl of fruit in a kitchen.",
+   "style": "cinematic and atmospheric",
+   "prompt": "A red bicycle is parked against a brick wall on a wet street at night, illuminated by the neon glow of a shop in the background. Cut to a golden retriever runs joyfully along a wet sandy beach towards the camera, bathed in the warm, golden light of a sunset. Cut to a small wooden cabin sits nestled among snow-covered pine trees with a majestic mountain peak rising in the background, with white smoke drifting from the chimney. Cut to a light blue ceramic bowl filled with several bright orange citrus fruits sits stationary on a wooden countertop in a softly blurred kitchen environment.",
+   "basis": "vision model, from the shot descriptions"
+  },
+  "note": "Scene descriptions and prompts are a vision model's reading of the keyframes, not ground truth. The reconstructed prompt is a NEW prompt meant to produce a similar clip; it is not the prompt or the model that made this video, which cannot be recovered from the pictures.",
+  "memory_gb": {
+   "before": 111.7,
+   "loaded": 87.9,
+   "after": 111.9
+  },
+  "load_s": 4.0,
+  "reason": "ok",
+  "unload_note": "unloaded",
+  "elapsed_s": 30.0
+ },
+ "shots": [
+  {
+   "index": 0,
+   "start": 0.0,
+   "end": 5.167,
+   "transition_in": {
+    "type": "start",
+    "label": "start of the video"
+   },
+   "camera_measured": [
+    "slow push-in / zoom in (a lens zoom and moving the camera look the same in 2D)"
+   ],
+   "vision": {
+    "text": "A red bicycle is parked against a brick wall on a wet street at night, illuminated by the neon glow of a shop in the background. The scene is quiet and still, with reflections shimmering on the rain-slicked pavement.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_001_first.jpg",
+      "t": 0.0,
+      "key": "first"
+     },
+     {
+      "file": "shot_001_mid.jpg",
+      "t": 2.534,
+      "key": "mid"
+     },
+     {
+      "file": "shot_001_last.jpg",
+      "t": 5.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "red bicycle",
+     "brick wall",
+     "wet street",
+     "shopfront"
+    ],
+    "action": "nothing notable",
+    "setting": "an urban street at night, likely after rain",
+    "mood": "quiet, atmospheric, moody",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "mixed ambient and neon light, soft and diffused",
+    "changes": "nothing notable",
+    "prompt": "A static medium wide shot of a red bicycle leaning against a dark brick wall on a wet city street at night. In the background, a shop with a blue sign reading 'VIQR BIC' glows with neon lights, casting colorful reflections on the rain-soaked ground. The lighting is soft and atmospheric, with cool tones from the neon contrasting against the warm brick. The mood is calm and slightly melancholic, evoking a quiet urban evening.",
+    "elapsed_s": 5.3,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 1,
+   "start": 5.167,
+   "end": 405.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0.0,
+    "basis": "measured",
+    "confidence": 1.0
+   },
+   "camera_measured": [
+    "static camera"
+   ],
+   "vision": {
+    "text": "A golden retriever runs joyfully along a wet sandy beach towards the camera. The scene is bathed in the warm, golden light of a sunset, with gentle ocean waves rolling in the background.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_002_first.jpg",
+      "t": 5.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_002_q1.jpg",
+      "t": 105.222,
+      "key": "q1"
+     },
+     {
+      "file": "shot_002_mid.jpg",
+      "t": 205.177,
+      "key": "mid"
+     },
+     {
+      "file": "shot_002_q3.jpg",
+      "t": 305.092,
+      "key": "q3"
+     },
+     {
+      "file": "shot_002_last.jpg",
+      "t": 405.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "golden retriever",
+     "beach",
+     "ocean",
+     "waves"
+    ],
+    "action": "The dog trots forward along the shoreline, its tail held high and ears flapping slightly with the motion.",
+    "setting": "A sandy beach at sunset or sunrise.",
+    "mood": "Joyful and serene",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "warm backlighting from the setting sun",
+    "changes": "nothing notable",
+    "prompt": "A medium wide shot of a golden retriever running happily along a beach at sunset. The dog moves towards the camera with its tail up, illuminated by warm golden backlighting. The ocean waves roll gently in the background under a soft sky. The camera remains static throughout the shot, capturing the serene and joyful mood of the scene.",
+    "elapsed_s": 5.4,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 2,
+   "start": 405.167,
+   "end": 418.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0.0,
+    "basis": "measured",
+    "confidence": 1.0
+   },
+   "camera_measured": [
+    "slow pan right (or sideways track)"
+   ],
+   "vision": {
+    "text": "A small wooden cabin sits nestled among snow-covered pine trees with a majestic mountain peak rising in the background. White smoke drifts steadily from the cabin's chimney into the cool air. The scene is quiet and still, evoking a sense of peaceful isolation in a winter landscape.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_003_first.jpg",
+      "t": 405.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_003_q1.jpg",
+      "t": 408.472,
+      "key": "q1"
+     },
+     {
+      "file": "shot_003_mid.jpg",
+      "t": 411.677,
+      "key": "mid"
+     },
+     {
+      "file": "shot_003_q3.jpg",
+      "t": 414.842,
+      "key": "q3"
+     },
+     {
+      "file": "shot_003_last.jpg",
+      "t": 418.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "wooden cabin",
+     "snow-covered trees",
+     "mountain",
+     "chimney smoke"
+    ],
+    "action": "Smoke continuously rises and disperses from the chimney of the cabin while the camera slowly pans to the right.",
+    "setting": "A snowy mountain forest during the day, likely at dawn or dusk.",
+    "mood": "Serene and tranquil",
+    "shot_size": "medium wide",
+    "angle": "eye level",
+    "lighting": "soft natural light with a cool blue tone",
+    "changes": "The camera pans slowly to the right, shifting the cabin from the right side of the frame towards the center and revealing more of the forest to the right.",
+    "prompt": "A medium wide shot of a rustic wooden cabin in a snowy forest with a large mountain in the background. Smoke rises gently from the chimney. The camera performs a slow, smooth pan to the right. The lighting is soft and cool, suggesting early morning or late afternoon. The mood is peaceful and serene.",
+    "elapsed_s": 6.2,
+    "basis": "vision model"
+   }
+  },
+  {
+   "index": 3,
+   "start": 418.167,
+   "end": 421.167,
+   "transition_in": {
+    "type": "cut",
+    "label": "hard cut",
+    "duration_s": 0.0,
+    "basis": "measured",
+    "confidence": 1.0
+   },
+   "camera_measured": [
+    "static camera"
+   ],
+   "vision": {
+    "text": "A light blue ceramic bowl filled with several bright orange citrus fruits sits stationary on a wooden countertop. The background shows a softly blurred kitchen environment with a window and cabinetry, creating a calm and domestic atmosphere.",
+    "model": "qwen3.6-35b-a3b",
+    "frames": [
+     {
+      "file": "shot_004_first.jpg",
+      "t": 418.287,
+      "key": "first"
+     },
+     {
+      "file": "shot_004_mid.jpg",
+      "t": 419.677,
+      "key": "mid"
+     },
+     {
+      "file": "shot_004_last.jpg",
+      "t": 421.027,
+      "key": "last"
+     }
+    ],
+    "subjects": [
+     "blue bowl",
+     "oranges",
+     "wooden countertop",
+     "kitchen background"
+    ],
+    "action": "The scene remains completely static with no movement of the fruit or camera throughout the duration of the shot.",
+    "setting": "A kitchen during the daytime, indicated by the natural light coming from the window.",
+    "mood": "Fresh, still, and domestic",
+    "shot_size": "medium close-up",
+    "angle": "eye level",
+    "lighting": "soft natural light from the left",
+    "changes": "nothing notable",
+    "prompt": "A static medium close-up shot of a light blue bowl filled with fresh oranges resting on a wooden kitchen counter. The background features a blurred kitchen setting with a window providing soft natural daylight. The scene is still and peaceful, focusing on the texture and color of the fruit.",
+    "elapsed_s": 4.8,
+    "basis": "vision model"
+   }
+  }
+ ]
+}

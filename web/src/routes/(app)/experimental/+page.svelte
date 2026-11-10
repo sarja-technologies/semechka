@@ -17,7 +17,7 @@
     { title: 'Videos', tools: [
       { href: '/openjutsu', icon: 'film', title: 'Video editor', what: 'Replace or edit an object in a video you upload, with reference pictures, masks and a step-by-step plan (OpenJutsu Studio).', on: !!o.openjutsu?.enabled },
       { href: '/experimental/video', icon: 'sliders', title: 'Advanced video', what: 'The Videos screen with the model’s own controls: resolution, frame rate, seed, negative prompt and steps.', on: !!o.video?.enabled },
-      { href: '/experimental/rea', icon: 'search', title: 'REA, video reverse engineer', what: 'Upload a video and the engine measures what is visible in it: shots, camera, light, colour and transitions, with a plan you can read.', on: !!o.video?.enabled }
+      { href: '/experimental/rea', icon: 'search', title: 'REA, video reverse engineer', what: 'Upload a video: the engine measures shots, camera, light, colour and transitions, and a vision model describes every shot and writes a prompt for a similar clip.', on: !!o.video?.enabled }
     ] }
   ].map((g) => ({ ...g, tools: g.tools.filter((t) => t.on) })).filter((g) => g.tools.length));
 </script>

@@ -170,6 +170,14 @@ class SparkMediaMixin(SarnessMediaMixin):
         """The Reverse Engineer Video analysis and plan of a finished ``reverse-video`` job."""
         return (await self._call("GET", f"/v1/reverse/{remote_id}", timeout=60)).json()
 
+    async def _peek(self, path: str, *, timeout=20) -> httpx.Response:
+        """A GET whose status the caller inspects itself (no AdapterError for 4xx); unreachable still raises."""
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                return await c.get(self.base_url + path, headers=_h(self.api_key))
+        except httpx.HTTPError as e:
+            raise AdapterError(f"Backend unreachable: {_short(e)}", kind="unreachable") from e
+
     async def media_reverse_file(self, remote_id: str, name: str, max_bytes: int = 8 * 1024 * 1024) -> tuple[int, bytes | None, str]:
         r = await self._peek(f"/v1/reverse/{remote_id}/files/{name}", timeout=30)
         if r.status_code != 200 or len(r.content) > max_bytes:
