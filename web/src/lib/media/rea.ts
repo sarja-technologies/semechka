@@ -69,7 +69,7 @@ export type ReaShot = {
   description: string; prompt: string; subjects: string[]; facts: [string, string][]; measured: [string, string][];
 };
 export type ReaVision = { used: boolean; model: string | null; described: number; total: number; framesSent: number; reason: string; note: string;
-  loadedByUs: boolean; unloaded: boolean | null; elapsed: number | null };
+  loadedByUs: boolean; unloaded: boolean | null; elapsed: number | null; lockWait: number | null };
 export type ReaView = { duration: number; shots: ReaShot[]; vision: ReaVision; clip: { summary: string; style: string; prompt: string } | null; honesty: string };
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
@@ -99,14 +99,17 @@ export function reaView(doc: any): ReaView | null {
   return { duration: num(a.source?.duration_s), shots, clip, honesty: str(a.honesty),
     vision: { used: !!(v.used ?? v.available) && num(v.described) > 0, model: str(v.model) || null, described: num(v.described), total: num(v.total) || shots.length,
       framesSent: num(v.frames_sent), reason: str(v.reason), note: str(v.note), loadedByUs: !!v.loaded_by_us, unloaded: typeof v.unloaded === 'boolean' ? v.unloaded : null,
-      elapsed: typeof v.elapsed_s === 'number' ? v.elapsed_s : null } };
+      elapsed: typeof v.elapsed_s === 'number' ? v.elapsed_s : null, lockWait: typeof v.lock_wait_s === 'number' ? v.lock_wait_s : null } };
 }
 
 /** One plain sentence about the vision step: which model, how many keyframes, or why it did not run. */
 export function visionLine(v: ReaVision): string {
   if (!v.used) return v.reason && v.reason !== 'No vision model was used.' ? v.reason : 'Scene descriptions were not made for this analysis (measurements only).';
   const parts = [`Vision used: ${v.model}, ${v.framesSent} keyframe${v.framesSent === 1 ? '' : 's'} from ${v.described} of ${v.total} shot${v.total === 1 ? '' : 's'}`];
-  if (v.elapsed != null) parts.push(`${Math.round(v.elapsed)} s`);
+  if (v.elapsed != null) {
+    const wait = v.lockWait ?? 0;
+    parts.push(wait >= 5 ? `${Math.round(v.elapsed - wait)} s (after waiting ${Math.round(wait)} s for other image/video work to finish)` : `${Math.round(v.elapsed)} s`);
+  }
   let s = parts.join(', ') + '.';
   if (v.loadedByUs) s += v.unloaded ? ' The model was loaded for this analysis and unloaded afterwards.' : ' The model was loaded for this analysis and is still loaded (someone else was using it).';
   if (v.reason && v.reason !== 'ok') s += ` ${v.reason}`;
