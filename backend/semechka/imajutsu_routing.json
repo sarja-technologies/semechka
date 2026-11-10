@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-07",
+  "updated": "2026-11-10",
   "notes": "Which engine model Imajutsu uses for each mode, in order of preference. This file is DATA: reorder the lists, edit the reasons, add a model. Code never names a model. The first model in a list that is installed, allowed for the person, and really offers the engine mode (the engine registry's capabilities.modes) is the recommended one. Facts measured on the DGX Spark (docs/imajutsu-bench/), corrected run at each model's OWN default steps and guidance (720x1280, 9:16, 7 scene types). 'quality' lists the draft and high step counts; the standard count is always the engine's own default for the model. 'wording' says how the prompt builder writes for a model: 'natural' = natural sentences ('handheld phone photo' is fine), 'plain' = 'A photograph of ...' plus plain light and framing sentences and none of the model's avoid_words.",
   "pixels": 921600,
   "avoid_words": [
@@ -154,6 +154,10 @@
       },
       "slow": true,
       "license": "Apache-2.0"
+    },
+    "flux1-fill-dev": {
+      "license": "FLUX.1-dev non-commercial",
+      "wording": "natural"
     }
   },
   "modes": {
@@ -251,6 +255,13 @@
     "inpaint": {
       "models": [
         {
+          "engine_id": "flux1-fill-dev",
+          "why": "FLUX.1 Fill [dev] on the media engine: the picture plus a selection (white = repaint) plus words for the new content; the result keeps the picture's shape. Licence: FLUX.1-dev non-commercial.",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md: image.inpaint-brush rendered and reviewed on the Spark (config/verified.json)"
+          ]
+        },
+        {
           "engine_id": "flux2-klein-4b",
           "why": "Fast inpainting that can also use reference pictures. Inpaint words are sent as an instruction ('Fill the selected area with ...') because this model draws nothing from a bare noun phrase.",
           "evidence": [
@@ -281,6 +292,13 @@
     },
     "outpaint": {
       "models": [
+        {
+          "engine_id": "flux1-fill-dev",
+          "why": "FLUX.1 Fill [dev] on the media engine: the picture plus a selection (white = repaint) plus words for the new content; the result keeps the picture's shape. Licence: FLUX.1-dev non-commercial.",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md: image.inpaint-brush rendered and reviewed on the Spark (config/verified.json)"
+          ]
+        },
         {
           "engine_id": "flux2-klein-4b",
           "why": "Fast; the new area is a masked region of a padded canvas.",

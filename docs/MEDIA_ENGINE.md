@@ -74,8 +74,8 @@ Engine-only extras that exist in OpenSfield but Semechka does not use (kept avai
 |---|---|---|---|
 | `z-image-turbo` | any width/height 512-2048, multiple of 16 | n/a | seed. No steps/guidance/negative |
 | `qwen-image-2512` | 512-1664, multiple of 16 | n/a | seed; `steps` <= 8 = **Fast** (Lightning, default), > 8 = **Quality** (the workflow's own full-step branch; its step count is the workflow's, reported in `applied.sampler_steps_last`) |
-| `flux2-klein-4b` | fixed shapes (8 aspects, 640-1536 px): a request snaps to the nearest shape within 4 % and the job reports `applied.size_snapped_from` | n/a | seed |
-| `krea2-turbo` | fixed shapes, about 1 MP | n/a | seed |
+| `flux2-klein-4b` | any width/height 512-1536, multiple of 16: the engine sets the verified graph's two size values (`PrimitiveInt` nodes `75:68`/`75:69`), nothing else changes; the render is checked by eye in the Evidence section | n/a | seed |
+| `krea2-turbo` | fixed shapes (8 aspects, about 1 MP): a request snaps to the nearest shape within 4 % (otherwise 422 listing the shapes) and the job reports `applied.size_snapped_from` | n/a | seed |
 | `qwen-image-edit-2511`, `qwen-image-2.1`, `flux1-fill-dev` | the output follows the source picture (`size_policy: source_shape`); width/height are ignored and `applied.size_ignored` says so | n/a | edit: `steps` Fast/Quality; inpaint: mask white = repaint |
 | `ltx-2.3` | 24 sizes (aspect x quality, 384-1344 px) | whole seconds 1-10 -> **24 s + 1 frames at 24 fps** (1.042 s ... 10.042 s) | seed; audio generated |
 | `wan2.2-ti2v-5b` | 16 sizes (448-1376 px) | 1-8 s -> **24 s + 1 frames at 24 fps** (1.042 ... 8.042 s) | seed |
@@ -102,7 +102,7 @@ only where a reviewed run exists (the table above) and say so.
 | Semechka capability | Status | Engine route |
 |---|---|---|
 | Text-to-image (chat, Images page, Work Mode) | **works** | `z-image-turbo`, `qwen-image-2512`, `flux2-klein-4b`, `krea2-turbo` |
-| iPhone Photo preset (tiers Fast / Best realism / Polished) | **works** | Fast = klein (snapped to 768x1344 for 9:16), Best = Qwen-Image 2512, Polished = Z-Image (720x1280 exactly). Prompt builder unchanged |
+| iPhone Photo preset (tiers Fast / Best realism / Polished) | **works** | Fast = klein (720x1280 exactly), Best = Qwen-Image 2512, Polished = Z-Image (720x1280 exactly). Prompt builder unchanged |
 | Imajutsu `generate`, `advanced` (text) | **works** | as above |
 | Imajutsu `edit` | works, **one picture** | `qwen-image-edit-2511` (no extra references: `references` = 1) |
 | Imajutsu `inpaint`, `outpaint` (padded canvas + mask) | **works (new routing entry)** | `flux1-fill-dev`; the engine writes the mask into the picture's alpha channel (white = repaint) |
@@ -172,7 +172,7 @@ normally discarded by Semechka right after it has copied them.
   into `DiscoveredModel` rows with the **same `meta.media` shape** the Sarness adapter produced, so `media_svc.option_defaults/validate_params`, the Composer, Imajutsu and
   `video_duration` are untouched. Unavailable models are reported with `meta.media.unavailable_reason` and `available=False`.
 * Small additive changes in shared files: the adapter registry; `media_svc.unavailable_reason()` wording is backend-neutral; `imajutsu_routing.json` gains `flux1-fill-dev`
-  (inpaint/outpaint) and `krea2-turbo` natives, and klein's native sizes become the engine's real shapes.
+  as the first model for inpaint and outpaint.
 * `scripts/spark/migrate_media_to_engine.py <data-dir> [--apply] [--rollback FILE]`: dry-run by default. Takes a DB backup, creates a **new** backend row `spark-media`
   (token read from the token file inside the script, never printed), moves each existing media `Model` row whose `real_id` the engine knows to the new backend (same
   `Model.id`, so grants, settings and Imajutsu keep working), marks rows with no equivalent `available=False` with the reason, adds engine-only models disabled with no grants,
