@@ -1,7 +1,7 @@
 """Core regression: streamed chat with context, an image, H3 text-to-video, and the restored Wan 2.2 14B and HunyuanVideo 1.5 text-to-video (short clips)."""
 import json
 NEEDS = {"perms": ["mode.image", "mode.video"],
-         "models": [("Qwen-Image 2512", ["image"]), ("minimax-h3", ["video"]), ("wan2.2-t2v-a14b", ["video"]), ("hunyuanvideo-1.5-t2v", ["video"])]}
+         "models": [("qwen-image-2512", ["image"]), ("minimax-h3", ["video"]), ("wan2.2-t2v-a14b", ["video"]), ("hunyuanvideo-1.5-t2v", ["video"])]}
 
 
 def _video(ctx, alias, prompt, seconds, tag, expect_audio):
@@ -40,7 +40,7 @@ def run(ctx):
         say("Remember the code word PERSIMMON-3318. Reply with just OK."); say("What was the code word? Answer with the word only.")
         th = u.call("GET", f"/api/chat/conversations/{cid}/thread"); last = [x for x in (th.get("messages") or th.get("items") or []) if x.get("role") == "assistant"]
         ctx.check(f"real chat reply through the router ({m['alias']}) with multi-turn context", last and "PERSIMMON" in (last[-1].get("content") or "").upper())
-    q = ctx.model("Qwen-Image 2512", "image"); ctx.check("an image model is offered", bool(q))
+    q = ctx.model("qwen-image-2512", "image") or ctx.model("Qwen-Image 2512", "image"); ctx.check("an image model is offered", bool(q))
     if q:
         r = u.call("POST", "/api/media/jobs", {"kind": "image", "model_id": q["id"], "prompt": "a green kettle on a wooden table, photo", "save": True}); j = ctx.wait(r.get("id"), 900) if r.get("id") else {}
         ctx.check("image generated through the engine", j.get("status") == "completed", f"{j.get('_seconds')} s")
