@@ -1,0 +1,58 @@
+PASS  staging is idle (no session in 15 min, no unfinished job): sessions=0 jobs=0
+PASS  dedicated test account signs in on the real port
+PASS  session identity is the test account, not a real user
+
+== plugin p2plugin_0: OpenJutsu acceptance through Semechka's real API: Studio swap, mask check (text and box), object edit, reference-to-video (4 pictures), cancel of a running job.
+PASS  the OpenJutsu editing profile is offered to the test account: OpenJutsu
+PASS  the OpenJutsu reference profile is offered to the test account: OpenJutsu Reference
+PASS  the source clip and four reference pictures upload to the library: video
+PASS  swap: the Studio offers 'character_replacement' on OpenJutsu: status=ready 
+PASS  swap: Studio project created from the uploaded video
+PASS  swap: generate accepted (sent 1 picture(s))
+PASS  swap: completed on the real GPU: 137 s 
+PASS  swap: the whole file decodes with no errors
+PASS  swap: length follows H3's frame grid (17k+5 frames, at most 0.7 s shorter than asked): 2.33s 56 fr, plan 3.0s -> grid 56
+PASS  swap: the source soundtrack is kept (audio present, not silent): mean -16.7 peak -2.4
+PASS  swap: the person area changed, the background did not: centre diff ['22.4', '18.7'] border diff ['3.8', '3.8']
+PASS  mask_text: profile job accepted
+PASS  mask_text: completed on the real GPU: 27 s 
+PASS  mask_text: the whole file decodes with no errors
+PASS  mask_text: a 3 s preview strip without sound: 3.00s 1024x288 audio=False
+PASS  mask_text: the left panel shows the tracked subject (mask tint): tinted 0.103 vs source 0.001
+PASS  mask_box: profile job accepted
+PASS  mask_box: completed on the real GPU: 24 s 
+PASS  mask_box: the whole file decodes with no errors
+PASS  mask_box: a 3 s preview strip without sound: 3.00s 1024x288 audio=False
+PASS  mask_box: the left panel shows the tracked subject (mask tint): tinted 0.103 vs source 0.001
+PASS  object: the Studio offers 'vehicle_replacement' on OpenJutsu: status=ready 
+PASS  object: Studio project created from the uploaded video
+PASS  object: generate accepted (sent 0 picture(s))
+PASS  object: completed on the real GPU: 109 s 
+PASS  object: the whole file decodes with no errors
+PASS  object: length follows H3's frame grid: 3.04s 73 fr, plan 3.042s -> grid 73
+PASS  object: the output carries an audio track (the source is silent, so it is silent)
+FAIL  object: the red bike became blue (red share fell, blue share rose): red 0.010->0.002 blue 0.030->0.047
+PASS  ref2v: the Studio offers 'reference_to_video' on OpenJutsu Reference: status=ready runs on profile 'openjutsu-reference-video' (MiniMax H3 reference-to-video, up to 9 pictures, no source video); one real
+PASS  ref2v: Studio project created from the uploaded video
+PASS  ref2v: generate accepted (sent 4 picture(s))
+PASS  ref2v: all four pictures were sent, in order: 4
+PASS  ref2v: completed on the real GPU: 52 s 
+PASS  ref2v: the whole file decodes with no errors
+PASS  ref2v: 2.5 s asked, H3 makes 56 frames = 2.33 s at 864x480 (its grid): 2.33s 56 fr 864x480
+PASS  ref2v: generated audio present and not silent: mean -17.5 peak -2.4
+PASS  cancel: the Studio offers 'character_replacement' on OpenJutsu: status=ready 
+PASS  cancel: Studio project created from the uploaded video
+PASS  cancel: generate accepted (sent 1 picture(s))
+PASS  cancel: the job reached the sampler with real progress: 0.11989795918367346 Generating, step 1 of 6
+PASS  cancel: the job ends as cancelled and keeps no output: cancelled 3 s
+PASS  cancel: ComfyUI's queue is empty (the GPU work stopped): 3.1 s after the request
+PASS  cancel: GPU utilisation is back to ~0 %: [0, 0, 0]
+
+== restoring the exact prior state
+<test-user>: deleted
+<test-admin>: deleted
+acceptance accounts left: 0 | audit chain verifies: True
+PASS  data identical to before (users, passwords, sessions, conversations, messages, media, jobs, models, grants): {}
+
+evidence: /home/spark/imajutsu-bench/p2-accept-staging-20261111-021519
+47/48 passed
