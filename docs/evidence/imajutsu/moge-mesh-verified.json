@@ -1,0 +1,24 @@
+{
+ "scene3d.moge-mesh": {
+  "at": "2026-11-10T23:17:44",
+  "job": "96fa93c71e2c",
+  "seconds": 2.1,
+  "outputs": [
+   {
+    "name": "5_0_moge_relief_00001_.glb",
+    "kind": "3d",
+    "size": 12074448,
+    "vertices": 257221,
+    "triangles": 507176,
+    "texture": "1024x1024"
+   },
+   {
+    "name": "7_0_moge_depth_00001_.png",
+    "kind": "image",
+    "w": 1024,
+    "h": 1024
+   }
+  ],
+  "note": "reviewed by eye: depth map correct (mug near, wall far); GLB valid glTF 2.0, finite positions, textured; dev verified file of the parity workstream"
+ }
+}

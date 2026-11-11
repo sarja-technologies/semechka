@@ -482,3 +482,9 @@ Gap: Fast mode of Wan 14B uses the Wan 2.1 LightX2V T2V LoRA (good output on the
 5. **Engine unit**: add `Environment=OPENSFIELD_COMFY_OUTPUT_DIR=%h/opensfield/state/comfy-output` (lets the hourly sweep remove old OpenJutsu clip checkpoints), then `systemctl --user restart semechka-media-engine`. `GET /v1/capabilities` must list `openjutsu-minimax-h3`, `openjutsu-reference-video` and the three restored models.
 6. **Semechka release** from branch `consol2/openjutsu` (adapter passes the Studio contract, Guidance field, migration RESTORE), then per instance: `migrate_media_to_engine.py <data> --apply` (dry run first; it RESTOREs the parked OpenJutsu / Wan 14B / HunyuanVideo rows, keeps enabled flags and grants; rollback file written), then admin > backends > sync once.
    `openjutsu-reference-video` and `opensfield-video-edit` are new rows on Salted/Roasted (disabled, no grants): enable and grant in admin. The restored Wan 14B / HunyuanVideo rows keep their previous enabled flag (off on Salted).
+
+### Acceptance plugins (phase 2)
+
+`scripts/spark/prod_accept2.py <staging|salted|roasted> --plugin FILE` signs in with throwaway accounts (never a real user), runs the plugin and restores the exact prior data fingerprint. Plugins in `scripts/spark/acceptance/`:
+`p2_core.py` (chat with context, image, H3 5 s with audio, Wan 14B, HunyuanVideo), `p2_openjutsu.py` (Studio swap, mask check, object edit, 4-picture reference-to-video, cancel), `p2_imajutsu.py` (picture modes, Images page, Experimental tools including 3D, REA).
+Staging results on 0.12.3: core 26/26, Imajutsu 57/57, OpenJutsu 48/48 after the object-edit threshold fix (47/48 before it; the output was correct). The `scene3d.moge-mesh` verified entry is in `docs/evidence/imajutsu/moge-mesh-verified.json` (merge by hand into the live `verified.json`). REA scene descriptions need the router vision key file (`OPENSFIELD_VISION_KEY_FILE`); without it REA reports technical analysis only.
