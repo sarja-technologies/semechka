@@ -9,6 +9,11 @@ Stream events yielded by `chat_stream`:
    "timings": {"prompt_per_second","predicted_per_second"}|None}
   {"type": "status", "state": "loading", "model": str, "elapsed": float}   optional, before the first delta (cold start)
   {"type": "tool_calls", "calls": [{"id","name","arguments"}]}              optional, before done (native tool calls)
+  {"type": "status", "state": "searching_web"|"reading_sources"|"verifying", "query"?: str, "count"?: int}
+                                                                            optional, Yaob systems (adapters/yaob.py)
+  {"type": "sources", "sources": [{"n","kind","url","title","site","published"?,"retrieved_at"?,"snippet"?}]}
+                                                                            optional, Yaob systems: cited documents
+  "done" may also carry "provenance": str (the id of a Yaob server's record of the reply)
 Errors are raised as AdapterError with a user-safe message.
 """
 from __future__ import annotations

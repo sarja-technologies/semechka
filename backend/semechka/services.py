@@ -199,6 +199,10 @@ def filter_tech(p: perms.Principal, full: dict) -> dict:
     put("tech.queue.position", ["queue"])
     put("tech.node.name", ["node"])
     put("tech.job.trace", ["trace_id"])
+    # Yaob systems only (absent for every other model, so never listed as unavailable)
+    for perm, key in (("tech.model.family", "core"), ("tech.model.family", "network"), ("tech.job.trace", "provenance_id")):
+        if f.get(key) is not None and p.can(perm):
+            out[key] = f[key]
     tri = _filter_trinodal(p, f.get("trinodal"))
     if tri:
         out["trinodal"] = tri

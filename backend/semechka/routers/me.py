@@ -162,6 +162,7 @@ class PrefsIn(BaseModel):
     prompt_history: bool | None = None
     picker: dict | None = None  # {"view": compact|detailed, "group_by": ..., "sort": ...}; a null value clears one
     favourite_models: list[str] | None = Field(default=None, max_length=200)
+    web_search: str | None = None  # the composer's web search choice for models that offer it: auto | on | off
 
 
 PICKER_CHOICES = {"view": ("compact", "detailed"), "group_by": ("groups", "family", "capability", "engine", "size", "none"),
@@ -206,6 +207,12 @@ def update_me(body: PrefsIn, ctx: Ctx = Depends(current)):
         if any(not isinstance(x, str) or len(x) > 32 for x in body.favourite_models):
             raise HTTPException(422, {"code": "invalid", "message": "Favourites are model ids."})
         prefs["favourite_models"] = list(dict.fromkeys(body.favourite_models))
+    if body.web_search is not None:
+        if body.web_search not in ("auto", "on", "off"):
+            raise HTTPException(422, {"code": "invalid", "message": "Web search is auto, on or off."})
+        prefs["web_search"] = body.web_search
+    elif "web_search" in body.model_fields_set:
+        prefs.pop("web_search", None)
     ctx.user.prefs = prefs
     return {"ok": True}
 
