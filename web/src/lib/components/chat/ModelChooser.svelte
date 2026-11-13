@@ -86,7 +86,8 @@
   const who = (m: any) => (m.provider_label ? (m.based_on ? `${m.provider_label}, based on ${m.based_on}` : m.provider_label) : '');
   function facts(m: any) {
     const d = m.details ?? {};
-    return [d.parameters, d.quantization, d.context_length ? `${ctx(d.context_length)} context` : null, d.memory_mb ? `about ${gb(d.memory_mb)} memory` : null,
+    // a Yaob system: its neural core and its node network, side by side and never as one size
+    return [d.core ? `Core: ${d.core}` : null, d.network ? `Network: ${d.network}` : null, d.parameters, d.quantization, d.context_length ? `${ctx(d.context_length)} context` : null, d.memory_mb ? `about ${gb(d.memory_mb)} memory` : null,
       d.reasoning ? 'Reasons step by step' : null, ...(m.media_modes ?? []).map((x: string) => MODES[x]).filter(Boolean)].filter(Boolean).join(' · ');
   }
   const sees = (m: any) => (m.capabilities ?? []).includes('vision');

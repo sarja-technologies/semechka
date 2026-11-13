@@ -9,6 +9,7 @@
   import { TECH_LABELS, fmtTech, trinodalPath, trinodalRows } from '$lib/techlabels';
   import { list, catalog, type Operation } from '$lib/chat/store.svelte';
   import { Thread, errText, type Msg, type MsgActions } from '$lib/chat/thread.svelte';
+  import { webFor } from '$lib/chat/websearch.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ProtectionPanel from '$lib/components/ProtectionPanel.svelte';
@@ -97,13 +98,15 @@
       thread.edit(m, { content: text, attachments: (m.attachments ?? []).filter((a) => !a.missing), operation: op, modelId: composer?.modelFor(o) ?? '',
         modelLabel: catalog(o)?.models?.find((x: any) => x.id === composer?.modelFor(o))?.alias ?? cur?.modelLabel ?? 'Assistant',
         sourceId: (m.attachments ?? []).find((a) => a.kind === 'image')?.id ?? null,
-        preset: m.meta?.preset?.id ? { id: m.meta.preset.id, scenes: m.meta.preset.scenes ?? [] } : undefined });
+        preset: m.meta?.preset?.id ? { id: m.meta.preset.id, scenes: m.meta.preset.scenes ?? [] } : undefined,
+        webSearch: op === 'text' ? webFor(catalog(o)?.models?.find((x: any) => x.id === composer?.modelFor(o))) : undefined });
     },
     regenerate(m) {
       const media = m.kind === 'image' || m.kind === 'video';
       const id = media ? '' : composer?.modelFor(textOp) ?? '';
       thread.regenerate(m, { content: '', attachments: [], operation: media ? (m.kind as 'image') : 'text', modelId: id,
-        modelLabel: media ? m.model ?? 'Assistant' : catalog(textOp)?.models?.find((x: any) => x.id === id)?.alias ?? m.model ?? 'Assistant' });
+        modelLabel: media ? m.model ?? 'Assistant' : catalog(textOp)?.models?.find((x: any) => x.id === id)?.alias ?? m.model ?? 'Assistant',
+        webSearch: media ? undefined : webFor(catalog(textOp)?.models?.find((x: any) => x.id === id)) });
     },
     version: (id) => thread.showVersion(id),
     details: (m) => (selected = selected === m.id ? null : m.id),

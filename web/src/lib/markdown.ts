@@ -1,5 +1,6 @@
 import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { citeParts, HAS_CITE } from './chat/web';
 import hljs from 'highlight.js/lib/core';
 import js from 'highlight.js/lib/languages/javascript';
 import ts from 'highlight.js/lib/languages/typescript';
@@ -88,4 +89,48 @@ export async function onCodeCopyClick(e: MouseEvent) {
   try { await navigator.clipboard.writeText(code); btn.textContent = 'Copied'; }
   catch { btn.textContent = 'Copy unavailable'; }
   setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+}
+
+// ---- inline citations ------------------------------------------------------------------------------------------
+export type Cite = { n: number; url: string; title?: string; site?: string };
+const SKIP = new Set(['A', 'CODE', 'PRE', 'KBD', 'SAMP', 'BUTTON']);
+
+/** `[n]` markers in rendered reply HTML become small links to source n, only where source n exists; every other
+ *  marker, and anything inside code or an existing link, is left exactly as it was. Built with DOM nodes (never by
+ *  string concatenation), and only for http(s) links. */
+export function linkCitations(html: string, cites: Cite[]): string {
+  if (!cites?.length || typeof document === 'undefined' || !HAS_CITE.test(html)) return html;
+  const by = new Map<number, Cite>();
+  for (const c of cites) if (/^https?:\/\//i.test(c.url) && !by.has(c.n)) by.set(c.n, c);
+  if (!by.size) return html;
+  const have = new Set(by.keys());
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const walker = document.createTreeWalker(t.content, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      for (let p = node.parentElement; p; p = p.parentElement) if (SKIP.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+      return HAS_CITE.test(node.nodeValue ?? '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+    }
+  });
+  const nodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
+  let changed = false;
+  for (const node of nodes) {
+    const parts = citeParts(node.nodeValue ?? '', have);
+    if (!parts) continue;
+    const frag = document.createDocumentFragment();
+    for (const p of parts) {
+      if (typeof p === 'string') { frag.append(p); continue; }
+      const c = by.get(p)!;
+      const a = document.createElement('a');
+      a.className = 'cite'; a.href = c.url; a.target = '_blank'; a.rel = 'noopener noreferrer nofollow';
+      a.textContent = String(c.n);
+      a.title = [c.title, c.site].filter(Boolean).join(', ');
+      a.setAttribute('aria-label', `Source ${c.n}${c.title ? `: ${c.title}` : ''}`);
+      frag.append(a);
+    }
+    node.replaceWith(frag);
+    changed = true;
+  }
+  return changed ? t.innerHTML : html;
 }

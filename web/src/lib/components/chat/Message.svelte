@@ -19,6 +19,10 @@
   const media = $derived(m.kind === 'image' || m.kind === 'video');
   const op = $derived(user ? m.meta?.operation : undefined);
   const sib = $derived(m.siblings);
+  // knowledge passages (no link) are shown above the reply as before; cited web documents below it, and the reply's [n]
+  // markers link to them
+  const known = $derived((m.sources ?? []).filter((x: any) => !x.url));
+  const cited = $derived((m.sources ?? []).filter((x: any) => !!x.url));
   const attUrl = (a: Attachment) => (a.id.startsWith('ma_') || a.id.startsWith('me_') ? `/api/media/assets/${a.id}/content` : `/api/chat/attachments/${a.id}/content`);
   const asset = (a: Attachment): Asset => ({ id: a.id, kind: a.kind === 'video' ? 'video' : 'image', mime: a.mime, size: a.size, width: a.width, height: a.height, duration: a.duration, name: a.name,
     url: isLibraryId(a.id) ? undefined : attUrl(a) });
@@ -72,9 +76,10 @@
       <MediaCard job={m.media} kind={m.kind as 'image' | 'video'} onchange={(j) => act.mediaChanged(m, j)} onuse={act.useSource} />
       {#if m.status === 'error' && m.meta?.error}<div class="notice bad" role="alert"><div>{m.meta.error}</div></div>{/if}
     {:else}
-      {#if showSources && m.sources?.length}<Sources sources={m.sources} />{/if}
-      {#if m.content}<Markdown text={m.content} />
+      {#if showSources && known.length}<Sources sources={known} />{/if}
+      {#if m.content}<Markdown text={m.content} cites={showSources ? cited : []} />
       {:else}<p class="muted small">{m.status === 'error' ? 'The model did not return a reply.' : m.status === 'stopped' ? 'Stopped before any text arrived.' : 'No text was produced.'}</p>{/if}
+      {#if showSources && cited.length}<Sources sources={cited} kind="web" />{/if}
       {#if m.meta?.trimmed}<p class="tiny muted note"><Icon name="info" size={13} /> The {m.meta.trimmed} oldest message{m.meta.trimmed === 1 ? '' : 's'} did not fit in this model's context window and {m.meta.trimmed === 1 ? 'was' : 'were'} left out of this reply.</p>{/if}
     {/if}
   </div>

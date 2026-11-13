@@ -11,6 +11,8 @@
   import Icon from '$lib/components/Icon.svelte';
   import ContextBar from '$lib/components/ContextBar.svelte';
   import ModelChooser from './ModelChooser.svelte';
+  import WebSearchControl from './WebSearchControl.svelte';
+  import { webFor } from '$lib/chat/websearch.svelte';
   import ProfileForm from './ProfileForm.svelte';
   import MediaDropzone from '$lib/components/media/MediaDropzone.svelte';
   import MediaAttachmentTray from '$lib/components/media/MediaAttachmentTray.svelte';
@@ -305,6 +307,7 @@
       sourceId: op !== 'text' && !prof ? sent.find((i) => i.kind === 'image')?.asset?.id ?? sent.find((i) => i.kind === 'image')?.legacy?.id ?? null : null,
       label: prof ? `${operation ? opLabel(operation) : 'Edit'} · ${prof.name ?? model?.alias ?? 'editing'}` : undefined,
       preset: presetOn ? { id: 'iphone_photo', scenes: [...preset.scenes] } : undefined,
+      webSearch: op === 'text' ? webFor(model) : undefined,
       profile: prof ? { inputs: { ...pvals, ...(operation ? { operation } : {}) }, assets: byRole, textField: textField ?? undefined } : undefined };
     if (prof) pvals = {};
     if (turn.content) mine = [turn.content, ...mine.filter((x) => x !== turn.content)].slice(0, 50);
@@ -420,6 +423,7 @@
       {:else if op !== 'text' && mopt}
         <button type="button" class="round ghostr" class:on={setOpen} aria-expanded={setOpen} aria-controls="media-settings" title="Picture and video settings" aria-label="Settings" onclick={() => (setOpen = !setOpen)}><Icon name="sliders" size={16} /></button>
       {/if}
+      {#if op === 'text' && model?.web_search}<WebSearchControl disabled={busy} />{/if}
       <span class="spacer"></span>
       {#if flags.model_chooser !== false}
         <ModelChooser catalog={cat} op={catOp} bind:value={chosen[catOp]} disabled={busy} label={op === 'text' ? 'Model' : op === 'image' ? 'Picture model' : 'Video model'} needVision={op === 'text' && hasImage} />
