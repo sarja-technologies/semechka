@@ -1,4 +1,4 @@
-# Yaob Origin in Semechka (0.12.4)
+# Yaob Origin in Semechka (0.12.4, 0.12.5)
 
 Yaob Origin is Fylume's hybrid system: a Qwen3.5-4B neural core plus the "Yaob Origin" Modular Persistent Network
 (node network, designation N119M at 119,176,878 nodes). This release lets Semechka show it under the name the server
