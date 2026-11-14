@@ -6,7 +6,7 @@ Run ON the Spark, inside the shared GPU lock, with a dev instance already servin
     ~/spark-reset/gpu-llm python3 scripts/spark/goose_e2e.py --base http://127.0.0.1:8794 --creds ~/work-dev/creds.json --out ~/work-dev/evidence
 
 Phases (each writes JSONL event logs and a summary to --out; credentials and keys are read from files and never printed):
-  isolation  two people's sessions, cross-read and /home/spark probes from INSIDE the containers, network probes
+  isolation  two people's sessions, cross-read and home-directory probes from INSIDE the containers, network probes
   repo       inspect a small repo, deny one edit, approve the rest, fix the bug, run the test, report (diff + test output)
   cancel     cancel a running tool
   mcp        a tool from an allowlisted MCP server
@@ -27,6 +27,8 @@ import urllib.request
 from http.cookiejar import CookieJar
 from pathlib import Path
 
+HOME = os.path.expanduser("~")  # the service user's home on the Spark: must not be visible inside a container
+LAN_IP = os.environ.get("SPARK_HOST_IP", "192.0.2.10")  # the Spark's LAN address: a container must not reach it
 DOCKER = {"DOCKER_HOST": f"unix:///run/user/{os.getuid()}/semechka-sandbox.sock", "PATH": "/usr/bin:/bin"}
 
 
@@ -158,11 +160,11 @@ def main():
             ("whoami / uid", ["id"]),
             ("see own file", ["cat", "/work/alice-secret.txt"]),
             ("see bob's file (path guess)", ["sh", "-c", f"cat /work/../{nb}/bob-secret.txt; find / -name bob-secret.txt 2>/dev/null | head -3; echo find-done"]),
-            ("read /home/spark", ["sh", "-c", "ls -la /home/spark; cat /home/spark/.bash_history; ls /home; echo done"]),
-            ("read host semechka data", ["sh", "-c", "ls /home/spark/semechka-deploy 2>&1; ls /run/user 2>&1; ls /proc/1/root/home 2>&1; echo done"]),
+            (f"read {HOME}", ["sh", "-c", f"ls -la {HOME}; cat {HOME}/.bash_history; ls /home; echo done"]),
+            ("read host semechka data", ["sh", "-c", f"ls {HOME}/semechka-deploy 2>&1; ls /run/user 2>&1; ls /proc/1/root/home 2>&1; echo done"]),
             ("mounts of interest", ["sh", "-c", "mount | grep -E ' /(work|run/llm|home|root) ' | cut -c1-150"]),
             ("network devices", ["sh", "-c", "cat /proc/net/dev | cut -c1-30"]),
-            ("reach router/LAN/internet", ["python3", "-c", "import socket\nfor h,p in [('192.0.2.10',8080),('127.0.0.1',8080),('127.0.0.1',22),('8.8.8.8',53),('192.0.2.10',8830)]:\n s=socket.socket(); s.settimeout(2)\n try: s.connect((h,p)); print(h,p,'OPEN')\n except Exception as e: print(h,p,'blocked:',type(e).__name__)"]),
+            ("reach router/LAN/internet", ["python3", "-c", "import socket\nfor h,p in [('" + LAN_IP + "',8080),('127.0.0.1',8080),('127.0.0.1',22),('8.8.8.8',53),('" + LAN_IP + "',8830)]:\n s=socket.socket(); s.settimeout(2)\n try: s.connect((h,p)); print(h,p,'OPEN')\n except Exception as e: print(h,p,'blocked:',type(e).__name__)"]),
             ("environment has no router key", ["sh", "-c", "env | cut -d= -f1 | sort | tr '\\n' ' '"]),
             ("model gateway: embeddings path", ["python3", "-c", "import socket\ns=socket.socket(socket.AF_UNIX); s.connect('/run/llm/llm.sock'); s.sendall(b'POST /v1/embeddings HTTP/1.1\\r\\nHost:x\\r\\nContent-Length: 2\\r\\n\\r\\n{}'); print(s.recv(300).decode().split('\\r\\n')[0])"]),
             ("model gateway: another model", ["python3", "-c", "import socket,json\nb=json.dumps({'model':'gpt-oss-120b','messages':[]}).encode()\ns=socket.socket(socket.AF_UNIX); s.connect('/run/llm/llm.sock'); s.sendall(b'POST /v1/chat/completions HTTP/1.1\\r\\nHost:x\\r\\nContent-Length: '+str(len(b)).encode()+b'\\r\\n\\r\\n'+b); print(s.recv(400).decode().replace('\\r\\n','|')[:300])"]),
@@ -274,7 +276,7 @@ def main():
         ca = state["alice_conv"]
         alice.req("PATCH", f"/api/work/goose/conversations/{ca}/session", {"autonomy": "auto"})
         since = alice.req("GET", f"/api/work/goose/conversations/{ca}/session")[1]["last_seq"]
-        alice.req("POST", f"/api/work/goose/conversations/{ca}/prompt", {"text": "Run these shell commands one after another and report their exact output, even if they fail: `ls -la /home/spark`, `cat /home/spark/.bash_history`, `find / -name bob-secret.txt 2>/dev/null; echo find-finished`, `cat /work/../bob-secret.txt`."})
+        alice.req("POST", f"/api/work/goose/conversations/{ca}/prompt", {"text": f"Run these shell commands one after another and report their exact output, even if they fail: `ls -la {HOME}`, `cat {HOME}/.bash_history`, `find / -name bob-secret.txt 2>/dev/null; echo find-finished`, `cat /work/../bob-secret.txt`."})
         log, _ = wait_idle_turn(alice, ca, run, "agentprobe", since, lambda ap: "allow_once")
         for e in log:
             if e["type"] == "tool_start":

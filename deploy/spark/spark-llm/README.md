@@ -4,7 +4,7 @@
 and kept in `~/spark-llm/llama/llama-v0.7.0/` (own copy; sha256 `4ccfcc61…`, commit `620d222`).
 
 * Endpoint: `http://<spark-lan-ip>:8080/v1` (OpenAI-compatible; also `127.0.0.1:8080`). Reachable only from the trusted networks (ufw).
-* Models: `~/spark-llm/models.ini` (router preset) / `models.json` (catalog) / `models.verified.json` (MEASURED capabilities). The GGUF files stay where they
+* Models: `~/spark-llm/models.ini` (router preset; the copy here writes the service user's home as `/home/spark`, so set the real path) / `models.json` (catalog) / `models.verified.json` (MEASURED capabilities). The GGUF files stay where they
   are (`~/.local/share/sarness-engine/models/llm/...`, shared with nothing else now); there are no copies.
 * `--models-max 3`: up to three models stay loaded; a fourth evicts the least-recently-used one that is not generating (measured).
 * Keys (`~/spark-llm/keys.txt` = the three below; never print them): `api.key` (Semechka chat + Spark Control), `clients.key` (Goose and other

@@ -1,5 +1,8 @@
 # Work Mode on Goose: evidence of a real run (Spark, 2026-11-10)
 
+> Published copy: host-specific details in this evidence and in `docs/evidence/work-goose/` were replaced before publication. The service user's
+> home directory is shown as `/home/spark` and the Spark's LAN address as `<spark-lan-ip>`; nothing else in the logs was changed.
+
 Everything below was produced by `scripts/spark/goose_e2e.py` against **real components**: a dev Semechka instance (port 8794,
 fresh data dir, two people `alice` and `bob`, started with `systemd-run --user` from this branch), the rootless Docker runtime
 of account `semsbx` through `semechka-sandbox-relay`, the image `semechka-goose:1` (upstream Goose 1.58.1 binary, unmodified), and the
