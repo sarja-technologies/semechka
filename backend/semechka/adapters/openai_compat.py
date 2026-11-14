@@ -101,6 +101,9 @@ class OpenAICompatAdapter(Adapter):
                         if not isinstance(ch, dict):
                             continue
                         if "yaob" in ch:  # Yaob stream extension: status, user-facing sources, provenance id
+                            tps = yaob.generation_speed(ch.get("yaob"))
+                            if tps and not (timings or {}).get("predicted_per_second"):
+                                timings = {**(timings or {}), "predicted_per_second": tps}
                             for ev in yaob.stream_events(ch.get("yaob")):
                                 if ev["type"] == "provenance":
                                     provenance = ev["id"]

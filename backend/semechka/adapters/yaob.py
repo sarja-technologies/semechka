@@ -171,6 +171,15 @@ def provenance_id(p) -> str | None:
     return pid if isinstance(pid, str) and _ID.match(pid) else None
 
 
+def generation_speed(ext) -> float | None:
+    """The server's own generation speed (`timing.tokens_per_s`, tokens over generation time). Semechka's measurement
+    from first to last delivered token is wrong for Yaob replies that are released in one piece after a check or a
+    tool decision (2026-11-14: "7099 tok/s" for 83 tokens)."""
+    t = ext.get("timing") if isinstance(ext, dict) else None
+    v = t.get("tokens_per_s") if isinstance(t, dict) else None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v < 100000 else None
+
+
 def stream_events(ext) -> list[dict]:
     """Adapter events for one chunk's `yaob` value. `route`, `validation` and `timing` stay with the server."""
     if not isinstance(ext, dict):

@@ -136,6 +136,18 @@ async def test_adapter_ignores_malformed_yaob_chunks(yaob_url):
                    {"type": "done", "finish_reason": "stop", "usage": None, "timings": None}]
 
 
+async def test_reply_speed_comes_from_the_server_timing(yaob_url):
+    """A Yaob reply released in one piece after a check must not show first-to-last-token speed (7099 tok/s seen live)."""
+    fake_yaob.reset()
+    fake_yaob.SCRIPT.append([
+        {"choices": [{"delta": {"content": "Spain won 1-0."}}]},
+        {"choices": [{"delta": {}, "finish_reason": "stop"}], "yaob": {"timing": {"ttft_ms": 15280.0, "tokens_per_s": 14.8}}},
+        {"choices": [], "usage": {"prompt_tokens": 3318, "completion_tokens": 83}}])
+    evs = [e async for e in OpenAICompatAdapter(yaob_url).chat_stream("yaob-origin", [{"role": "user", "content": "x"}], {})]
+    assert evs[-1]["timings"] == {"predicted_per_second": 14.8}
+    assert yaob.generation_speed({"timing": {"tokens_per_s": True}}) is None and yaob.generation_speed({"timing": "x"}) is None
+
+
 async def test_other_openai_servers_are_unchanged(fake_url):
     found = {d.real_id: d for d in await OpenAICompatAdapter(fake_url).discover()}
     assert found["fake-small"].meta == {"context": 4096, "context_trained": 4096, "params": 500_000_000,
