@@ -28,7 +28,11 @@ export const inspectJob = (job: string): Promise<any> => get(`/api/studio/jobs/$
 export const mediaJob = (job: string): Promise<any> => get(`/api/media/jobs/${job}`);
 export const cancelJob = (job: string) => post(`/api/media/jobs/${job}/cancel`);
 export const adjustApply = (asset: string, recipe: Recipe): Promise<{ task: string }> => post(`/api/imajutsu/assets/${asset}/adjust`, { recipe });
-export const upscale = (asset: string, width: number, height: number): Promise<{ task: string; [k: string]: any }> => post(`/api/imajutsu/assets/${asset}/upscale`, { width, height });
+export const upscale = (asset: string, width: number, height: number, engine: UpscaleEngineId = 'lanczos'): Promise<{ task: string; [k: string]: any }> => post(`/api/imajutsu/assets/${asset}/upscale`, { width, height, engine });
+export type UpscaleEngineId = 'lanczos' | 'seedvr2' | 'esrgan';
+export type UpscaleEngine = { id: UpscaleEngineId; label: string; ai: boolean; ready: boolean; reason: string | null; note: string | null; max_pixels: number; max_edge: number; max_scale?: number; max_source_pixels?: number };
+/** The upscale methods and whether each can run right now (the AI ones run on the Spark's GPU). */
+export const upscaleEngines = (): Promise<{ engines: UpscaleEngine[] }> => get('/api/imajutsu/upscale/engines');
 
 /** Poll one media edit task (adjust and upscale are ordinary edits) until it ends. */
 export async function followTask(task: string, onprogress?: (p: number) => void, isStopped: () => boolean = () => false): Promise<Asset> {

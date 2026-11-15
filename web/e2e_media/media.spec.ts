@@ -10,7 +10,7 @@ test.describe.configure({ mode: 'serial' });
 test.use({ storageState: path.join(TMP, 'auth', 'owner.json') });
 
 async function openOpenJutsu(page: Page, op?: string) {
-  await page.goto('/chat?new=' + Date.now());
+  await page.goto('/experimental/studio?new=' + Date.now());
   await page.getByRole('radio', { name: 'Video' }).click();
   await page.getByRole('button', { name: /model: /i }).click();
   await page.getByRole('listbox').getByRole('option', { name: /OpenJutsu/ }).first().click();
@@ -232,7 +232,8 @@ test('12 attachments survive navigation and a reload', async ({ page }) => {
   await openOpenJutsu(page);
   await drop(page, composer(page), [F.clip, F.b]);
   await waitReady(page, 2);
-  await page.getByRole('link', { name: 'Library' }).click();
+  await page.getByRole('button', { name: /^Account:/ }).click();
+  await page.getByRole('menuitem', { name: 'Library' }).click();   // Library lives in the account menu now
   await expect(page).toHaveURL(/\/library/);
   await page.goBack();
   await expect(cards(page)).toHaveCount(2);
@@ -370,7 +371,7 @@ test('17 pictures attached to an ordinary chat message use the same library path
 });
 
 test('18 a generated picture is previewable in the viewer and reusable as a source', async ({ page }) => {
-  await page.goto('/chat?new=' + Date.now());
+  await page.goto('/experimental/studio?new=' + Date.now());
   await page.getByRole('radio', { name: 'Picture' }).click();
   await page.getByLabel('Message', { exact: true }).fill('a red bicycle');
   await page.getByRole('button', { name: /^Make picture/ }).click();
@@ -392,11 +393,18 @@ test('19 the Library hands a file to a new message, and the files can be dropped
   await drop(page, page.locator('.lib'), [F.webm]);
   await expect(page.getByRole('button', { name: /^Open loop/ })).toBeVisible({ timeout: 30_000 });
   expect(((await api(page, '/api/media/assets?origin=upload')) as any[]).filter((a) => !before.has(a.id))).toHaveLength(1);
-  await page.getByRole('button', { name: /^Open loop/ }).locator('xpath=ancestor::li').getByRole('button', { name: 'Use' }).click();
-  await expect(page).toHaveURL(/\/chat/);
-  await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toHaveAttribute('aria-label', /loop\.webm/);
-  await expect(page.getByRole('radiogroup', { name: 'What to make' }).getByRole('radio', { name: 'Video' })).toHaveAttribute('aria-checked', 'true');
+  // a video goes to the video editor (Experimental), a picture becomes the reference on the Images screen
+  await page.getByRole('button', { name: /^Open loop/ }).locator('xpath=ancestor::li').getByTitle('Open it in the video editor (Experimental)').click();
+  await expect(page).toHaveURL(/\/openjutsu/);
+  await expect(page.getByRole('heading', { name: 'OpenJutsu Studio' })).toBeVisible();
+  await expect(page.getByText(/loop\.webm/).first()).toBeVisible({ timeout: 30_000 });
+  await page.goto('/library');
+  await page.getByRole('radio', { name: 'Uploaded' }).click();
+  await drop(page, page.locator('.lib'), [F.a]);
+  await expect(page.getByRole('button', { name: /^Open portrait-a/ }).first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: /^Open portrait-a/ }).first().locator('xpath=ancestor::li').getByRole('button', { name: 'Use' }).click();
+  await expect(page).toHaveURL(/\/image$/);
+  await expect(page.locator('.refcard')).toContainText('portrait-a');
 });
 
 test('20 other formats: MOV and WebM play, no-save uploads stay in memory', async ({ page }) => {
@@ -411,7 +419,7 @@ test('20 other formats: MOV and WebM play, no-save uploads stay in memory', asyn
   }
   // a no-save conversation keeps its uploads in server memory only
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto('/chat?new=' + Date.now() + '&nosave=1');
+  await page.goto('/experimental/studio?new=' + Date.now() + '&nosave=1');
   await page.getByRole('radio', { name: 'Video' }).click();
   await drop(page, composer(page), [F.mov]);
   await waitReady(page, 1);
@@ -499,7 +507,7 @@ test('24 pasting a picture and the ordinary attach button both add real attachme
 });
 
 test('25 pictures: viewer zoom and pan, rotate and crop into a new picture, original untouched', async ({ page }) => {
-  await page.goto('/chat?new=' + Date.now());
+  await page.goto('/experimental/studio?new=' + Date.now());
   await drop(page, composer(page), [F.b]);
   await waitReady(page, 1);
   await cards(page).first().getByRole('button', { name: /^Open / }).click({ position: { x: 12, y: 62 } });

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import backends_svc, catalog_svc, services
+from ..adapters import yaob
 from ..deps import Ctx, audit_ctx, current, require, require_any
 from ..models import (
     Backend,
@@ -325,6 +326,10 @@ def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, access: str,
     if not opts["show_context"]:
         tech.pop("context_length", None)
     details = {k: tech[k] for k, perm in TECH_FIELDS if tech.get(k) not in (None, "") and p.can(perm)}
+    if p.can("tech.model.family"):  # a Yaob system: its neural core and its node network, never one combined size
+        for k, v in (("core", yaob.core_label(meta)), ("network", yaob.network_label(meta))):
+            if v:
+                details[k] = v
     if meta.get("reasoning"):
         details["reasoning"] = True
     info = meta.get("media") or {}
@@ -337,6 +342,8 @@ def _row(ctx: Ctx, m: Model, b: Backend, prof: dict, opts: dict, *, access: str,
            "provider": prof.get("provider"), "provider_label": prof.get("provider_label"), "icon": prof.get("icon"),
            "based_on": prof.get("based_on"), "modality": prof.get("modality"), "description": prof.get("description"),
            "media_modes": info.get("modes") or [], "details": details}
+    if yaob.has_web_search(meta):  # the composer offers its web search control only for these
+        row["web_search"] = True
     if p.can("tech.model.id"):
         row["real_id"] = services.display_id(m.real_id)
     if p.can("tech.runtime.name") or opts["group_by"] == "engine":

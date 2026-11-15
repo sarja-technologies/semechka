@@ -20,12 +20,18 @@ export type MsgActions = {
 };
 export type Live = {
   mode: 'send' | 'regenerate' | 'edit'; anchor: string | null; userText: string; userAttachments: Attachment[];
-  text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; model: string;
+  text: string; reasoning: string; status: 'sending' | 'streaming' | 'stopping'; error: string; model: string; modelId?: string;
   queue: null | { position: number; ahead: number; waiting: number; running: number; limit: number };
+  /** The model is being loaded into memory (a cold start takes 25-90 s on the Spark's router): set by `engine` events, cleared by the first words. */
+  loading?: null | { elapsed: number };
   sources?: any[]; skipped?: number; trimmed?: number;
+  /** What a Yaob system reports before it writes: searching the web, reading sources, checking the answer. Cleared by the first words. */
+  activity?: null | { state: string; query?: string; count?: number };
 };
 export type Turn = { content: string; attachments: Attachment[]; operation: 'text' | 'image' | 'video'; modelId: string;
   modelLabel: string; media?: Record<string, unknown>; sourceId?: string | null;
+  /** Web search for this reply; set only for models that offer it (lib/chat/websearch.svelte.ts). */
+  webSearch?: 'auto' | 'on' | 'off';
   /** The iPhone Photo preset of a picture request (the server builds the prompt, the 9:16 size and the wording for the model). */
   preset?: { id: string; scenes: string[] };
   /** What the person sees in the conversation when the prompt is empty (an editing profile has no free prompt in most operations). */
@@ -124,7 +130,8 @@ export class Thread {
     await patch(`/api/chat/conversations/${this.id}`, { assistant_id: assistantId, collection_ids: collectionIds });
   }
 
-  private async ensure(modelId: string, ctx: { assistantId: string | null; collectionIds: string[] }, onCreated: (id: string) => void) {
+  /** Save the conversation if it is still new (Work Mode needs one before its first prompt) and return its id. */
+  async ensure(modelId: string, ctx: { assistantId: string | null; collectionIds: string[] }, onCreated: (id: string) => void) {
     if (this.id) return this.id;
     const c = await post('/api/chat/conversations', { model_id: modelId || null, mode: this.workspace, assistant_id: ctx.assistantId, collection_ids: ctx.collectionIds });
     this.id = c.id; this.head = { ...c, context: { assistant_id: ctx.assistantId, collection_ids: ctx.collectionIds } };
@@ -174,7 +181,7 @@ export class Thread {
     this.sendError = ''; this.outcome = '';
     const mine = this.epoch, noSave = this.ephemeral;
     const live: Live = { mode, anchor: anchor?.id ?? null, userText: turn.content, userAttachments: turn.attachments, text: '',
-      reasoning: '', status: 'sending', error: '', model: turn.modelLabel, queue: null };
+      reasoning: '', status: 'sending', error: '', model: turn.modelLabel, modelId: turn.modelId, queue: null };
     this.live = live;
     const cur = this.live; // the proxied object: writes below update the view
     let final: any = null;
@@ -189,17 +196,21 @@ export class Thread {
         else hist.push({ role: 'user', content: turn.content, attachments: atts });
         url = '/api/chat/ephemeral/generate';
         body = { messages: hist, model_id: turn.modelId, workspace: this.workspace, assistant_id: ctx.assistantId, collection_ids: ctx.collectionIds };
+        if (turn.webSearch) body.web_search = turn.webSearch;
       } else {
         const id = await this.ensure(turn.modelId, ctx, onCreated);
         url = `/api/chat/conversations/${id}/generate`;
         body = mode === 'send' ? { mode, operation: 'text', content: turn.content, model_id: turn.modelId, parent_id: this.last?.id ?? null, attachments: atts }
           : mode === 'edit' ? { mode, operation: 'text', content: turn.content, parent_id: anchor!.id, model_id: turn.modelId, attachments: atts }
           : { mode, parent_id: anchor!.id, model_id: turn.modelId };
+        if (turn.webSearch) body.web_search = turn.webSearch;
       }
       this.ctrl = stream(url, body, (ev) => {
         if (mine !== this.epoch) return;
         if (ev.type === 'start') cur.status = 'streaming';
-        else if (ev.type === 'delta') { if (ev.content) cur.text += ev.content; if (ev.reasoning) cur.reasoning += ev.reasoning; }
+        else if (ev.type === 'delta') { cur.loading = null; if (ev.content) { cur.text += ev.content; cur.activity = null; } if (ev.reasoning) cur.reasoning += ev.reasoning; }
+        else if (ev.type === 'activity') cur.activity = { state: ev.state, query: ev.query, count: ev.count };
+        else if (ev.type === 'engine') cur.loading = ev.state === 'loading' ? { elapsed: Number(ev.elapsed) || 0 } : null;
         else if (ev.type === 'queue') cur.queue = ev.running === true ? null : ev;
         else if (ev.type === 'sources') { cur.sources = ev.sources; cur.skipped = ev.skipped; }
         else if (ev.type === 'trimmed') cur.trimmed = ev.dropped;

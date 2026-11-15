@@ -36,7 +36,7 @@ IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "ima
 VIDEO_EXT = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/x-matroska": "mkv", "video/x-msvideo": "avi"}
 SERVE_MIME = {**IMAGE_EXT, **VIDEO_EXT}
 EPHEMERAL_UPLOAD_MAX = 256 * 1024 * 1024
-ORIGINS = ("upload", "edit", "prepared", "export", "adjusted", "scaled", "composited")  # prepared: made for an OpenJutsu Studio run; export: a result scaled to a requested size
+ORIGINS = ("upload", "edit", "prepared", "export", "adjusted", "scaled", "upscaled", "composited")  # prepared: made for an OpenJutsu Studio run; export: a result scaled to a requested size
 # Imajutsu (docs/IMAJUTSU_BACKEND.md): adjusted = photographic adjustments of a picture (no model); scaled = Lanczos resize (never presented as AI);
 # composited = a result blended with its source outside the selection
 META_KEYS = ("origin", "name", "parent", "edit", "media")
@@ -531,7 +531,7 @@ async def _store(st, *, user_id: str, name: str, pr: Probe, src: Path, size: int
     return out
 
 
-_MODEL_OF = {"edit": "edit", "prepared": "prepared", "export": "export", "adjusted": "adjusted", "scaled": "scaled", "composited": "composited"}  # MediaAsset.model_id of derived items (prepared ones are found by it)
+_MODEL_OF = {"edit": "edit", "prepared": "prepared", "export": "export", "adjusted": "adjusted", "scaled": "scaled", "upscaled": "upscaled", "composited": "composited"}  # MediaAsset.model_id of derived items (prepared ones are found by it)
 
 
 def mem_out(st, aid: str) -> dict:

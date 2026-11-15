@@ -8,9 +8,10 @@
   import Message from './Message.svelte';
   import ModelIcon from './ModelIcon.svelte';
   import type { Thread, Msg, MsgActions } from '$lib/chat/thread.svelte';
+  import { activityText } from '$lib/chat/websearch.svelte';
 
-  let { thread, labelFor, act, canBranch, techOn, showSources, selected = null, empty }:
-    { thread: Thread; labelFor: (m: { model: string | null }) => string; act: MsgActions; canBranch: boolean; techOn: boolean; showSources: boolean;
+  let { thread, labelFor, act, canBranch, techOn, showSources, selected = null, empty, modelState }:
+    { modelState?: (id: string | undefined) => string | null | undefined; thread: Thread; labelFor: (m: { model: string | null }) => string; act: MsgActions; canBranch: boolean; techOn: boolean; showSources: boolean;
       selected?: string | null; empty: Snippet } = $props();
 
   let scroller: HTMLDivElement | undefined = $state(), inner: HTMLDivElement | undefined = $state(), top: HTMLDivElement | undefined = $state();
@@ -63,8 +64,13 @@
   const queueText = (q: any) => q.reason === 'engine_busy' ? 'Waiting for the engine to finish another reply'
     : q.reason === 'model_switch' ? 'Waiting for replies from another model to finish'
     : `In queue, position ${q.position}`;
-  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Sending' : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
-  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
+  const loadingText = (l: { elapsed: number }) => `Loading the model${l.elapsed >= 1 ? ` (${Math.round(l.elapsed)} s)` : ''}`;
+  // what a Yaob system reports it is doing before it writes (searching the web, reading what it found)
+  const activity = $derived(live && !live.text ? activityText(live.activity) : '');
+  const statusText = $derived(live ? (live.status === 'stopping' ? 'Stopping' : live.queue ? queueText(live.queue) : live.loading ? loadingText(live.loading) : live.status === 'sending' ? 'Sending' : activity ? activity : live.text ? 'Assistant is writing' : 'Assistant is replying') : thread.outcome);
+  const liveWord = $derived(!live ? '' : live.queue ? queueText(live.queue) : live.status === 'sending' ? 'Waiting for the model' : live.status === 'stopping' ? 'Stopping' : live.loading ? loadingText(live.loading) : activity ? activity : live.text ? '' : live.reasoning ? 'Thinking' : 'Waiting for the first words');
+  const liveKnown = $derived((live?.sources ?? []).filter((x: any) => !x.url));
+  const liveCited = $derived((live?.sources ?? []).filter((x: any) => !!x.url));
 </script>
 
 <!-- One announcement per reply, never per token: screen readers hear that a reply started and how it ended. -->
@@ -101,11 +107,13 @@
           <ModelIcon icon={act.icon(null)} label={live.model} size={20} /><span>{labelFor({ model: live.model })}</span>
           {#if liveWord}<span class="state"><span class="dot" aria-hidden="true"></span>{liveWord}</span>{/if}
         </div>
+        {#if live.loading}<p class="small muted" data-testid="model-loading">This model was not in memory, so it is being started. The first reply after that takes up to about a minute; later ones are quick.</p>{/if}
         {#if live.queue}<p class="small muted">{live.queue.running} of {live.queue.limit} reply slot{live.queue.limit === 1 ? '' : 's'} in use; {live.queue.waiting} waiting. Your request starts when it reaches the front. Stop leaves the queue.</p>{/if}
-        {#if showSources && (live.sources?.length || live.skipped)}<Sources sources={live.sources ?? []} skipped={live.skipped ?? 0} />{/if}
+        {#if showSources && (liveKnown.length || live.skipped)}<Sources sources={liveKnown} skipped={live.skipped ?? 0} />{/if}
         {#if live.trimmed}<p class="tiny muted"><Icon name="info" size={13} /> The {live.trimmed} oldest message{live.trimmed === 1 ? '' : 's'} did not fit in this model's context window and {live.trimmed === 1 ? 'is' : 'are'} left out of this reply.</p>{/if}
         {#if live.reasoning}<details class="think"><summary class="small muted">Thinking</summary><pre>{live.reasoning}</pre></details>{/if}
         {#if live.text}<StreamText text={live.text} />{/if}
+        {#if showSources && liveCited.length}<Sources sources={liveCited} kind="web" />{/if}
       </article>
     {/if}
     {#if thread.sendError}<div class="notice bad" role="alert"><div>{thread.sendError}</div></div>{/if}

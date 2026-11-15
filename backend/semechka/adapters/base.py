@@ -7,6 +7,13 @@ Stream events yielded by `chat_stream`:
   {"type": "delta", "content": str, "reasoning": str}
   {"type": "done", "finish_reason": str|None, "usage": {"prompt_tokens","completion_tokens"}|None,
    "timings": {"prompt_per_second","predicted_per_second"}|None}
+  {"type": "status", "state": "loading", "model": str, "elapsed": float}   optional, before the first delta (cold start)
+  {"type": "tool_calls", "calls": [{"id","name","arguments"}]}              optional, before done (native tool calls)
+  {"type": "status", "state": "searching_web"|"reading_sources"|"verifying", "query"?: str, "count"?: int}
+                                                                            optional, Yaob systems (adapters/yaob.py)
+  {"type": "sources", "sources": [{"n","kind","url","title","site","published"?,"retrieved_at"?,"snippet"?}]}
+                                                                            optional, Yaob systems: cited documents
+  "done" may also carry "provenance": str (the id of a Yaob server's record of the reply)
 Errors are raised as AdapterError with a user-safe message.
 """
 from __future__ import annotations
@@ -39,6 +46,10 @@ class Manifest:
     # context window) replaces it even while a reply is being written. Semechka then never runs replies for two
     # different chat models on it at once, and waits while another client is mid-reply before switching.
     exclusive_chat_model: bool = False
+    # The opposite: several chat models are resident at once (a router such as llama.cpp's). Loaded state is per model, a
+    # load/unload of one never disturbs another, and the stream may yield {"type": "status", "state": "loading", ...} events
+    # while a cold model starts (Semechka passes them on to the interface).
+    multi_model: bool = False
     worker_stop: bool = False  # the picture/video worker process can be stopped to return all of its memory
     model_install: bool = False
     media: bool = False  # image/video generation jobs (media_* methods)

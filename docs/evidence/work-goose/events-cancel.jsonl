@@ -1,0 +1,33 @@
+{"seq": 278, "type": "turn_start", "ts": 1794299463.7662148, "turn_id": "t_803c7658249d", "text": "Run the shell command `sleep 300` and wait for it, then tell me it is done."}
+{"seq": 279, "type": "state", "ts": 1794299463.7812183, "turn_id": "t_803c7658249d", "state": "starting"}
+{"seq": 280, "type": "state", "ts": 1794299463.8979805, "turn_id": "t_803c7658249d", "state": "running"}
+{"seq": 281, "type": "reasoning_delta", "ts": 1794299464.2486405, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "The user wants me to run `sleep "}
+{"seq": 282, "type": "reasoning_delta", "ts": 1794299464.3706124, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "300` (300"}
+{"seq": 283, "type": "reasoning_delta", "ts": 1794299464.492584, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " seconds = 5 minutes) and wait"}
+{"seq": 284, "type": "reasoning_delta", "ts": 1794299464.6145768, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " for it to complete. This is a"}
+{"seq": 285, "type": "reasoning_delta", "ts": 1794299464.7379591, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " very long wait - 5 minutes."}
+{"seq": 286, "type": "reasoning_delta", "ts": 1794299464.8599396, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " I should run the command and then wait"}
+{"seq": 287, "type": "reasoning_delta", "ts": 1794299464.9812467, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": ". But I can't actually wait "}
+{"seq": 288, "type": "reasoning_delta", "ts": 1794299465.1037126, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "5 minutes in real time. Let me"}
+{"seq": 289, "type": "reasoning_delta", "ts": 1794299465.225443, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " think about how to handle this.\n\n"}
+{"seq": 290, "type": "reasoning_delta", "ts": 1794299465.34784, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "Actually, I can run the command with"}
+{"seq": 291, "type": "reasoning_delta", "ts": 1794299465.4719176, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " a timeout. But the user explicitly said"}
+{"seq": 292, "type": "reasoning_delta", "ts": 1794299465.594122, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " to wait for it. Let me run"}
+{"seq": 293, "type": "reasoning_delta", "ts": 1794299465.717499, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " it and see what happens. The default"}
+{"seq": 294, "type": "reasoning_delta", "ts": 1794299465.8403068, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " timeout might be too short though."}
+{"seq": 295, "type": "reasoning_delta", "ts": 1794299465.9643857, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " Let me run it and report back."}
+{"seq": 296, "type": "reasoning_delta", "ts": 1794299466.0866554, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "\n\nActually, running `sleep 3"}
+{"seq": 297, "type": "reasoning_delta", "ts": 1794299466.2084768, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "00` would take 5 minutes"}
+{"seq": 298, "type": "reasoning_delta", "ts": 1794299466.331994, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": ". That's not practical in this context"}
+{"seq": 299, "type": "reasoning_delta", "ts": 1794299466.454709, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": ". I should run it but note that"}
+{"seq": 300, "type": "reasoning_delta", "ts": 1794299466.5773873, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " it will take a while. Let me"}
+{"seq": 301, "type": "reasoning_delta", "ts": 1794299466.699349, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " just run it and see if there's"}
+{"seq": 302, "type": "reasoning_delta", "ts": 1794299466.821412, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " a timeout issue.\n"}
+{"seq": 303, "type": "assistant_delta", "ts": 1794299466.8231547, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": "Running"}
+{"seq": 304, "type": "assistant_delta", "ts": 1794299466.9464593, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " `sleep 300`"}
+{"seq": 305, "type": "assistant_delta", "ts": 1794299467.0698187, "turn_id": "t_803c7658249d", "message_id": "chatcmpl-rsYfBLPoQK5RuO9vHdEYoTSIddlnQyYc", "text": " (5 minutes)...\n\n"}
+{"seq": 306, "type": "tool_start", "ts": 1794299467.704633, "turn_id": "t_803c7658249d", "tool_call_id": "TamTwV5rreHsDqKMtAIQmCTTGjxpKFFy", "tool": "shell", "extension": "developer", "title": "shell \u00b7 sleep 300", "input": {"command": "sleep 300", "timeout_secs": 600}, "kind": "execute"}
+{"seq": 307, "type": "usage", "ts": 1794299467.7271214, "turn_id": "t_803c7658249d", "used": 7530, "size": 65536}
+{"seq": 308, "type": "state", "ts": 1794299470.8056912, "turn_id": "t_803c7658249d", "state": "cancelling"}
+{"seq": 309, "type": "usage", "ts": 1794299470.8131022, "turn_id": "t_803c7658249d", "used": 7530, "size": 65536}
+{"seq": 310, "type": "turn_end", "ts": 1794299471.0291739, "turn_id": "t_803c7658249d", "stop_reason": "cancelled", "usage": {"input": 7297, "output": 233, "total": 7530}}

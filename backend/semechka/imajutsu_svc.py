@@ -28,7 +28,7 @@ from . import imajutsu_pix as pix
 from . import imajutsu_plan as plan_mod
 from . import imajutsu_presets as presets
 from . import imajutsu_routing as routing
-from . import media_lib, media_svc, services
+from . import media_lib, media_svc, opensfield_upscale, services
 from .adapters import AdapterError
 from .backends_svc import adapter_for
 from .media_lib import MediaError
@@ -102,15 +102,13 @@ def load_pic(st, s, user_id: str, aid, what: str, *, missing: int = 422) -> Pic:
         if missing == 404:
             raise ImajutsuError(404, "not_found", "Not found.")
         raise ImajutsuError(422, "asset_missing", f"{what} is no longer in your library.")
+    if (media_lib.mem_info(st, got)["kind"] if isinstance(got, str) else got.kind) != "image":   # before reading a size: a sound or 3D mesh has none
+        raise ImajutsuError(422, "invalid", f"{what} must be a picture.")
     if isinstance(got, str):
         info = media_lib.mem_info(st, got)
         pic = Pic(got, got, True, info["mime"], int(info["width"]), int(info["height"]), media_lib.clean_name(info.get("name"), "image"), info["size"])
-        kind = info["kind"]
     else:
         pic = Pic(got.id, got, False, got.mime, int(got.width), int(got.height), media_lib.display_name(media_lib.meta_of(st, got), got.kind, got.id), got.size)
-        kind = got.kind
-    if kind != "image":
-        raise ImajutsuError(422, "invalid", f"{what} must be a picture.")
     if pic.mime == "image/gif":
         raise ImajutsuError(422, "unsupported_type", f"{what} is an animated GIF; save a frame as PNG first.")
     return pic
@@ -150,17 +148,17 @@ def default_spec(mode: str = "generate") -> dict:
     return {"version": SPEC_VERSION, "kind": KIND, "mode": mode, "prompt": "", "negative": "", "preset": {"id": presets.PRESET_ID if mode == "iphone_photo" else None, "scenes": [], "finish": False, "tier": None},
             "aspect": default_aspect(mode), "size": {"native": None, "output": None}, "quality": "standard", "seed": None, "count": 1,
             "source_asset": None, "mask_asset": None, "selection": {"box": None, "feather": 0, "invert": False, "keep_outside": None},
-            "outpaint": {"pad": None, "target": None, "anchor": {"x": 0.5, "y": 0.5}, "overlap": 0}, "upscale": {"refine": False, "strength": 0.3},
+            "outpaint": {"pad": None, "target": None, "anchor": {"x": 0.5, "y": 0.5}, "overlap": 0}, "upscale": {"refine": False, "strength": 0.3, "engine": "lanczos"},
             "references": [], "model": None, "advanced": {}, "adjustments": {}}
 
 
-def _size(v, name: str):
+def _size(v, name: str, hi: int = plan_mod.MAX_OUT):
     if v is None:
         return None
     if not isinstance(v, dict):
         raise ImajutsuError(422, "invalid", f"{name} needs a width and a height.")
-    return {"width": _num(v.get("width"), f"{name}.width", plan_mod.MIN_OUT, plan_mod.MAX_OUT, integer=True),
-            "height": _num(v.get("height"), f"{name}.height", plan_mod.MIN_OUT, plan_mod.MAX_OUT, integer=True)}
+    return {"width": _num(v.get("width"), f"{name}.width", plan_mod.MIN_OUT, hi, integer=True),
+            "height": _num(v.get("height"), f"{name}.height", plan_mod.MIN_OUT, hi, integer=True)}
 
 
 def normalize_spec(st, s, user_id: str, raw, *, check_model: bool = True) -> dict:
@@ -209,10 +207,12 @@ def normalize_spec(st, s, user_id: str, raw, *, check_model: bool = True) -> dic
     if sz is not None:
         if not isinstance(sz, dict):
             raise ImajutsuError(422, "invalid", "size must be an object.")
-        d["size"] = {"native": _size(sz.get("native"), "size.native"), "output": _size(sz.get("output"), "size.output")}
+        d["size"] = {"native": _size(sz.get("native"), "size.native"), "output": _size(sz.get("output"), "size.output", plan_mod.MAX_OUT_AI)}
+        ru = raw.get("upscale") if isinstance(raw.get("upscale"), dict) else {}
+        ai_up = raw.get("mode") == "upscale" and ru.get("engine") in ("seedvr2", "esrgan") and not ru.get("refine")   # AI upscaling may go past 8K (the plan checks its own limit)
         for k in ("native", "output"):
-            if d["size"][k] and d["size"][k]["width"] * d["size"][k]["height"] > plan_mod.MAX_OUT_PIXELS:
-                raise ImajutsuError(422, "invalid", "That size is larger than 8K.")
+            if d["size"][k] and d["size"][k]["width"] * d["size"][k]["height"] > (plan_mod.MAX_OUT_AI_PIXELS if ai_up and k == "output" else plan_mod.MAX_OUT_PIXELS):
+                raise ImajutsuError(422, "invalid", "That size is larger than the Spark upscales reliably (about 90 megapixels)." if ai_up and k == "output" else "That size is larger than 8K.")
     q = raw.get("quality", "standard")
     if q not in plan_mod.QUALITY:
         raise ImajutsuError(422, "invalid", "quality must be one of: " + ", ".join(plan_mod.QUALITY) + ".")
@@ -257,7 +257,10 @@ def normalize_spec(st, s, user_id: str, raw, *, check_model: bool = True) -> dic
     if u is not None:
         if not isinstance(u, dict):
             raise ImajutsuError(422, "invalid", "upscale must be an object.")
-        d["upscale"] = {"refine": bool(u.get("refine", False)), "strength": round(_num(u.get("strength", 0.3), "upscale.strength", 0.05, 1), 3)}
+        eng = u.get("engine", "lanczos")
+        if eng not in plan_mod.UPSCALE_ENGINES:
+            raise ImajutsuError(422, "invalid", "upscale.engine must be lanczos, seedvr2 or esrgan.")
+        d["upscale"] = {"refine": bool(u.get("refine", False)), "strength": round(_num(u.get("strength", 0.3), "upscale.strength", 0.05, 1), 3), "engine": eng}
     refs = raw.get("references", [])
     if not isinstance(refs, list):
         raise ImajutsuError(422, "invalid", "references must be a list.")
@@ -416,6 +419,7 @@ def model_facts(m: Model, b: Backend) -> dict:
     info = media_svc.media_info(m)
     return {"model_id": m.id, "alias": m.alias, "engine_id": m.real_id.split(":", 1)[1] if ":" in m.real_id else m.real_id,
             "modes": [x for x in info.get("modes") or [] if isinstance(x, str)], "references": int(info.get("references") or 0),
+            "mode_pictures": {k: v for k, v in (info.get("mode_pictures") or {}).items() if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)},
             "negative_prompt": bool(info.get("negative_prompt")), "schedulers": list(info.get("schedulers") or []), "limits": dict(info.get("limits") or {}),
             "defaults": dict(info.get("defaults") or {}), "license": (m.meta or {}).get("license"), "loaded": (m.meta or {}).get("loaded"),
             "description": (m.meta or {}).get("description")}
@@ -448,9 +452,10 @@ def operational(mode: str, f: dict, entry: dict | None) -> tuple[bool, str]:
     if em not in f["modes"]:
         return False, f"{f['alias']} does not offer {'instruction editing' if em == 'edit' else em} (it can do: {', '.join(f['modes']) or 'nothing it reports'})."
     if md["refs_min"]:
-        slots = plan_mod.picture_cap(em, f["references"]) - (1 if md["source"] else 0)
+        cap = plan_mod.picture_cap(em, f["references"], f.get("mode_pictures"))
+        slots = cap - (1 if md["source"] else 0)
         if slots < md["refs_min"]:
-            return False, f"{f['alias']} takes {plan_mod.picture_cap(em, f['references'])} picture{'s' if plan_mod.picture_cap(em, f['references']) != 1 else ''} and {md['label']} needs {md['refs_min'] + (1 if md['source'] else 0)}."
+            return False, f"{f['alias']} takes {cap} picture{'s' if cap != 1 else ''} and {md['label']} needs {md['refs_min'] + (1 if md['source'] else 0)}."
     return True, ""
 
 
@@ -648,7 +653,10 @@ async def build_plan(st, s, user, spec: dict, *, estimate: bool = True) -> dict:
     facts = row[2] if row else None
     if spec["mode"] == "upscale" and not (spec.get("upscale") or {}).get("refine"):
         row, facts, choice = None, None, {"row": None, "entry": None, "recommended": False}
-    ctx = {"mode": spec["mode"], "model": facts, "entry": choice.get("entry"), "recommended": choice.get("recommended"), "why_none": choice.get("why_none"),
+    caps = None
+    if spec["mode"] == "upscale" and not (spec.get("upscale") or {}).get("refine") and (spec.get("upscale") or {}).get("engine", "lanczos") != "lanczos":
+        caps = await opensfield_upscale.capabilities()
+    ctx = {"mode": spec["mode"], "upscale_caps": caps, "model": facts, "entry": choice.get("entry"), "recommended": choice.get("recommended"), "why_none": choice.get("why_none"),
            "source": source.facts() if source else None, "mask": ({"asset": maskp.id, "width": maskp.width, "height": maskp.height} if maskp else None),
            "avoid_words": routing.avoid_words(doc), "pixels": doc.get("pixels"), "warnings": choice.get("warnings")}
     pln = plan_mod.plan(spec, ctx)
@@ -772,7 +780,7 @@ async def generate(st, s, user, project: StudioProject, body: dict) -> dict:
         spec["count"] = _num(body["count"], "count", 1, MAX_COUNT, integer=True)
     mode = spec["mode"]
     if mode == "upscale" and not spec["upscale"]["refine"]:
-        raise ImajutsuError(422, "use_upscale", "Upscale without refining is a scaling step: use POST /api/imajutsu/assets/{id}/upscale.")
+        raise ImajutsuError(422, "use_upscale", "Upscale without refining is a scaling step: use POST /api/imajutsu/assets/{id}/upscale (with engine lanczos, seedvr2 or esrgan).")
     r = await build_plan(st, s, user, spec, estimate=False)
     pln, facts, row, source, maskp = r["plan"], r["facts"], r["row"], r["source"], r["mask"]
     if pln["errors"]:
@@ -875,7 +883,7 @@ def block_of(st, j: MediaJob) -> dict | None:
     return b if isinstance(b, dict) else None
 
 
-DERIVED_MODELS = ("adjusted", "scaled", "composited")
+DERIVED_MODELS = ("adjusted", "scaled", "upscaled", "composited")
 
 
 def _derived_by_parent(st, s, user_id: str) -> dict[str, list[dict]]:
@@ -1091,7 +1099,11 @@ async def start_adjust(st, s, user, aid: str, raw_recipe, name: str | None) -> m
     return _spawn(st, user.id, pic.id, work)
 
 
-async def start_upscale(st, s, user, aid: str, width: int, height: int, name: str | None = None) -> tuple[media_lib.EditTask, dict]:
+async def start_upscale(st, s, user, aid: str, width: int, height: int, name: str | None = None, engine: str = "lanczos") -> tuple[media_lib.EditTask, dict]:
+    if engine not in plan_mod.UPSCALE_ENGINES:
+        raise ImajutsuError(422, "invalid", "engine must be lanczos, seedvr2 or esrgan.")
+    if engine != "lanczos":
+        return await start_ai_upscale(st, s, user, aid, width, height, name, engine)
     principal = services.load_principal(s, user)
     pic = load_pic(st, s, user.id, aid, "The picture", missing=404)
     w = _num(width, "width", plan_mod.MIN_OUT, plan_mod.MAX_OUT, integer=True)
@@ -1117,6 +1129,52 @@ async def start_upscale(st, s, user, aid: str, width: int, height: int, name: st
         meta = {"parent": pic.id, "imajutsu": {"kind": "scaled", **info, "parent": pic.id}}
         return await media_lib.ingest(st, user_id=user.id, name=nm, body=_bytes_iter(data), declared=len(data), cap=tc.cap, ephemeral=tc.ephemeral,
                                       expires_at=None if tc.ephemeral else tc.expires, origin="scaled", extra_meta=meta)
+    return _spawn(st, user.id, pic.id, work), info
+
+
+AI_JPEG_ABOVE_PIXELS = 24_000_000
+
+
+async def start_ai_upscale(st, s, user, aid: str, width: int, height: int, name: str | None, engine: str) -> tuple[media_lib.EditTask, dict]:
+    """Enlarge with an AI model on the Spark's GPU (OpenSfield: SeedVR2 or Real-ESRGAN). Labelled as AI; the original is never touched and the result is a new asset."""
+    principal = services.load_principal(s, user)
+    pic = load_pic(st, s, user.id, aid, "The picture", missing=404)
+    w = _num(width, "width", plan_mod.MIN_OUT, plan_mod.MAX_OUT_AI, integer=True)
+    h = _num(height, "height", plan_mod.MIN_OUT, plan_mod.MAX_OUT_AI, integer=True)
+    if (w, h) == (pic.width, pic.height):
+        raise ImajutsuError(422, "nothing_to_do", f"The picture already is {w}×{h}.")
+    if abs((w / h) / (pic.width / pic.height) - 1) > plan_mod.SHAPE_TOLERANCE:
+        raise ImajutsuError(422, "shape_differs", f"{w}×{h} has a different shape from the picture ({pic.width}×{pic.height}). Choose a size with the same shape.")
+    if plan_mod.scaling_kind((pic.width, pic.height), (w, h)) != "upscale":
+        raise ImajutsuError(422, "not_larger", "AI upscaling only makes a picture larger. Use plain scaling to make it smaller.")
+    caps = await opensfield_upscale.capabilities()
+    eng = opensfield_upscale.engine_info(caps, engine)
+    if not caps.get("configured") or not caps.get("reachable"):
+        raise ImajutsuError(503, "ai_unavailable", caps.get("reason") or "AI upscaling is not available right now.")
+    if eng is None or not eng.get("ready"):
+        raise ImajutsuError(503, "ai_unavailable", "This upscale method is not ready on the Spark" + (f": {eng.get('reason')}" if eng and eng.get("reason") else "."))
+    if w * h > min(plan_mod.MAX_OUT_AI_PIXELS, int(caps.get("max_output_pixels") or plan_mod.MAX_OUT_AI_PIXELS)):
+        raise ImajutsuError(422, "invalid", "That size is larger than the Spark upscales reliably.")
+    tc = _task_ctx(st, s, principal, pic)
+    s.commit()
+    label = plan_mod.UPSCALE_ENGINES[engine]
+    info = {"scaling": "upscale", "method": engine, "from": {"width": pic.width, "height": pic.height}, "to": {"width": w, "height": h}, "label": label, "ai": True}
+    big = w * h > AI_JPEG_ABOVE_PIXELS             # a 90 MP PNG is 120+ MB; large results are kept as high-quality JPEG
+    fmt = "JPEG" if (pic.mime == "image/jpeg" or big) else "PNG"
+
+    async def work(t):
+        with open_pics(st, [pic]) as [path]:
+            data = path.read_bytes()
+        try:
+            out, res = await opensfield_upscale.upscale(data, pic.name or "image.png", engine, w, h, fmt, on_progress=lambda p, _ph: setattr(t, "progress", min(0.97, p)),
+                                                        cancelled=lambda: t.cancel.is_set())
+        except opensfield_upscale.UpscaleUnavailable as e:
+            raise ImajutsuError(502, "ai_failed", str(e)) from e
+        ext = "jpg" if (res.get("format") or fmt).upper().startswith("JPEG") else "png"
+        nm = media_lib.clean_name(name, "image") if name else f"{_stem(pic.name)} ({w}x{h}, {'SeedVR2' if engine == 'seedvr2' else 'Real-ESRGAN'}).{ext}"
+        meta = {"parent": pic.id, "imajutsu": {"kind": "upscaled", **info, "parent": pic.id, "honest": res.get("honest"), "passes": res.get("passes"), "model": None}}
+        return await media_lib.ingest(st, user_id=user.id, name=nm, body=_bytes_iter(out), declared=len(out), cap=tc.cap, ephemeral=tc.ephemeral,
+                                      expires_at=None if tc.ephemeral else tc.expires, origin="upscaled", extra_meta=meta)
     return _spawn(st, user.id, pic.id, work), info
 
 

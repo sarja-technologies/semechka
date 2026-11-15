@@ -28,7 +28,8 @@
   function setDim(which: 'w' | 'h', v: number) {
     if (!(v >= 16)) return;
     s.edit((x) => {
-      const cw = x.size.output?.width ?? x.aspect.w ?? v, ch = x.size.output?.height ?? x.aspect.h ?? v, r = cw / ch;
+      const sw = up && src?.width && src?.height ? src : null;   // upscale: with no size chosen yet the shape to keep is the picture's own
+      const cw = x.size.output?.width ?? sw?.width ?? x.aspect.w ?? v, ch = x.size.output?.height ?? sw?.height ?? x.aspect.h ?? v, r = cw / ch;
       const w = which === 'w' ? Math.round(v) : lock.on ? Math.round(v * r) : cw, h = which === 'h' ? Math.round(v) : lock.on ? Math.round(v / r) : ch;
       x.aspect = { id: 'custom', w, h }; x.size.output = { width: w, height: h };
     });
@@ -97,7 +98,7 @@
     {:else}
       <ol class="pipe">
         {#if !up}<li data-testid="pipe-native" class="proc"><span class="k"><i>1</i>Model makes</span><strong>{fmtDims(nat)}</strong><span class="sub">its native size</span></li>{/if}
-        <li data-testid="pipe-output"><span class="k"><i>{up ? 1 : 2}</i>You get</span><strong>{fmtDims(out)}</strong><span class="sub">{sc === 'upscale' ? 'scaled up, no new detail' : sc === 'downscale' ? 'scaled down' : sc === 'none' ? 'as made' : ''}</span></li>
+        <li data-testid="pipe-output"><span class="k"><i>{up ? 1 : 2}</i>You get</span><strong>{fmtDims(out)}</strong><span class="sub">{sc === 'upscale' ? (p?.scaling?.ai ? 'AI upscale: new detail is drawn' : 'scaled up, no new detail') : sc === 'downscale' ? 'scaled down' : sc === 'none' ? 'as made' : ''}</span></li>
       </ol>
       {#if nat?.why && !up}<p class="st-note" data-testid="pipe-why"><Icon name="info" size={13} /> {nat.why}</p>{/if}
       {#if out?.note}<p class="st-note" class:warn={sc === 'upscale'} data-testid="pipe-output-note">{out.note}</p>{/if}

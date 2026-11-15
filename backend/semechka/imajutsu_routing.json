@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-07",
+  "updated": "2026-11-10",
   "notes": "Which engine model Imajutsu uses for each mode, in order of preference. This file is DATA: reorder the lists, edit the reasons, add a model. Code never names a model. The first model in a list that is installed, allowed for the person, and really offers the engine mode (the engine registry's capabilities.modes) is the recommended one. Facts measured on the DGX Spark (docs/imajutsu-bench/), corrected run at each model's OWN default steps and guidance (720x1280, 9:16, 7 scene types). 'quality' lists the draft and high step counts; the standard count is always the engine's own default for the model. 'wording' says how the prompt builder writes for a model: 'natural' = natural sentences ('handheld phone photo' is fine), 'plain' = 'A photograph of ...' plus plain light and framing sentences and none of the model's avoid_words.",
   "pixels": 921600,
   "avoid_words": [
@@ -154,6 +154,10 @@
       },
       "slow": true,
       "license": "Apache-2.0"
+    },
+    "flux1-fill-dev": {
+      "license": "FLUX.1-dev non-commercial",
+      "wording": "natural"
     }
   },
   "modes": {
@@ -215,17 +219,17 @@
     "edit": {
       "models": [
         {
-          "engine_id": "qwen-image-edit-2511",
-          "why": "A dedicated instruction-editing model: it takes the picture and up to two more, and follows edit sentences closely. Slow (about 40 steps).",
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast instruction editing (about 10-15 s): the picture plus up to three more pictures (four in all). The result keeps the picture's exact size. Measured: jacket colour changed with face and street untouched; Apache-2.0.",
           "evidence": [
-            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit with up to 3 pictures"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: FLUX.2 klein 4B distilled, edit with 1-4 pictures"
           ]
         },
         {
-          "engine_id": "flux2-klein-4b",
-          "why": "Fast instruction editing (about 20 s) with the picture and up to three more.",
+          "engine_id": "qwen-image-edit-2511",
+          "why": "A dedicated instruction-editing model: the picture plus up to two more. Slower (about 40 s Fast, 3-4 min Quality) and its output size is its own (720x1280 became 752x1392).",
           "evidence": [
-            "docs/IMAJUTSU.md: flux2-klein-4b edit with up to 4 pictures"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: Qwen-Image-Edit 2511 edit with 1-3 pictures"
           ]
         }
       ]
@@ -233,17 +237,17 @@
     "replace_subject": {
       "models": [
         {
-          "engine_id": "qwen-image-edit-2511",
-          "why": "Follows 'replace X with the subject in image 2' instructions with the source and up to two reference pictures.",
+          "engine_id": "flux2-klein-4b",
+          "why": "Takes the source and up to three reference pictures; with a selection it repaints only the selection (everything outside is the source's own pixels, measured). About 13 s. Measured: the man replaced by the person of the reference picture, street and light kept.",
           "evidence": [
-            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit with up to 3 pictures"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: edit with 2 pictures and masked edit with 1-3 reference pictures"
           ]
         },
         {
-          "engine_id": "flux2-klein-4b",
-          "why": "Fast; takes the source and up to three reference pictures, and can inpaint inside a selection.",
+          "engine_id": "qwen-image-edit-2511",
+          "why": "Follows 'replace X with the subject in image 2' with the source and up to two reference pictures (about 40 s); it edits the whole picture, so use the 'keep outside the selection' copy to confine it.",
           "evidence": [
-            "docs/IMAJUTSU.md: flux2-klein-4b edit with up to 4 pictures and inpaint"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: Qwen-Image-Edit 2511 edit with 2 pictures"
           ]
         }
       ]
@@ -251,10 +255,17 @@
     "inpaint": {
       "models": [
         {
-          "engine_id": "flux2-klein-4b",
-          "why": "Fast inpainting that can also use reference pictures. Inpaint words are sent as an instruction ('Fill the selected area with ...') because this model draws nothing from a bare noun phrase.",
+          "engine_id": "flux1-fill-dev",
+          "why": "FLUX.1 Fill [dev] on the media engine: the picture plus a selection (white = repaint) plus words for the new content; the result keeps the picture's shape. Licence: FLUX.1-dev non-commercial.",
           "evidence": [
-            "docs/IMAJUTSU.md: flux2-klein-4b inpaint"
+            "docs/MEDIA_ENGINE.md: image.inpaint-brush rendered and reviewed on the Spark (config/verified.json)"
+          ]
+        },
+        {
+          "engine_id": "flux2-klein-4b",
+          "why": "Fast masked edit (about 5-15 s) that can use up to three reference pictures; only the selection changes (everything else is the source's own pixels, measured). Words are sent as an instruction ('Fill the selected area with ...').",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: FLUX.2 klein masked edit with 0-3 references"
           ],
           "inpaint_prompt": "Fill the selected area with {text}. Keep the lighting, perspective and style of the rest of the picture.",
           "preset_steps": {
@@ -281,6 +292,13 @@
     },
     "outpaint": {
       "models": [
+        {
+          "engine_id": "flux1-fill-dev",
+          "why": "FLUX.1 Fill [dev] on the media engine: the picture plus a selection (white = repaint) plus words for the new content; the result keeps the picture's shape. Licence: FLUX.1-dev non-commercial.",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md: image.inpaint-brush rendered and reviewed on the Spark (config/verified.json)"
+          ]
+        },
         {
           "engine_id": "flux2-klein-4b",
           "why": "Fast; the new area is a masked region of a padded canvas.",
@@ -309,16 +327,16 @@
       "models": [
         {
           "engine_id": "flux2-klein-4b",
-          "why": "Takes up to four reference pictures and makes a new picture guided by them.",
+          "why": "Takes up to four reference pictures and makes a new picture guided by them (about 15 s). Measured: a woman and a teapot from two references became one café photo.",
           "evidence": [
-            "docs/IMAJUTSU.md: flux2-klein-4b references 4"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: FLUX.2 klein edit with 2-4 pictures"
           ]
         },
         {
           "engine_id": "qwen-image-edit-2511",
-          "why": "Takes up to three pictures; slower.",
+          "why": "Takes up to three reference pictures; slower (about 45 s).",
           "evidence": [
-            "docs/IMAJUTSU.md: qwen-image-edit-2511 references 3"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: Qwen-Image-Edit 2511 with 2-3 pictures"
           ]
         }
       ]
@@ -326,12 +344,28 @@
     "restyle": {
       "models": [
         {
+          "engine_id": "flux2-klein-4b",
+          "engine_mode": "edit",
+          "why": "Restyles by instruction ('as a watercolour painting, keep the same ...') in about 10 s and keeps the content and the exact size; can also take a second picture as the style reference. Measured: watercolour kitchen, painting-style portrait from a style reference.",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: FLUX.2 klein edit, restyle and style-reference runs"
+          ]
+        },
+        {
+          "engine_id": "qwen-image-edit-2511",
+          "engine_mode": "edit",
+          "why": "Restyles by instruction. In Fast mode (4 steps) it changed very little in the measured watercolour test; use the Quality setting (about 3-4 minutes) or klein.",
+          "evidence": [
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: Qwen-Image-Edit watercolour test"
+          ]
+        },
+        {
           "engine_id": "z-image-turbo",
           "engine_mode": "img2img",
-          "why": "Image-to-image at a chosen strength: keeps the layout and changes the look.",
+          "why": "Image-to-image at a chosen strength. Measured: it does NOT restyle well (strength 0.55 barely changed the look, 0.75 re-invented the objects); it is there for low-strength re-texturing only. Prefer the instruction editors above.",
           "avoid_phone_words": true,
           "evidence": [
-            "docs/imajutsu-bench/ 2026-11-06"
+            "docs/MEDIA_ENGINE.md (Phase 2 evidence): real run on the Spark through the media engine, output looked at: Z-Image Turbo image-to-image at 0.55 / 0.7 / 0.75"
           ]
         },
         {
@@ -340,22 +374,6 @@
           "why": "Slow, high-detail image-to-image.",
           "evidence": [
             "docs/imajutsu-bench/ 2026-11-06"
-          ]
-        },
-        {
-          "engine_id": "qwen-image-edit-2511",
-          "engine_mode": "edit",
-          "why": "Restyles by instruction instead of strength.",
-          "evidence": [
-            "docs/IMAJUTSU.md: qwen-image-edit-2511 edit"
-          ]
-        },
-        {
-          "engine_id": "flux2-klein-4b",
-          "engine_mode": "edit",
-          "why": "Fast restyling by instruction.",
-          "evidence": [
-            "docs/IMAJUTSU.md: flux2-klein-4b edit"
           ]
         }
       ]
@@ -371,10 +389,10 @@
         {
           "engine_id": "z-image-turbo",
           "engine_mode": "img2img",
-          "why": "An optional second pass at low strength after scaling; it can add texture, so it is a model step and is labelled as one.",
+          "why": "An optional second pass at low strength after scaling (Z-Image Turbo image-to-image, 2048 px a side at most). It adds fine texture and can change small details such as eye colour; it is a model step and is labelled as one.",
           "avoid_phone_words": true,
           "evidence": [
-            "docs/imajutsu-bench/ 2026-11-06"
+            "docs/MEDIA_ENGINE.md section 9: refine at 0.25-0.3 kept content and composition, added texture, and changed eye colour and freckles on a face (real run on the Spark)"
           ]
         }
       ]

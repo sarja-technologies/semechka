@@ -26,6 +26,7 @@ from . import (
     jobs_svc,
     media_svc,
     services,
+    goose_svc,
     work_svc,
 )
 from .config import Config
@@ -49,6 +50,7 @@ from .routers import (  # sso: OIDC single sign-on
     me,
     media,
     media_assets,
+    media_extras,
     misc,
     orgs,
     queue,
@@ -59,6 +61,7 @@ from .routers import (  # sso: OIDC single sign-on
     theme,
     trinodal,
     work,
+    work_goose,
 )
 from .state import AppState
 
@@ -88,6 +91,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                 log.info("requeued %d job(s) left running by the previous process", n)
         work_task = None
         if cfg.background:
+            await asyncio.to_thread(goose_svc.startup, st)  # Work on Goose: settle turns a previous process left running, start the idle reaper
             await asyncio.to_thread(work_svc.startup, st)  # Work Mode: settle sessions whose runs ended, adopt/clean containers
             work_task = asyncio.create_task(work_svc.sweeper(st))  # idle stop + periodic reconcile
         jobs_task = asyncio.create_task(jobs_svc.pump(st)) if cfg.background else None  # durable workspace jobs
@@ -96,6 +100,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         for t in (task, media_task, jobs_task, seen_task, work_task):
             if t:
                 t.cancel()
+        await asyncio.to_thread(goose_svc._mgr(st).close_all)  # Goose processes end with the service; sessions resume later
         await asyncio.to_thread(flush_seen, st)  # what people did in the last seconds survives a restart
 
     app = FastAPI(title="Semechka", version=__version__, lifespan=lifespan, redoc_url=None,
@@ -137,7 +142,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         loc = ".".join(str(x) for x in first.get("loc", []) if x != "body")
         return JSONResponse({"detail": {"code": "invalid", "message": f"{loc or 'Request'}: {first.get('msg', 'invalid')}"}}, status_code=422)
 
-    for r in (setup.router, auth.router, me.router, chat.router, media.router, media_assets.router, studio.router, imajutsu.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, admin_media.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router, schemra.router, work.router):
+    for r in (setup.router, auth.router, me.router, chat.router, media_extras.router, media.router, media_assets.router, studio.router, imajutsu.router, knowledge.router, assistants.router, queue.router, admin_people.router, admin_config.router, admin_content.router, admin_media.router, catalog.router, lifecycle.router, theme.router, misc.router, sso.router, orgs.router, files.router, agents.router, cloud_admin.router, trinodal.router, schemra.router, work.router, work.skills_router, work_goose.router):
         app.include_router(r)
 
     web = cfg.web_dir

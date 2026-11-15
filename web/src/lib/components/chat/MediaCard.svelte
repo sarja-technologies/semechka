@@ -7,7 +7,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { openViewer } from '$lib/media/viewer.svelte';
 
-  let { job: initial, kind, onchange, onuse }: { job: any; kind: 'image' | 'video'; onchange?: (job: any) => void; onuse?: (asset: any) => void } = $props();
+  let { job: initial, kind, onchange, onuse, large = false }: { job: any; kind: 'image' | 'video'; onchange?: (job: any) => void; onuse?: (asset: any) => void; large?: boolean } = $props();
   let job = $state<any>(null);
   $effect.pre(() => { if (!job || initial?.id !== job.id || initial?.status !== job.status) job = initial; });
   let cancelling = $state(false);
@@ -58,7 +58,7 @@
 {#if !job}
   <div class="mcard"><p class="muted small">This {kind === 'image' ? 'picture' : 'video'} is no longer available. Its job was removed.</p></div>
 {:else}
-  <div class="mcard" data-job={job.id} data-status={job.status}>
+  <div class="mcard" class:large data-job={job.id} data-status={job.status}>
     {#if active}
       <div class="run" role="status" aria-live="polite">
         <div class="ph" class:video={kind === 'video'} style:aspect-ratio={job.params?.width && job.params?.height ? `${job.params.width} / ${job.params.height}` : undefined}>
@@ -124,4 +124,11 @@
   .acts { display: inline-flex; gap: 2px; margin-left: auto; }
   .vbox { position: relative; } .exp { all: unset; position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; background: rgba(14, 15, 16, 0.7); color: #fff; cursor: pointer; opacity: 0; transition: opacity var(--fast) var(--ease); }
   .vbox:hover .exp, .exp:focus-visible { opacity: 1; } .exp:focus-visible { outline: 2px solid var(--accent); }
+  /* the Images and Videos screens show the result large: it is what the person came for */
+  .mcard.large { max-width: none; }
+  .large .ph { width: 100%; max-height: 60vh; min-height: 220px; }
+  .large .res img, .large .res video { max-height: min(72vh, 900px); }
+  .large .res img { margin-inline: auto; width: auto; max-width: 100%; }
+  .large .res video { width: 100%; }
+  .large .zoom { justify-self: center; max-width: 100%; }
 </style>

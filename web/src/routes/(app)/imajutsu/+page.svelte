@@ -6,6 +6,7 @@
   import { onMount, untrack } from 'svelte';
   import { app } from '$lib/session.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import ExpBack from '$lib/components/ExpBack.svelte';
   import MediaDropzone from '$lib/components/media/MediaDropzone.svelte';
   import ModeBar from '$lib/components/imajutsu/ModeBar.svelte';
   import PanelRail from '$lib/components/imajutsu/PanelRail.svelte';
@@ -34,7 +35,10 @@
     if (!op?.enabled) return;
     try { s.advanced = localStorage.getItem(ADV) === '1'; } catch { /* storage unavailable */ }
     const u = page.url.searchParams;
-    s.init(u.get('project'), u.has('new')).then(() => {
+    s.init(u.get('project'), u.has('new') || u.has('mode')).then(() => {
+      // Experimental links open a mode directly (?mode=upscale); a project that is already open is left alone
+      const wantMode = u.get('mode');
+      if (wantMode && !s.project) s.chooseMode(wantMode);
       const job = u.get('job');
       if (job && s.project && s.jobs.some((j) => j.job === job)) s.batch = s.batch.includes(job) ? s.batch : [job];
     });
@@ -87,7 +91,7 @@
   <MediaDropzone onfiles={(f) => s.addFiles(f)} hint="Drop pictures" sub="Your first picture is the one to work on; the rest become reference pictures.">
     <div class="ij">
       <header class="top">
-        <div class="ttl"><h1>Imajutsu</h1>{#if s.project}<span class="proj" title={s.project.title}>{s.project.title || 'Untitled project'}</span>{/if}</div>
+        <div class="ttl"><ExpBack /><h1>Imajutsu</h1>{#if s.project}<span class="proj" title={s.project.title}>{s.project.title || 'Untitled project'}</span>{/if}</div>
         <div class="acts">
           {#if s.project}<span class="save tiny" class:bad={s.saveState === 'error' || s.saveState === 'conflict'} role="status" aria-live="polite" data-testid="save-state">{saveText}</span>{/if}
           <label class="adv"><input type="checkbox" checked={adv} disabled={s.key === 'advanced'} onchange={(e) => setAdvanced(e.currentTarget.checked)} data-testid="advanced-toggle" /> Advanced options</label>

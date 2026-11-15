@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Literal
 
@@ -22,6 +23,10 @@ router = APIRouter(prefix="/api/media")
 
 
 def _gate(ctx: Ctx, kind: str) -> None:
+    if kind in ("tool", "audio", "3d"):      # an Experimental tool job or its speech/music/3D file (media_extras): generated media must still be available
+        from ..media_extras import gate
+        gate(ctx)
+        return
     st = services.mode_state(ctx.s, ctx.principal, ctx.st, kind)
     if st["enabled"]:
         return
@@ -58,15 +63,17 @@ def options(kind: str, ctx: Ctx = Depends(current)):
     _gate(ctx, kind)
     vmax = _val(ctx, "media.video_max_seconds")
     size = _val(ctx, "media.default_image_size")
+    from ..media_extras import display_name
     models = []
     for m, b in services.accessible_models(ctx.s, ctx.principal, ctx.st, kind):
         info = media_svc.media_info(m)
-        models.append({"id": m.id, "alias": m.alias, "pinned": m.pinned, "external": services.is_external(m, b),
+        models.append({"id": m.id, "alias": m.alias, "display_name": display_name(m), "pinned": m.pinned, "external": services.is_external(m, b),
                        "description": (m.meta or {}).get("description"), "negative_prompt": bool(info.get("negative_prompt")),
                        "modes": info.get("modes") or [], "audio": bool(info.get("audio")),
                        "references": int(info.get("references") or 0),
                        "schedulers": info.get("schedulers") or [], "limits": info.get("limits") or {},
                        "defaults": media_svc.option_defaults(kind, m, size, vmax),
+                       **({"duration": media_svc.duration_spec(m, vmax)} if kind == "video" and media_svc.has_duration(m) else {}),
                        "loaded": (m.meta or {}).get("loaded"),
                        "profile": media_svc.profile_info(m)})
     ephemeral = bool(_val(ctx, "privacy.ephemeral_allowed") and ctx.principal.can("chat.ephemeral"))
@@ -91,6 +98,7 @@ class JobIn(BaseModel):
     seed: int | None = None
     scheduler: str | None = None
     frames: int | None = None
+    seconds: float | None = Field(default=None, gt=0, le=3600)   # length in SECONDS (video): converted to the nearest frame count the model accepts, at its own frame rate
     fps: int | None = None
     save: bool = True
     preset: Literal["iphone_photo"] | None = None  # image only: the shared preset (prompt builder, 9:16, routed wording); see preset_params
@@ -283,6 +291,50 @@ async def get_job(jid: str, ctx: Ctx = Depends(current)):
     await media_svc.refresh(ctx.st, jid)
     ctx.s.expire_all()
     return media_svc.job_out(ctx.st, ctx.s, ctx.principal, ctx.s.get(MediaJob, jid))
+
+
+@router.get("/jobs/{jid}/analysis")
+async def job_analysis(jid: str, ctx: Ctx = Depends(current)):
+    """Reverse Engineer Video: the measured analysis and the editable plan of a finished ``reverse-video`` job, read from the media engine (it keeps them for a few
+    days; the stored result in the library is the contact sheet). 404 for any other job or an engine that has no analysis."""
+    from ..backends_svc import adapter_for
+    j = _own_job(ctx, jid)
+    _gate(ctx, j.kind)
+    b = ctx.s.get(Backend, j.backend_id)
+    ad = adapter_for(b, ctx.st) if b is not None else None
+    if ad is None or not hasattr(ad, "media_reverse") or not j.remote_id or j.status != "completed":
+        raise HTTPException(404, {"code": "not_found", "message": "There is no analysis for this job."})
+    ctx.s.commit()
+    try:
+        return await ad.media_reverse(j.remote_id)
+    except AdapterError as e:
+        raise HTTPException(404 if e.status in (404, 409) else 502, {"code": e.kind, "message": str(e)}) from e
+
+
+_REA_FILE = re.compile(r"shot_\d{3}_(first|mid|last|q1|q3)\.jpg|contact_sheet\.jpg")
+
+
+@router.get("/jobs/{jid}/analysis/files/{name}")
+async def job_analysis_file(jid: str, name: str, ctx: Ctx = Depends(current)):
+    """REA keyframes (``shot_001_mid.jpg`` ...) and the contact sheet of the person's own finished analysis job, proxied from the media engine. Pictures
+    only (JPEG names from a fixed pattern), so nothing else on the engine can be read through this route."""
+    from ..backends_svc import adapter_for
+    if not _REA_FILE.fullmatch(name):
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    j = _own_job(ctx, jid)
+    _gate(ctx, j.kind)
+    b = ctx.s.get(Backend, j.backend_id)
+    ad = adapter_for(b, ctx.st) if b is not None else None
+    if ad is None or not hasattr(ad, "media_reverse_file") or not j.remote_id or j.status != "completed":
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    ctx.s.commit()
+    try:
+        code, data, mime = await ad.media_reverse_file(j.remote_id, name)
+    except AdapterError as e:
+        raise HTTPException(502, {"code": e.kind, "message": str(e)}) from e
+    if code != 200 or data is None or mime != "image/jpeg":
+        raise HTTPException(404, {"code": "not_found", "message": "No such file."})
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/jobs/{jid}/cancel")

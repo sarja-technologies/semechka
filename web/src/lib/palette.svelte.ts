@@ -4,7 +4,7 @@
 import { goto } from '$app/navigation';
 import { app, can, loadMe, logout } from './session.svelte';
 import { patch, qs } from './api';
-import { navHref, navPages, trinodalLinks } from './nav';
+import { primaryNav, secondaryNav } from './nav';
 import { ADMIN_PAGES } from './components/admin/util';
 import { toast } from './toast.svelte';
 
@@ -34,11 +34,8 @@ registerSource({
   commands: () => {
     if (!app.me) return [];
     const out: Command[] = [];
-    for (const n of navPages(app.me.ui) as any[]) {
-      if (!n.available) continue; // unavailable modes are explained on their own page; they are not offered as actions
-      out.push({ id: `go:${n.id}`, group: 'Go to', label: n.label, run: () => goto(navHref(n)) });
-    }
-    for (const l of trinodalLinks(app.trinodal)) out.push({ id: `go:trinodal:${l.id}`, group: 'Go to', label: `Trinodal: ${l.label}`, keywords: 'trinodal nodes network training', run: () => location.assign(l.href) });
+    for (const n of primaryNav(app.me.ui)) out.push({ id: `go:${n.id}`, group: 'Go to', label: n.label, run: () => goto(n.href) });
+    for (const n of secondaryNav(app.me.ui)) out.push({ id: `go:${n.id}`, group: 'Go to', label: n.label, run: () => goto(n.href) });
     out.push({ id: 'go:account', group: 'Go to', label: 'Account and security', keywords: 'password mfa two-factor sessions', run: () => goto('/account') });
     if (can('admin.overview')) {
       for (const p of ADMIN_PAGES.filter((p) => can(p.perm))) out.push({ id: `go:admin:${p.href}`, group: 'Administration', label: p.label, run: () => goto(p.href) });
@@ -55,11 +52,11 @@ registerSource({
     const chat = app.me.ui.modes?.chat?.enabled;
     if (chat) {
       out.push({ id: 'act:new', group: 'Actions', label: 'New chat', keywords: 'start conversation', run: () => goto(`/chat?new=${Date.now()}`) });
+      out.push({ id: 'act:new-work', group: 'Actions', label: 'New Work conversation', keywords: 'work agent files terminal task', run: () => goto(`/chat?new=${Date.now()}&mode=work`) });
       if (app.me.ui.composer?.ephemeral) out.push({ id: 'act:new-nosave', group: 'Actions', label: 'New no-save chat', hint: 'Nothing is stored', keywords: 'private ephemeral temporary', run: () => goto(`/chat?new=${Date.now()}&nosave=1`) });
     }
     if (app.me.ui.theme?.user_choice) for (const [v, label] of THEMES) if (v === 'system' || app.me.ui.theme.choices.includes(v)) out.push({ id: `theme:${v}`, group: 'Appearance', label: `Theme: ${label}`, keywords: 'dark light appearance', run: () => setPref({ theme: v }) });
     for (const v of ['comfortable', 'compact']) out.push({ id: `dens:${v}`, group: 'Appearance', label: `Density: ${v}`, run: () => setPref({ density: v }) });
-    if (app.me.ui.operations?.work?.enabled) out.push({ id: 'act:new-work', group: 'Actions', label: 'New work session', keywords: 'work container agent task', run: () => goto('/work?new=1') });
     if (app.me.ui.tech?.drawer) out.push({ id: 'act:tech', group: 'Actions', label: app.me.user.prefs.show_tech ? 'Hide technical details' : 'Show technical details', run: () => setPref({ show_tech: !app.me.user.prefs.show_tech }) });
     return out;
   }

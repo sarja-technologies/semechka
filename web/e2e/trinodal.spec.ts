@@ -1,85 +1,35 @@
-import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, signIn, appReady } from './support/fixtures';
-import { apiAs, setSetting } from './support/api';
-import { PW, URLS } from './support/env';
+import { test, expect, appReady } from './support/fixtures';
+import { setSetting } from './support/api';
+import { URLS } from './support/env';
 
 test.describe.configure({ mode: 'serial' });
 
 // The service is not running here: these specs cover what Semechka itself decides (who is offered the entry, who is refused
 // by the proxy, how a run record is shown). The proxy against a Trinodal test double is covered by backend/tests/test_trinodal.py.
-const nav = (page: Page) => page.getByRole('navigation', { name: 'More' });
 const send = async (page: Page, text: string) => {
   await page.getByLabel('Message', { exact: true }).fill(text);
   await page.getByRole('button', { name: /^Send/ }).click();
 };
 
-test.describe('Trinodal AI entry', () => {
+test.describe('Trinodal AI is not part of the interface', () => {
   let before: unknown;
   test.afterAll(async () => { await setSetting('trinodal.url', typeof before === 'string' ? before : ''); });
 
-  test('nobody is offered it while it is not configured', async ({ as }) => {
+  test('configured or not, nobody is offered a Trinodal entry in the navigation, the account menu or the palette', async ({ as }) => {
+    before = await setSetting('trinodal.url', 'http://127.0.0.1:8800');
     for (const who of ['owner', 'admin', 'member'] as const) {
       const page = await as(who);
       await page.goto('/chat');
       await appReady(page);
-      await expect(nav(page).getByRole('button', { name: /Trinodal/ })).toHaveCount(0);
-      expect((await page.request.get('/trinodal/')).status()).toBe(404);
-    }
-  });
-
-  test('once configured it is offered to people who hold trinodal.view, with training links only for trinodal.train', async ({ as, browser }) => {
-    before = await setSetting('trinodal.url', 'http://127.0.0.1:8800');
-    const all = ['Dashboard', 'Network Explorer', 'Training Studio', 'Training Jobs', 'Evaluations'];
-    const links = async (page: Page) => {
-      await page.goto('/chat');
-      await appReady(page);
-      const entry = nav(page).getByRole('button', { name: /Trinodal/ });
-      if (!(await entry.count())) return null;
-      await entry.click();
-      const list = page.getByRole('list', { name: 'Trinodal AI' });
-      return { names: await list.getByRole('link').allInnerTexts(), hrefs: await list.getByRole('link').evaluateAll((as) => as.map((a) => a.getAttribute('href'))) };
-    };
-    // Owner and Platform Admin templates hold view and train on a fresh install
-    const owner = await links(await as('owner'));
-    expect(owner?.names).toEqual(all);
-    const op = await as('owner'); // the expanded entry and the account menu entry have no accessibility violations
-    await op.goto('/chat');
-    await appReady(op);
-    await nav(op).getByRole('button', { name: /Trinodal/ }).click();
-    expect(nav(op).getByRole('button', { name: /Trinodal/ })).toHaveAttribute('aria-expanded', 'true');
-    await op.getByRole('button', { name: /^Account: / }).click();
-    await expect(op.getByRole('group', { name: 'Trinodal AI' }).filter({ hasText: 'Training Studio' })).toBeVisible();
-    const found = (await new AxeBuilder({ page: op }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()).violations.map((v) => `${v.id}: ${v.help}`);
-    expect(found).toEqual([]);
-    expect(owner?.hrefs).toEqual(['/trinodal/', '/trinodal/#/network', '/trinodal/#/training', '/trinodal/#/training/jobs', '/trinodal/#/evaluations']);
-    expect((await links(await as('admin')))?.names).toEqual(all);
-    expect(await links(await as('member'))).toBeNull();
-    expect(await links(await as('guest'))).toBeNull();
-
-    // a person who may only look
-    const api = await apiAs('owner');
-    const role = await (await api.post('/api/admin/roles', { label: 'Trinodal viewers', grants: ['mode.chat', 'trinodal.view'], denies: [] })).json();
-    const made = await (await api.post('/api/admin/users', { email: 'viewer@e2e.test', display_name: 'Vera Viewer', password: PW, role_id: role.id, team_ids: [] })).json();
-    try {
-      const ctx = await browser.newContext({ baseURL: URLS.seeded });
-      const page = await ctx.newPage();
-      await signIn(page, 'viewer@e2e.test', PW);
-      await appReady(page);
-      // this role has no chat model, so there is no conversation sidebar: the account menu carries the entry too
+      await expect(page.getByRole('link', { name: /Trinodal/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Trinodal/ })).toHaveCount(0);
       await page.getByRole('button', { name: /^Account: / }).click();
-      const items = page.getByRole('group', { name: 'Trinodal AI' }).getByRole('menuitem');
-      expect(await items.allInnerTexts()).toEqual(['Dashboard', 'Network Explorer', 'Evaluations']);
-      expect(await items.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(['/trinodal/', '/trinodal/#/network', '/trinodal/#/evaluations']);
-      // the server decides: the same person is refused every training request, whatever the page shows
-      const me = await (await page.request.get('/api/me')).json();
-      expect((await page.request.post('/trinodal/api/training/jobs', { data: {}, headers: { 'x-csrf-token': me.csrf } })).status()).toBe(403);
-      expect((await page.request.get('/trinodal/api/admin/tokens')).status()).toBe(403);
-      await ctx.close();
-    } finally {
-      await api.del(`/api/admin/users/${made.id}`);
-      await api.del(`/api/admin/roles/${role.id}`);
-      await api.dispose();
+      await expect(page.getByRole('group', { name: 'Trinodal AI' })).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Control+k');
+      await page.keyboard.type('trinodal');
+      await expect(page.getByRole('option', { name: /Trinodal/ })).toHaveCount(0);
     }
   });
 

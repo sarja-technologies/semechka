@@ -9,6 +9,7 @@ import json
 
 import httpx
 
+from . import yaob
 from .base import Adapter, AdapterError, DiscoveredModel, Manifest
 
 _SAMPLING = ("temperature", "top_p", "max_tokens", "seed", "presence_penalty", "frequency_penalty", "stop")
@@ -64,6 +65,8 @@ class OpenAICompatAdapter(Adapter):
             if m.get("max_model_len"):  # vLLM
                 meta["context"] = int(m["max_model_len"])
             meta["owned_by"] = m.get("owned_by") or None
+            # Yaob systems (docs/YAOB_ORIGIN.md): the runtime display name and identity record. Absent elsewhere.
+            meta.update(yaob.discovered_meta(m))
             meta = {k: v for k, v in meta.items() if v is not None}
             out.append(DiscoveredModel(real_id=m["id"], capabilities=["chat"], meta=meta,
                                        external=bool(self.options.get("external"))))
@@ -74,7 +77,10 @@ class OpenAICompatAdapter(Adapter):
         for k in _SAMPLING + _EXTRA:
             if params.get(k) is not None:
                 body[k] = params[k]
+        if params.get("web_search") in yaob.WEB_MODES:  # set by the chat router only for models that report web_search
+            body["web_search"] = params["web_search"]
         usage = timings = finish = None
+        provenance = None
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10)) as c:
                 async with c.stream("POST", self.base_url + "/chat/completions", json=body,
@@ -92,6 +98,17 @@ class OpenAICompatAdapter(Adapter):
                             ch = json.loads(payload)
                         except ValueError:
                             continue
+                        if not isinstance(ch, dict):
+                            continue
+                        if "yaob" in ch:  # Yaob stream extension: status, user-facing sources, provenance id
+                            tps = yaob.generation_speed(ch.get("yaob"))
+                            if tps and not (timings or {}).get("predicted_per_second"):
+                                timings = {**(timings or {}), "predicted_per_second": tps}
+                            for ev in yaob.stream_events(ch.get("yaob")):
+                                if ev["type"] == "provenance":
+                                    provenance = ev["id"]
+                                else:
+                                    yield ev
                         for choice in ch.get("choices") or []:
                             d = choice.get("delta") or {}
                             c_, r_ = d.get("content") or "", d.get("reasoning_content") or d.get("reasoning") or ""
@@ -110,7 +127,10 @@ class OpenAICompatAdapter(Adapter):
             raise
         except httpx.HTTPError as e:
             raise AdapterError(f"Backend unreachable: {_short(e)}") from e
-        yield {"type": "done", "finish_reason": finish, "usage": usage, "timings": timings}
+        done = {"type": "done", "finish_reason": finish, "usage": usage, "timings": timings}
+        if provenance:
+            done["provenance"] = provenance
+        yield done
 
 
 def _short(e: Exception) -> str:

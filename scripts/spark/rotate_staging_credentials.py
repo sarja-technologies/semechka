@@ -27,9 +27,20 @@ def main() -> int:
     done = 0
     for email in list(creds):
         api = Api(a.base)
-        api.login(email, creds[email])  # each person changes their own password: organisation members are not visible to a platform admin
+        try:
+            api.login(email, creds[email])  # each person changes their own password: organisation members are not visible to a platform admin
+        except Exception as exc:  # noqa: BLE001
+            print(f"skipped {email}: the recorded password does not sign in ({str(exc)[:60]})")
+            continue
         pw = new_password()
-        api.call("POST", "/api/auth/password", {"current": creds[email], "new": pw})
+        try:
+            api.call("POST", "/api/auth/password", {"current": creds[email], "new": pw})
+        except Exception as exc:  # noqa: BLE001  a 5xx can arrive AFTER the change was committed (seen: "database is locked" on a busy SQLite): keep the file in step
+            try:
+                Api(a.base).login(email, pw)
+            except Exception:  # noqa: BLE001
+                print(f"password change failed for {email}, the old password still applies: {str(exc)[:80]}")
+                continue
         creds[email] = pw
         save_credentials(path, creds, a.base)  # after each change, so the file never lags the instance
         done += 1

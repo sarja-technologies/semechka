@@ -1,0 +1,476 @@
+{
+ "openjutsu.swap": {
+  "at": "2026-11-10T22:52:13",
+  "job": "76e20ac1e438",
+  "seconds": 270.9,
+  "note": "Real runs on this engine: AI-generated single-person clips + one AI-generated reference picture, 480p: 3 s (1 clip) and 10.1 s (2 clips, identity holds across the clip boundary and a bus passing). Person replaced, background/motion/soundtrack kept. Validated only for AI-generated single-person footage.",
+  "runs": [
+   {
+    "name": "t01_swap_480",
+    "job": "76e20ac1e438",
+    "seconds": 270.9,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "duration": 2.333333,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xb97583cf58f0] mean_volume: -16.7 dB",
+     "[Parsed_volumedetect_0 @ 0xb97583cf58f0] max_volume: -2.4 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "swap",
+     "references": [
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 1,
+       "used": true,
+       "file": "183309d58cb745b5a170df34a5942d42.png"
+      }
+     ],
+     "source": {
+      "width": 854,
+      "height": 480,
+      "duration": 3.0,
+      "fps": 24.0,
+      "frames": 72,
+      "has_audio": true
+     }
+    }
+   },
+   {
+    "name": "t08_swap_multiclip",
+    "job": "9ea7d3aefaec",
+    "seconds": 523.1,
+    "w": 864,
+    "h": 480,
+    "frames": "226",
+    "duration": 9.416667,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xbf588fe30410] mean_volume: -17.7 dB",
+     "[Parsed_volumedetect_0 @ 0xbf588fe30410] max_volume: -2.3 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "swap",
+     "references": [
+      {
+       "original": "400x740",
+       "prepared": "400x740",
+       "warnings": [
+        "small picture (400x740): likeness improves with 512+ px"
+       ],
+       "position": 1,
+       "used": true,
+       "file": "012f1c276fad43fb8e30f4acdf6e8074.png"
+      }
+     ],
+     "source": {
+      "width": 854,
+      "height": 480,
+      "duration": 10.112,
+      "fps": 24.0,
+      "frames": 242,
+      "has_audio": true
+     }
+    }
+   }
+  ],
+  "outputs": [
+   {
+    "duration": 2.333333,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "audio": "aac",
+    "kind": "video"
+   }
+  ]
+ },
+ "openjutsu.advanced": {
+  "at": "2026-11-10T22:29:45",
+  "job": "a95bf4fdbd3a",
+  "seconds": 199.2,
+  "note": "Real run: 3 AI-generated reference pictures replace the 3 people of an AI-generated clip (480p, 3 s); the workflow takes up to 4 pictures, 3 were run.",
+  "runs": [
+   {
+    "name": "t05_advanced3",
+    "job": "a95bf4fdbd3a",
+    "seconds": 199.2,
+    "w": 832,
+    "h": 480,
+    "frames": "56",
+    "duration": 2.334,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xc0ab6e0bc050] mean_volume: -29.9 dB",
+     "[Parsed_volumedetect_0 @ 0xc0ab6e0bc050] max_volume: -15.1 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "advanced_swap",
+     "references": [
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 1,
+       "used": true,
+       "file": "01633d94fc7342d4b66c08a0cad51594.png"
+      },
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 2,
+       "used": true,
+       "file": "e0cb1ffbb5574897bf81f58d18505b68.png"
+      },
+      {
+       "original": "400x740",
+       "prepared": "400x740",
+       "warnings": [
+        "small picture (400x740): likeness improves with 512+ px"
+       ],
+       "position": 3,
+       "used": true,
+       "file": "336e41147bc84c26bef9eb47549561d4.png"
+      }
+     ],
+     "source": {
+      "width": 1344,
+      "height": 768,
+      "duration": 5.167,
+      "fps": 24.0,
+      "frames": 124,
+      "has_audio": true
+     }
+    }
+   }
+  ],
+  "outputs": [
+   {
+    "duration": 2.334,
+    "w": 832,
+    "h": 480,
+    "frames": "56",
+    "audio": "aac",
+    "kind": "video"
+   }
+  ]
+ },
+ "openjutsu.mask": {
+  "at": "2026-11-10T23:50:56",
+  "job": "7c5ed76cca3f",
+  "seconds": 30.3,
+  "note": "Real runs on an AI-generated three-person clip (3 s): text target tracks the largest person; a box around the small man and a clicked point on the old man each select only that subject (previews looked at).",
+  "runs": [
+   {
+    "name": "t02_mask_text",
+    "job": "7c5ed76cca3f",
+    "seconds": 30.3,
+    "w": 1024,
+    "h": 294,
+    "frames": "72",
+    "duration": 3.0,
+    "audio": null,
+    "volume": [],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "check_mask",
+     "references": [],
+     "source": {
+      "width": 1344,
+      "height": 768,
+      "duration": 5.167,
+      "fps": 24.0,
+      "frames": 124,
+      "has_audio": true
+     }
+    }
+   },
+   {
+    "name": "t03b_mask_box_small",
+    "job": "4b80320bd51e",
+    "seconds": 27.4,
+    "w": 1024,
+    "h": 294,
+    "frames": "72",
+    "duration": 3.0,
+    "audio": null,
+    "volume": [],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "check_mask",
+     "references": [],
+     "source": {
+      "width": 1344,
+      "height": 768,
+      "duration": 5.167,
+      "fps": 24.0,
+      "frames": 124,
+      "has_audio": true
+     }
+    }
+   },
+   {
+    "name": "t04_mask_points",
+    "job": "ea0b3af49795",
+    "seconds": 24.3,
+    "w": 1024,
+    "h": 294,
+    "frames": "72",
+    "duration": 3.0,
+    "audio": null,
+    "volume": [],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "check_mask",
+     "references": [],
+     "source": {
+      "width": 1344,
+      "height": 768,
+      "duration": 5.167,
+      "fps": 24.0,
+      "frames": 124,
+      "has_audio": true
+     }
+    }
+   },
+   {
+    "name": "t03_mask_box",
+    "job": "8c24c8199818",
+    "seconds": 24.3,
+    "w": 1024,
+    "h": 294,
+    "frames": "72",
+    "duration": 3.0,
+    "audio": null,
+    "volume": [],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "check_mask",
+     "references": [],
+     "source": {
+      "width": 1344,
+      "height": 768,
+      "duration": 5.167,
+      "fps": 24.0,
+      "frames": 124,
+      "has_audio": true
+     }
+    }
+   }
+  ],
+  "outputs": [
+   {
+    "duration": 3.0,
+    "w": 1024,
+    "h": 294,
+    "frames": "72",
+    "audio": null,
+    "kind": "video"
+   }
+  ],
+  "selection": [
+   "text",
+   "box",
+   "points"
+  ]
+ },
+ "openjutsu.reference-video": {
+  "at": "2026-11-10T22:42:54",
+  "job": "acd01b9e6358",
+  "seconds": 82.5,
+  "note": "Real run: 9 AI-generated reference pictures + prompt, 864x480, 2.33 s with generated audio. The model uses what the prompt names; in the run about five of the nine identities are visible, the rest were ignored (warned by the engine).",
+  "runs": [
+   {
+    "name": "t07_ref9",
+    "job": "acd01b9e6358",
+    "seconds": 82.5,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "duration": 2.333333,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xb966bb310880] mean_volume: -14.0 dB",
+     "[Parsed_volumedetect_0 @ 0xb966bb310880] max_volume: -0.8 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "reference_video",
+     "references": [
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 1,
+       "used": true,
+       "file": "6dc3c241f3594a52af1c22e05dfd6956.png"
+      },
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 2,
+       "used": true,
+       "file": "1b956b69faca4171b01579b02035d5f8.png"
+      },
+      {
+       "original": "768x1024",
+       "prepared": "768x1024",
+       "warnings": [],
+       "position": 3,
+       "used": true,
+       "file": "22fd0ccb29db491fa8bc5f437b995505.png"
+      },
+      {
+       "original": "400x740",
+       "prepared": "400x740",
+       "warnings": [
+        "small picture (400x740): likeness improves with 512+ px"
+       ],
+       "position": 4,
+       "used": true,
+       "file": "71c5af4b5f144128a6881f35195fe5b3.png"
+      },
+      {
+       "original": "854x480",
+       "prepared": "854x480",
+       "warnings": [
+        "small picture (854x480): likeness improves with 512+ px"
+       ],
+       "position": 5,
+       "used": true,
+       "file": "d66c33850ace4e1c97ecf344baa84f70.png"
+      },
+      {
+       "original": "864x480",
+       "prepared": "864x480",
+       "warnings": [
+        "small picture (864x480): likeness improves with 512+ px"
+       ],
+       "position": 6,
+       "used": true,
+       "file": "37f1a5c498f04ec08a90cfbd61b782bf.png"
+      },
+      {
+       "original": "864x480",
+       "prepared": "864x480",
+       "warnings": [
+        "small picture (864x480): likeness improves with 512+ px"
+       ],
+       "position": 7,
+       "used": true,
+       "file": "2aa21b777122491086c9544db4ebbb35.png"
+      },
+      {
+       "original": "1024x576",
+       "prepared": "1024x576",
+       "warnings": [],
+       "position": 8,
+       "used": true,
+       "file": "49ec182d311b4d668b30650e048ff082.png"
+      },
+      {
+       "original": "1024x576",
+       "prepared": "1024x576",
+       "warnings": [],
+       "position": 9,
+       "used": true,
+       "file": "77f307c683e341ae92d77551a970444d.png"
+      }
+     ],
+     "source": null
+    }
+   }
+  ],
+  "outputs": [
+   {
+    "duration": 2.333333,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "audio": "aac",
+    "kind": "video"
+   }
+  ]
+ },
+ "openjutsu.object": {
+  "at": "2026-11-10T23:52:57",
+  "job": "304d5f8287e7",
+  "seconds": 96.4,
+  "note": "Real runs: object_edit change on AI-generated clips (480p, text target + words, no picture): a coat becomes a yellow raincoat on a person; a red dirt bike becomes a blue dirt bike. Remove, add, background and paint have no real run.",
+  "runs": [
+   {
+    "name": "t06_object_coat",
+    "job": "304d5f8287e7",
+    "seconds": 96.4,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "duration": 2.333333,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xb279fd476a90] mean_volume: -16.7 dB",
+     "[Parsed_volumedetect_0 @ 0xb279fd476a90] max_volume: -2.4 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "object_edit",
+     "references": [],
+     "source": {
+      "width": 854,
+      "height": 480,
+      "duration": 3.0,
+      "fps": 24.0,
+      "frames": 72,
+      "has_audio": true
+     }
+    }
+   },
+   {
+    "name": "t09_object_bike",
+    "job": "90432e59327b",
+    "seconds": 123.5,
+    "w": 832,
+    "h": 480,
+    "frames": "73",
+    "duration": 3.041667,
+    "audio": "aac",
+    "volume": [
+     "[Parsed_volumedetect_0 @ 0xb4fbd5ff4890] mean_volume: -91.0 dB",
+     "[Parsed_volumedetect_0 @ 0xb4fbd5ff4890] max_volume: -91.0 dB"
+    ],
+    "progress_monotonic": true,
+    "applied": {
+     "operation": "object_edit",
+     "references": [],
+     "source": {
+      "width": 832,
+      "height": 480,
+      "duration": 3.041667,
+      "fps": 24.0,
+      "frames": 73,
+      "has_audio": false
+     }
+    }
+   }
+  ],
+  "outputs": [
+   {
+    "duration": 2.333333,
+    "w": 864,
+    "h": 480,
+    "frames": "56",
+    "audio": "aac",
+    "kind": "video"
+   }
+  ]
+ }
+}

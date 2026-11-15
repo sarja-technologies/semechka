@@ -444,6 +444,8 @@ def _up_11(conn: Connection, _c: Ctx) -> None:
 
 
 def _down_11(conn: Connection, c: Ctx) -> None:
+    for tbl in ("work_goose_events", "work_goose_sessions"):  # Work on Goose (created by create_all, not by a numbered step)
+        drop_table_if_present(conn, tbl)
     # Work sessions, their timeline, artifacts and skills exist only in this release. The workspace VOLUMES live in the
     # container runtime, not here: remove them with `docker ps -a --filter label=semechka.work` and `docker volume ls`
     # (docs/WORK_MODE.md, Rollback) before or after this step.

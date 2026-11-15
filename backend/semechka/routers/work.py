@@ -24,6 +24,20 @@ def mode_gate(ctx: Ctx = Depends(current)) -> Ctx:
 
 
 router = APIRouter(prefix="/api/work", dependencies=[Depends(mode_gate)])
+skills_router = APIRouter(prefix="/api/work")   # skills are shared by both Work Modes: the older one and the one on Goose
+
+
+def skills_gate(ctx: Ctx = Depends(current)) -> Ctx:
+    """Skills can be managed when the older Work Mode is on, or when Work on Goose is (docs/WORK_MODE_GOOSE.md)."""
+    try:
+        return mode_gate(ctx)
+    except HTTPException:
+        from .. import goose_svc
+        try:
+            goose_svc.gate(ctx.st, ctx.s, ctx.principal)
+        except goose_svc.GooseError as e:
+            raise HTTPException(e.status, {"code": e.code, "message": e.message}) from None
+        return ctx
 
 SAFE_INLINE = {"image/png", "image/jpeg", "image/webp", "image/gif", "video/mp4", "video/webm", "text/plain", "text/markdown", "text/csv",
                "application/json", "application/pdf", "text/x-python", "text/yaml", "text/javascript"}
@@ -403,55 +417,55 @@ class SkillIn(BaseModel):
 
 
 def _skill(ctx: Ctx, sid: str):
-    gate(ctx)
+    skills_gate(ctx)
     return call(work_skills.get_visible, ctx.s, ctx.user, sid)
 
 
-@router.get("/skills")
+@skills_router.get("/skills")
 def list_skills(ctx: Ctx = Depends(current)):
-    gate(ctx)
+    skills_gate(ctx)
     return [work_skills.summary(sk, ctx.principal, ctx.user.id) for sk in work_skills.list_for(ctx.st, ctx.s, ctx.user, ctx.principal)]
 
 
-@router.post("/skills")
+@skills_router.post("/skills")
 def create_skill(body: SkillIn, ctx: Ctx = Depends(current)):
-    gate(ctx)
+    skills_gate(ctx)
     sk = call(work_skills.create, ctx.st, ctx.s, ctx.user, ctx.principal, body.model_dump(exclude_unset=True), ctx.ip)
     return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
 
 
-@router.post("/skills/import")
+@skills_router.post("/skills/import")
 def import_skill(file: UploadFile = File(...), scope: str = Form("user"), ctx: Ctx = Depends(current)):
-    gate(ctx)
+    skills_gate(ctx)
     raw = file.file.read(work_skills.BODY_MAX + 8193)
     sk = call(work_skills.import_markdown, ctx.st, ctx.s, ctx.user, ctx.principal, file.filename or "", raw, scope, ctx.ip)
     return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
 
 
-@router.get("/skills/{sid}")
+@skills_router.get("/skills/{sid}")
 def get_skill(sid: str, ctx: Ctx = Depends(current)):
     return work_skills.full(ctx.st, _skill(ctx, sid), ctx.principal, ctx.user.id)
 
 
-@router.put("/skills/{sid}")
+@skills_router.put("/skills/{sid}")
 def put_skill(sid: str, body: SkillIn, ctx: Ctx = Depends(current)):
     sk = call(work_skills.update, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), body.model_dump(exclude_unset=True), ctx.ip)
     return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
 
 
-@router.delete("/skills/{sid}")
+@skills_router.delete("/skills/{sid}")
 def delete_skill(sid: str, ctx: Ctx = Depends(current)):
     call(work_skills.delete, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), ctx.ip)
     return {"ok": True}
 
 
-@router.post("/skills/{sid}/enable")
+@skills_router.post("/skills/{sid}/enable")
 def enable_skill(sid: str, ctx: Ctx = Depends(current)):
     sk = call(work_skills.set_enabled, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), True, ctx.ip)
     return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)
 
 
-@router.post("/skills/{sid}/disable")
+@skills_router.post("/skills/{sid}/disable")
 def disable_skill(sid: str, ctx: Ctx = Depends(current)):
     sk = call(work_skills.set_enabled, ctx.st, ctx.s, ctx.user, ctx.principal, _skill(ctx, sid), False, ctx.ip)
     return work_skills.full(ctx.st, sk, ctx.principal, ctx.user.id)

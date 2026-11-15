@@ -1,0 +1,108 @@
+{
+ "name": "t08_swap_multiclip",
+ "job": "9ea7d3aefaec",
+ "status": "completed",
+ "wall_s": 523.1,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  175
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-minimax-h3",
+  "operation": "swap",
+  "feature": "openjutsu.swap",
+  "openjutsu": {
+   "operation": "swap",
+   "resolution": "480p",
+   "short_edge": null,
+   "seed": 21,
+   "hat_fix": false,
+   "no_lip_sync": false,
+   "motion_reference": 512,
+   "clip_seconds": 6.0,
+   "subject_kind": null,
+   "subject_selection": null,
+   "mask_margin": 40,
+   "target": "person"
+  },
+  "references": [
+   {
+    "original": "400x740",
+    "prepared": "400x740",
+    "warnings": [
+     "small picture (400x740): likeness improves with 512+ px"
+    ],
+    "position": 1,
+    "used": true,
+    "file": "012f1c276fad43fb8e30f4acdf6e8074.png"
+   }
+  ],
+  "source": {
+   "width": 854,
+   "height": 480,
+   "duration": 10.112,
+   "fps": 24.0,
+   "frames": 242,
+   "has_audio": true
+  },
+  "output": {
+   "width": 864,
+   "height": 480,
+   "frames": 226,
+   "fps": 24.0,
+   "duration": 9.4167
+  },
+  "sampler_steps_last": 6
+ },
+ "generations": [
+  {
+   "id": "9ea7d3aefaec-0",
+   "file_id": "9ea7d3aefaec-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 3292228,
+   "width": 864,
+   "height": 480,
+   "duration": 9.4167,
+   "fps": 24.0,
+   "frames": 226,
+   "audio": true,
+   "seed": 21,
+   "name": "67_0_swap_2026-11-10_001.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 864,
+    "height": 480,
+    "r_frame_rate": "24/1",
+    "nb_frames": "226",
+    "duration": "9.416667",
+    "sample_rate": null,
+    "channels": null
+   },
+   {
+    "codec_type": "audio",
+    "codec_name": "aac",
+    "width": null,
+    "height": null,
+    "r_frame_rate": "0/0",
+    "nb_frames": "443",
+    "duration": "9.416000",
+    "sample_rate": "48000",
+    "channels": 2
+   }
+  ],
+  "duration": "9.416667"
+ },
+ "volume0": [
+  "[Parsed_volumedetect_0 @ 0xbf588fe30410] mean_volume: -17.7 dB",
+  "[Parsed_volumedetect_0 @ 0xbf588fe30410] max_volume: -2.3 dB"
+ ]
+}

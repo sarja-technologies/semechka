@@ -39,6 +39,7 @@ class AppState:
     def build(cls, cfg: Config) -> "AppState":
         cfg.ensure()
         db = Database(cfg.db_url)
+        from . import models_goose  # noqa: F401  (Work Mode on Goose: additive tables)
         db.create_all()
         migrations.apply(db, cfg.data_dir)
         vault = Vault(load_or_create_master_key(cfg.key_path))

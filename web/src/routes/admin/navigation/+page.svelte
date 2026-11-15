@@ -21,7 +21,7 @@
   async function preview() { pvErr = ''; try { pv = await get(`/api/admin/preview/${role}`); } catch (e) { pvErr = errMsg(e); } }
   let drag = -1;
 </script>
-<Page title="Layout & Navigation" lead="Order, rename and hide navigation items. Hiding an item is presentation only: the server still checks permissions on every request.">
+<Page title="Layout & Navigation" lead="Order, rename and hide the pages in the account menu (Library, knowledge, assistants, usage, help). The four main places, Chat, Images, Videos and Experimental, are shown whenever the server offers them to a person. Code and Workspaces no longer have a place in the interface. Hiding an item is presentation only: the server still checks permissions on every request.">
   <State {loading} {error} retry={load} />
   {#if items.length}
   <section class="panel"><div class="panel-h"><h3>Navigation items</h3><div class="row"><button class="btn primary sm" disabled={!dirty} onclick={save}>Save order</button>{#if dirty}<button class="btn sm" onclick={() => (items = JSON.parse(orig))}>Revert</button>{/if}</div></div>

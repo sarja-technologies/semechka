@@ -1,0 +1,33 @@
+// Model details for a Yaob system: the picker's detailed view and the technical drawer show core and network apart.
+import { chromium } from '@playwright/test';
+import path from 'node:path';
+const BASE = process.argv[2] ?? 'http://127.0.0.1:5173', PW = process.argv[3] ?? 'dev passphrase 2026 yaob';
+const OUT = path.resolve('../docs/evidence/yaob-origin');
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'owner@example.test', password: PW } });
+const csrf = (await (await ctx.request.get(`${BASE}/api/me`)).json()).csrf;
+await ctx.request.patch(`${BASE}/api/me`, { data: { theme: 'light', show_tech: true, picker: { view: 'detailed' } }, headers: { 'x-csrf-token': csrf } });
+await page.goto(`${BASE}/chat`);
+await page.locator('#msg').waitFor();
+await page.locator('.mc .trigger').first().click();
+const opt = page.getByRole('option', { name: /^Yaob Origin N119M/ }).first();
+await opt.waitFor();
+const t = await opt.innerText();
+console.log('picker row:', t.replace(/\s+/g, ' '));
+await page.waitForTimeout(300);
+await page.screenshot({ path: path.join(OUT, 'desktop-light-7-picker-details.png') });
+await page.keyboard.press('Escape');
+// the newest conversation, then its technical details
+await page.locator('aside a, nav a').filter({ hasText: 'What changed in the latest' }).first().click();
+const msg = page.locator('article[data-role="assistant"]').last();
+await msg.waitFor();
+await msg.hover();
+await msg.getByRole('button', { name: 'Technical details' }).click();
+await page.waitForTimeout(400);
+const drawer = await page.locator('dl').last().innerText();
+console.log('drawer:', drawer.replace(/\s+/g, ' ').slice(0, 600));
+await page.screenshot({ path: path.join(OUT, 'desktop-light-8-technical-details.png') });
+await ctx.request.patch(`${BASE}/api/me`, { data: { show_tech: false, picker: { view: null } }, headers: { 'x-csrf-token': csrf } });
+await browser.close();

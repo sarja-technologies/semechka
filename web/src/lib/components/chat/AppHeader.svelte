@@ -8,7 +8,8 @@
   import { toast } from '$lib/toast.svelte';
   import { THEME_LABELS, PRESETS } from '$lib/theme/theme';
   import { openPalette } from '$lib/palette.svelte';
-  import { trinodalLinks } from '$lib/nav';
+  import { primaryNav, primaryOf, secondaryNav } from '$lib/nav';
+  import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
   import { errText } from '$lib/chat/thread.svelte';
 
@@ -51,7 +52,9 @@
     if (t === 'system') return PRESETS.light.values.bg;
     return (PRESETS as any)[t]?.values.bg;
   }
-  const tnl = $derived(trinodalLinks(app.trinodal));
+  const tabs = $derived(primaryNav(app.me?.ui));
+  const activeTab = $derived(primaryOf(page.url.pathname));
+  const more = $derived(secondaryNav(app.me?.ui));
   const density = $derived(app.me?.user.prefs?.density ?? app.me?.ui.density ?? 'comfortable');
 </script>
 
@@ -71,7 +74,14 @@
       {#if collapsed && onnew}<button class="btn ghost icon sm desk-only" onclick={onnew} aria-label="New conversation" title="New conversation (Ctrl+Shift+O)"><Icon name="edit" size={17} /></button>{/if}
     {/if}
     {#if pos === 'left'}{@render brand()}{/if}
-    {#if title}<span class="ttl" title={title}>{title}</span>{/if}
+    {#if tabs.length}
+      <nav class="tabs" aria-label="Main">
+        {#each tabs as t (t.id)}
+          <a href={t.href} class="tab" class:on={activeTab === t.id} aria-current={activeTab === t.id ? 'page' : undefined} data-nav={t.id}>{t.label}</a>
+        {/each}
+      </nav>
+    {/if}
+    {#if title && activeTab === 'chat'}<span class="ttl" title={title}>{title}</span>{/if}
   </div>
   {#if pos === 'center'}<div class="c">{@render brand()}</div>{/if}
   <div class="r">
@@ -100,10 +110,9 @@
               <button role="menuitemradio" aria-checked={density === v} onclick={() => pref({ density: v })}>{l}{#if density === v}<span class="ck"><Icon name="check" size={14} /></span>{/if}</button>
             {/each}
           </div>
-          {#if tnl.length}
-            <div class="sec" role="group" aria-label="Trinodal AI">
-              <span class="lab tiny muted">Trinodal AI</span>
-              {#each tnl as l (l.id)}<a role="menuitem" href={l.href} data-sveltekit-reload onclick={() => close(false)}><Icon name="network" size={15} /> {l.label}</a>{/each}
+          {#if more.length}
+            <div class="sec" role="group" aria-label="More">
+              {#each more as l (l.id)}<a role="menuitem" href={l.href} onclick={() => close(false)}><Icon name={l.icon} size={15} /> {l.label}</a>{/each}
             </div>
           {/if}
           <div class="sec">
@@ -128,6 +137,7 @@
   .brand img { display: block; max-width: 200px; object-fit: contain; }
   .bn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
   .ttl { color: var(--fg); font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+  .tabs + .ttl { color: var(--fg-muted); font-weight: 400; padding-left: 14px; margin-left: 6px; border-left: 1px solid var(--border); }
   .brand + .ttl { color: var(--fg-muted); font-weight: 400; padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border); }
   .sbt:not(.desk) { display: none; }
   .ret { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
@@ -146,9 +156,15 @@
   .ck { margin-left: auto; display: grid; }
   .sw { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); flex: none; }
   .sw[data-sw='system'] { box-shadow: inset -7px 0 0 #141617; }
+  .tabs { display: flex; align-items: center; gap: 2px; margin-left: 12px; }
+  .tab { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: var(--radius-sm); color: var(--fg-2); text-decoration: none; font-size: 14px; font-weight: 500; }
+  .tab:hover { background: var(--hover); color: var(--fg); }
+  .tab.on { background: var(--selected); color: var(--fg); }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   @media (max-width: 899px) {
     .sbt { display: inline-flex !important; } .desk-only { display: none; }
     .ttl, .ret { display: none; }
+    .tabs { display: none; } /* the same four places sit in the bar at the foot of the screen */
   }
   @media (pointer: coarse) { .amenu button, .amenu a { min-height: 44px; } .av { width: 40px; height: 40px; } }
 </style>

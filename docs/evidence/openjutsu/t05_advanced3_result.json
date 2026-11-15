@@ -1,0 +1,126 @@
+{
+ "name": "t05_advanced3",
+ "job": "a95bf4fdbd3a",
+ "status": "completed",
+ "wall_s": 199.2,
+ "progress_monotonic": true,
+ "progress_first_last_n": [
+  0.0,
+  1.0,
+  67
+ ],
+ "error": null,
+ "applied": {
+  "profile": "openjutsu-minimax-h3",
+  "operation": "advanced_swap",
+  "feature": "openjutsu.advanced",
+  "openjutsu": {
+   "operation": "advanced_swap",
+   "resolution": "480p",
+   "short_edge": null,
+   "seed": 5,
+   "hat_fix": false,
+   "no_lip_sync": false,
+   "motion_reference": 512,
+   "clip_seconds": 6.0,
+   "subject_kind": null,
+   "subject_selection": null,
+   "mask_margin": 40,
+   "pictures": 3,
+   "per_person_pass": false,
+   "roles": "the old man with the long white beard\nthe bearded knight in armor\nthe small man at the front"
+  },
+  "references": [
+   {
+    "original": "768x1024",
+    "prepared": "768x1024",
+    "warnings": [],
+    "position": 1,
+    "used": true,
+    "file": "01633d94fc7342d4b66c08a0cad51594.png"
+   },
+   {
+    "original": "768x1024",
+    "prepared": "768x1024",
+    "warnings": [],
+    "position": 2,
+    "used": true,
+    "file": "e0cb1ffbb5574897bf81f58d18505b68.png"
+   },
+   {
+    "original": "400x740",
+    "prepared": "400x740",
+    "warnings": [
+     "small picture (400x740): likeness improves with 512+ px"
+    ],
+    "position": 3,
+    "used": true,
+    "file": "336e41147bc84c26bef9eb47549561d4.png"
+   }
+  ],
+  "source": {
+   "width": 1344,
+   "height": 768,
+   "duration": 5.167,
+   "fps": 24.0,
+   "frames": 124,
+   "has_audio": true
+  },
+  "output": {
+   "width": 832,
+   "height": 480,
+   "frames": 56,
+   "fps": 24.0,
+   "duration": 2.334
+  },
+  "sampler_steps_last": 6
+ },
+ "generations": [
+  {
+   "id": "a95bf4fdbd3a-0",
+   "file_id": "a95bf4fdbd3a-0",
+   "type": "video",
+   "mime": "video/mp4",
+   "size": 1145636,
+   "width": 832,
+   "height": 480,
+   "duration": 2.334,
+   "fps": 24.0,
+   "frames": 56,
+   "audio": true,
+   "seed": 5,
+   "name": "82_0_advanced_swap_2026-11-10.mp4"
+  }
+ ],
+ "ffprobe0": {
+  "streams": [
+   {
+    "codec_type": "video",
+    "codec_name": "h264",
+    "width": 832,
+    "height": 480,
+    "r_frame_rate": "24/1",
+    "nb_frames": "56",
+    "duration": "2.333333",
+    "sample_rate": null,
+    "channels": null
+   },
+   {
+    "codec_type": "audio",
+    "codec_name": "aac",
+    "width": null,
+    "height": null,
+    "r_frame_rate": "0/0",
+    "nb_frames": "74",
+    "duration": "2.334000",
+    "sample_rate": "32000",
+    "channels": 2
+   }
+  ],
+  "duration": "2.334000"
+ },
+ "volume0": [
+  "[Parsed_volumedetect_0 @ 0xc0ab6e0bc050] mean_volume: -29.9 dB",
+  "[Parsed_volumedetect_0 @ 0xc0ab6e0bc050] max_volume: -15.1 dB"
+ ]
+}

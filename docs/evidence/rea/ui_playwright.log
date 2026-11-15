@@ -1,0 +1,14 @@
+Running 1 test using 1 worker
+analysis visible after 991 s: Vision used: qwen3.6-35b-a3b, 14 keyframes from 4 of 4 shots, 973 s. The model was loaded for this analysis and unloaded afterwards.
+shots shown: 4
+keyframes loaded: 14
+shot 1: A red bicycle is parked against a brick wall on a wet street at night. The scene is illuminated by the blue and pink neon lights from a shop in the background, which reflect on the slick pavement.
+shot 2: A golden retriever runs happily along the wet sand of a beach, moving towards the camera. The scene is bathed in the warm, golden light of a sunset, with ocean waves rolling in the background.
+shot 3: A wooden cabin sits nestled among snow-covered pine trees with a large mountain in the background. White smoke drifts steadily from the cabin's chimney into the cool air. The scene is quiet and still, evoking a sense of peaceful isolation.
+shot 4: A light blue ceramic bowl filled with several bright oranges sits on a wooden countertop in a kitchen. The scene is still and quiet, with natural light coming from a window on the left. The background shows a blurred kitchen environment with white cabinetry.
+reconstructed prompt: A red bicycle is parked against a brick wall on a wet street at night illuminated by blue and pink neon lights reflecting on the pavement. Cut to a golden retriever running happily along wet sand towards the camera bathed in warm sunset light with ocean waves in the background. Cut to a wooden cabin nestled among snow-covered pine trees with white smoke drifting from the chimney and a large mountain in the background. Cut to a light blue ceramic bowl filled with bright oranges sitting on a wooden countertop in a kitchen with natural light coming from a window.
+horizontal overflow at 390 px: 0
+  ✓  1 e2e_media/staging/rea.spec.ts:12:1 › REA: upload a video, analyse it with scene descriptions, read per-shot descriptions, keyframes and the reconstructed prompt (16.5m)
+  Slow test file: e2e_media/staging/rea.spec.ts (16.5m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (16.6m)

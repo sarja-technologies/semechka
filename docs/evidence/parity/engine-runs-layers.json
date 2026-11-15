@@ -1,0 +1,74 @@
+[
+ {
+  "name": "layers",
+  "job": "7bd1519df814",
+  "status": "completed",
+  "error": null,
+  "wall_s": 127.5,
+  "monotonic": true,
+  "phases": [
+   "Done",
+   "Generating, step 1 of 20",
+   "Generating, step 10 of 20",
+   "Generating, step 11 of 20",
+   "Generating, step 12 of 20",
+   "Generating, step 13 of 20",
+   "Generating, step 14 of 20",
+   "Generating, step 15 of 20",
+   "Generating, step 16 of 20",
+   "Generating, step 17 of 20",
+   "Generating, step 18 of 20",
+   "Generating, step 19 of 20",
+   "Generating, step 2 of 20",
+   "Generating, step 20 of 20",
+   "Generating, step 3 of 20",
+   "Generating, step 4 of 20",
+   "Generating, step 5 of 20",
+   "Generating, step 6 of 20",
+   "Generating, step 7 of 20",
+   "Generating, step 8 of 20",
+   "Generating, step 9 of 20",
+   "Preparing"
+  ],
+  "applied": {
+   "tool": "image-layers",
+   "feature": "image.decompose",
+   "layers": 3,
+   "seed": 99,
+   "output": {
+    "width": 640,
+    "height": 640
+   },
+   "sampler_steps_last": 20
+  },
+  "files": [
+   {
+    "file": "out/b2/layers.0.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 372586,
+    "width": 640,
+    "height": 640,
+    "duration": null
+   },
+   {
+    "file": "out/b2/layers.1.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 340478,
+    "width": 640,
+    "height": 640,
+    "duration": null
+   },
+   {
+    "file": "out/b2/layers.2.png",
+    "type": "image",
+    "mime": "image/png",
+    "size": 264688,
+    "width": 640,
+    "height": 640,
+    "duration": null
+   }
+  ]
+ }
+]

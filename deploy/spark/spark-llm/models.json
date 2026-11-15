@@ -1,0 +1,239 @@
+[
+ {
+  "id": "dolphin3.0-r1-mistral-24b",
+  "legacy_id": "dolphin3.0-r1-mistral-24b@Q6_K",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/bartowski--cognitivecomputations_Dolphin3.0-R1-Mistral-24B-GGUF/cognitivecomputations_Dolphin3.0-R1-Mistral-24B-Q6_K.gguf",
+  "mmproj": null,
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": false,
+  "reasoning": true,
+  "context_max": 32768,
+  "est_mem_mb": 25000,
+  "tags": [
+   "24b",
+   "uncensored",
+   "reasoning"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "gpt-oss-120b",
+  "legacy_id": "gpt-oss-120b@MXFP4",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/ggml-org--gpt-oss-120b-GGUF/gpt-oss-120b-MXFP4.gguf",
+  "mmproj": null,
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": false,
+  "reasoning": true,
+  "context_max": 131072,
+  "est_mem_mb": 70000,
+  "tags": [
+   "large",
+   "reasoning",
+   "128gb"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "hermes-4-70b",
+  "legacy_id": "hermes-4-70b@Q4_K_M",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Hermes-4-70B-GGUF/Hermes-4-70B-Q4_K_M.gguf",
+  "mmproj": null,
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": false,
+  "reasoning": true,
+  "context_max": 131072,
+  "est_mem_mb": 56000,
+  "tags": [
+   "large",
+   "uncensored",
+   "reasoning",
+   "128gb"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3-4b-instruct-2507",
+  "legacy_id": "qwen3-4b-instruct-2507@Q4_K_M",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+  "mmproj": null,
+  "ctx": 32768,
+  "parallel": 4,
+  "vision": false,
+  "reasoning": false,
+  "context_max": 262144,
+  "est_mem_mb": 3900,
+  "tags": [
+   "recommended",
+   "text"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3-coder-next",
+  "legacy_id": "qwen3-coder-next@MXFP4_MOE",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3-Coder-Next-GGUF/Qwen3-Coder-Next-MXFP4_MOE.gguf",
+  "mmproj": null,
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": false,
+  "reasoning": false,
+  "context_max": 262144,
+  "est_mem_mb": 56000,
+  "tags": [
+   "large",
+   "code",
+   "128gb"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3.5-0.8b",
+  "legacy_id": "qwen3.5-0.8b@Q8_0",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/ggml-org--Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf",
+  "mmproj": null,
+  "ctx": 32768,
+  "parallel": 4,
+  "vision": false,
+  "reasoning": false,
+  "context_max": 32768,
+  "est_mem_mb": 1500,
+  "tags": [
+   "small",
+   "text"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "huihui-qwen3.5-27b-abliterated",
+  "legacy_id": "huihui-qwen3.5-27b-abliterated@Q6_K",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/mradermacher--Huihui-Qwen3.5-27B-abliterated-GGUF/Huihui-Qwen3.5-27B-abliterated.Q6_K.gguf",
+  "mmproj": "/home/spark/.local/share/sarness-engine/models/llm/mradermacher--Huihui-Qwen3.5-27B-abliterated-GGUF/Huihui-Qwen3.5-27B-abliterated.mmproj-f16.gguf",
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": true,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 32000,
+  "tags": [
+   "27b",
+   "uncensored",
+   "reasoning",
+   "vision"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3.6-35b-a3b",
+  "legacy_id": "qwen3.6-35b-a3b@MXFP4_MOE",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-MXFP4_MOE.gguf",
+  "mmproj": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3.6-35B-A3B-GGUF/mmproj-F16.gguf",
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": true,
+  "reasoning": false,
+  "context_max": 262144,
+  "est_mem_mb": 28000,
+  "tags": [
+   "vision",
+   "fast"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3.8-27b",
+  "legacy_id": "qwen3.8-27b@UD-Q6_K",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q6_K.gguf",
+  "mmproj": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3.8-27B-GGUF/mmproj-F16.gguf",
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": true,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 34000,
+  "tags": [
+   "27b",
+   "reasoning",
+   "vision"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "huihui-qwen3.8-27b-abliterated",
+  "legacy_id": "huihui-qwen3.8-27b-abliterated@Q6_K",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/huihui-ai--Huihui-Qwen3.8-27B-abliterated-GGUF/Huihui-Qwen3.8-27B-abliterated-Q6_K.gguf",
+  "mmproj": "/home/spark/.local/share/sarness-engine/models/llm/huihui-ai--Huihui-Qwen3.8-27B-abliterated-GGUF/mmproj-model-bf16.gguf",
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": true,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 33000,
+  "tags": [
+   "27b",
+   "uncensored",
+   "reasoning",
+   "vision"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3.8-27b-uncensored-hauhaucs",
+  "legacy_id": "qwen3.8-27b-uncensored-hauhaucs@Q6_K_P",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/HauhauCS--Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf",
+  "mmproj": "/home/spark/.local/share/sarness-engine/models/llm/HauhauCS--Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF/mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+  "ctx": 65536,
+  "parallel": 2,
+  "vision": true,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 36000,
+  "tags": [
+   "27b",
+   "uncensored",
+   "reasoning",
+   "vision"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "qwen3.8-flash-next",
+  "legacy_id": "qwen3.8-flash-next@UD-IQ4_XS",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/unsloth--Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+  "mmproj": null,
+  "ctx": 32768,
+  "parallel": 4,
+  "vision": false,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 108000,
+  "tags": [
+   "large",
+   "code",
+   "reasoning",
+   "128gb"
+  ],
+  "file_exists": true
+ },
+ {
+  "id": "huihui-qwen3.8-flash-next-abliterated",
+  "legacy_id": "huihui-qwen3.8-flash-next-abliterated@UD-IQ4_XS",
+  "file": "/home/spark/.local/share/sarness-engine/models/llm/huihui-ai--Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF/unsloth-UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+  "mmproj": null,
+  "ctx": 32768,
+  "parallel": 4,
+  "vision": false,
+  "reasoning": true,
+  "context_max": 262144,
+  "est_mem_mb": 106000,
+  "tags": [
+   "large",
+   "uncensored",
+   "reasoning",
+   "128gb"
+  ],
+  "file_exists": true
+ }
+]

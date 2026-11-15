@@ -14,13 +14,15 @@
   import MediaProtection from '$lib/components/media/MediaProtection.svelte';
   import { contentUrl, facts, listAssets, type Asset } from '$lib/media/assets';
   import { Upload, isMedia, precheck } from '$lib/media/upload.svelte';
-  import { trayFor } from '$lib/media/tray.svelte';
+  import { handoff } from '$lib/media/handoff.svelte';
   import { openViewer } from '$lib/media/viewer.svelte';
+  import GlbViewer from '$lib/components/media/GlbViewer.svelte';
 
   const ui = $derived(app.me.ui);
   const ops = $derived(ui.operations ?? {});
   const allowed = $derived(!!ui.composer.media_library);
   let kind = $state<'' | 'image' | 'video'>(''), origin = $state<'' | 'upload' | 'edit' | 'generated'>(''), items = $state<Asset[]>([]), loading = $state(true), more = $state(false), error = $state('');
+  let other = $state<Asset | null>(null);   // a sound or a 3D mesh (Experimental tools): shown in its own small dialog, not the picture/video viewer
   let confirm = $state<Asset | null>(null), protOpen = $state(false), ups = $state<Upload[]>([]), note = $state('');
 
   async function load(reset = true) {
@@ -48,13 +50,15 @@
   }
   function pick(e: Event) { const i = e.currentTarget as HTMLInputElement; if (i.files) addFiles([...i.files]); i.value = ''; }
 
-  const openAsset = (a: Asset, edit = false) => openViewer(a, { edit, siblings: items, useLabel: 'Use in a new message', onsaved: (n) => { items = [n, ...items.filter((x) => x.id !== n.id)]; }, onuse: (n) => useIn(n) });
-  /** Start a new message with this file attached. The tray is kept for the whole session, so it is waiting when the composer opens. */
+  const kindOf = (a: Asset): string => a.kind;   // 'audio' | '3d' come from Experimental tools
+  const isOther = (a: Asset) => kindOf(a) === 'audio' || kindOf(a) === '3d';
+  const openAsset = (a: Asset, edit = false) => isOther(a) ? (other = a) : openViewer(a, { edit, siblings: items, useLabel: 'Use as reference', onsaved: (n) => { items = [n, ...items.filter((x) => x.id !== n.id)]; }, onuse: (n) => useIn(n) });
+  /** A picture becomes the reference on the Images screen; a video goes to the video editor (Experimental). */
   function useIn(a: Asset) {
-    trayFor('chat:new', app.me.user.id).addAsset(a, []);
-    const op = a.kind === 'video' && ops.video?.enabled ? 'video' : ops.image?.enabled ? 'image' : '';
-    goto(`/chat?new=${Date.now()}${op ? `&op=${op}` : ''}`);
+    if (a.kind === 'video') { if (ops.openjutsu?.enabled) { handoff.video = a; goto('/openjutsu?new=1'); } return; }
+    if (ops.image?.enabled) { handoff.image = a; goto('/image'); }
   }
+  const canUse = (a: Asset) => (isOther(a) ? false : a.kind === 'video' ? !!ops.openjutsu?.enabled : !!ops.image?.enabled);
   async function remove() {
     const a = confirm; confirm = null; if (!a) return;
     try {
@@ -63,7 +67,8 @@
     } catch (e) { toast(errText(e), 'bad'); }
   }
   const when = (t?: number) => (t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
-  const label = (a: Asset) => a.origin === 'generated' ? a.job?.prompt || a.prompt || (a.kind === 'video' ? 'Generated video' : 'Generated picture') : a.name ?? (a.kind === 'video' ? 'Video' : 'Picture');
+  const noun = (a: Asset) => ({ video: 'video', audio: 'sound', '3d': '3D mesh', image: 'picture' } as Record<string, string>)[kindOf(a)] ?? 'file';
+  const label = (a: Asset) => a.origin === 'generated' ? a.job?.prompt || a.prompt || `Generated ${noun(a)}` : a.name ?? noun(a).replace(/^./, (c) => c.toUpperCase());
   const originLabel = (a: Asset) => ({ upload: 'Uploaded', edit: 'Edited', generated: 'Generated', prepared: 'Prepared', export: 'Exported', adjusted: 'Adjusted', upscaled: 'Scaled' })[a.origin ?? 'generated'];
 </script>
 
@@ -112,7 +117,7 @@
         {#each items as a (a.id)}
           <li class="card">
             <button class="media" onclick={() => openAsset(a)} aria-label={`Open ${label(a)}`}>
-              <MediaThumb id={a.id} kind={a.kind} name={label(a)} duration={a.duration} ratio="1 / 1" />
+              <MediaThumb id={a.id} kind={isOther(a) ? (kindOf(a) as 'audio' | '3d') : a.kind} name={label(a)} duration={a.duration} ratio="1 / 1" />
               {#if a.kind === 'video'}<span class="play" aria-hidden="true"><Icon name="play" size={16} /></span>{/if}
               <span class="badge">{originLabel(a)}</span>
             </button>
@@ -120,8 +125,8 @@
               <p class="pr" title={label(a)}>{label(a)}</p>
               <p class="tiny muted">{[...facts(a).slice(0, 2), when(a.created_at)].filter(Boolean).join(' · ')}</p>
               <div class="acts">
-                <button class="btn ghost sm" onclick={() => useIn(a)} title="Start a message with this"><Icon name="plus" size={14} /> Use</button>
-                {#if a.mime !== 'image/gif'}<button class="btn ghost icon sm" onclick={() => openAsset(a, true)} aria-label="Edit" title={a.kind === 'video' ? 'Trim or crop' : 'Crop or rotate'}><Icon name={a.kind === 'video' ? 'scissors' : 'crop'} size={15} /></button>{/if}
+                {#if canUse(a)}<button class="btn ghost sm" onclick={() => useIn(a)} title={a.kind === 'video' ? 'Open it in the video editor (Experimental)' : 'Use it as the reference picture on Images'}><Icon name="plus" size={14} /> {a.kind === 'video' ? 'Edit' : 'Use'}</button>{/if}
+                {#if a.mime !== 'image/gif' && !isOther(a)}<button class="btn ghost icon sm" onclick={() => openAsset(a, true)} aria-label="Edit" title={a.kind === 'video' ? 'Trim or crop' : 'Crop or rotate'}><Icon name={a.kind === 'video' ? 'scissors' : 'crop'} size={15} /></button>{/if}
                 {#if a.job?.conversation_id}<a class="btn ghost icon sm" href={`/chat/${a.job.conversation_id}`} aria-label="Open its conversation" title="Conversation"><Icon name="chat" size={15} /></a>{/if}
                 <a class="btn ghost icon sm" href={contentUrl(a, { download: true })} download aria-label="Download" title="Download"><Icon name="download" size={15} /></a>
                 <button class="btn ghost icon sm" aria-label="Delete" title="Delete" onclick={() => (confirm = a)}><Icon name="trash" size={15} /></button>
@@ -137,8 +142,13 @@
 </MediaDropzone>
 
 <Modal open={!!confirm} title="Delete this file?">
-  <p>The {confirm?.kind === 'video' ? 'video' : 'picture'} is deleted from this server.{confirm?.origin === 'generated' && confirm?.job?.conversation_id ? ' Its conversation keeps the request, marked as no longer available.' : ''} {confirm?.origin !== 'generated' ? 'Copies you edited from it are separate files and stay.' : ''}</p>
+  <p>The {confirm ? noun(confirm) : 'file'} is deleted from this server.{confirm?.origin === 'generated' && confirm?.job?.conversation_id ? ' Its conversation keeps the request, marked as no longer available.' : ''} {confirm?.origin !== 'generated' ? 'Copies you edited from it are separate files and stay.' : ''}</p>
   {#snippet footer()}<button class="btn" onclick={() => (confirm = null)}>Cancel</button><button class="btn danger solid" onclick={remove}>Delete</button>{/snippet}
+</Modal>
+<Modal open={!!other} title={other ? label(other) : ''} wide>
+  {#if other && kindOf(other) === 'audio'}<audio src={contentUrl(other)} controls preload="metadata" style="width: 100%"></audio>
+  {:else if other && kindOf(other) === '3d'}<GlbViewer src={contentUrl(other)} label={label(other)} />{/if}
+  {#snippet footer()}{#if other}<a class="btn" href={contentUrl(other, { download: true })} download><Icon name="download" size={14} /> Download</a>{/if}<button class="btn" onclick={() => (other = null)}>Close</button>{/snippet}
 </Modal>
 <Modal bind:open={protOpen} title="How are pictures and videos stored?" wide><MediaProtection kind={kind || 'image'} />{#snippet footer()}<button class="btn" onclick={() => (protOpen = false)}>Close</button>{/snippet}</Modal>
 

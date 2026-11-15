@@ -391,7 +391,7 @@ Check first: `list_models` with `{"kind": "video"}`, then `resources`. Video mod
 Never start a second heavy job while one runs; `wait_job` for it, or `cancel_job`.
 
 ## Plain video models (text or image to video)
-`generate_video` with `{"model": "<id>", "prompt": "...", "inputs": {"width": 512, "height": 320, "frames": 17, "fps": 16}, "out": "artifacts/clip.mp4"}`.
+`generate_video` with `{"model": "<id>", "prompt": "...", "inputs": {"width": 512, "height": 320, "seconds": 4}, "out": "artifacts/clip.mp4"}`. Give the length in **seconds**: the server picks the nearest length the model supports at its own frame rate (`list_models` shows each video model's `duration` limits). `frames` and `fps` still work for exact control.
 Use only sizes and frame counts the model lists (`list_models` shows its limits). To animate a picture add `"start_image": "path/in/work.png"` to `inputs`.
 
 ## OpenJutsu profile (replace the main person of a video)

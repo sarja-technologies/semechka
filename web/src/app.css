@@ -159,6 +159,9 @@ label.row > input[type='checkbox'], label.row > input[type='radio'] { flex: none
 .prose pre code { background: none; padding: 0; }
 .prose table { border-collapse: collapse; } .prose th, .prose td { border: 1px solid var(--border); padding: 4px 8px; }
 .prose blockquote { margin: 0 0 var(--s3); padding-left: var(--s3); border-left: 3px solid var(--border-strong); color: var(--fg-muted); }
+/* an inline [n] citation: a link to source n of the reply (lib/markdown.ts linkCitations) */
+.prose a.cite { display: inline-block; min-width: 1.5em; margin: 0 1px; padding: 0 4px; border-radius: 5px; background: var(--bg-2); color: var(--link); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; text-align: center; text-decoration: none; vertical-align: 1px; box-sizing: border-box; }
+.prose a.cite:hover { background: var(--hover); text-decoration: underline; } .prose a.cite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent); font-weight: 600; }
 .hljs-string, .hljs-attr, .hljs-number { color: var(--success); }
 .hljs-comment { color: var(--fg-muted); font-style: italic; }

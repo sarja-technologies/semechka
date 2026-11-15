@@ -27,7 +27,7 @@ export function defaultSpec(mode = 'generate'): Spec {
     version: 1, kind: 'image', mode, prompt: '', negative: '', preset: { id: null, scenes: [], finish: false },
     aspect: { id: '9:16', w: 9, h: 16 }, size: { native: null, output: null }, quality: 'standard', seed: null, count: 1,
     source_asset: null, mask_asset: null, selection: { box: null, feather: 0, invert: false, keep_outside: null },
-    outpaint: { pad: null, target: null, anchor: { x: 0.5, y: 0.5 }, overlap: 0 }, upscale: { refine: false, strength: 0.3 },
+    outpaint: { pad: null, target: null, anchor: { x: 0.5, y: 0.5 }, overlap: 0 }, upscale: { refine: false, strength: 0.3, engine: 'lanczos' },
     references: [], model: null, advanced: {}, adjustments: {}
   };
 }

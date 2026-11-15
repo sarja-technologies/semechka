@@ -30,9 +30,9 @@ from .. import (
     media_svc,
     services,
 )
-from ..adapters import AdapterError
+from ..adapters import AdapterError, yaob
 from ..backends_svc import adapter_for
-from ..deps import Ctx, current
+from ..deps import Ctx, abegin_write, current
 from ..media_models import MediaJob
 from ..models import (
     Backend,
@@ -133,10 +133,13 @@ def list_models(ctx: Ctx = Depends(current), mode: str = "chat"):
 
 def _model_tech(m: Model, b: Backend) -> dict:
     meta = m.meta or {}
-    return {"model_real_id": services.display_id(m.real_id), "family": meta.get("family"), "params": meta.get("params_label") or meta.get("params"),
-            "quantization": meta.get("quantization"), "format": meta.get("format"), "context": meta.get("context"),
-            "license": meta.get("license"), "runtime": b.adapter, "runtime_version": (b.options or {}).get("version"),
-            "node": b.name}
+    out = {"model_real_id": services.display_id(m.real_id), "family": meta.get("family"), "params": meta.get("params_label") or meta.get("params"),
+           "quantization": meta.get("quantization"), "format": meta.get("format"), "context": meta.get("context"),
+           "license": meta.get("license"), "runtime": b.adapter, "runtime_version": (b.options or {}).get("version"),
+           "node": b.name}
+    if meta.get("identity"):  # a Yaob system: the neural core and the node network are reported apart, never summed
+        out["core"], out["network"] = yaob.core_label(meta), yaob.network_label(meta)
+    return out
 
 
 class NewConv(BaseModel):
@@ -482,6 +485,10 @@ def delete_attachment(aid: str, ctx: Ctx = Depends(current)):
     return {"ok": True}
 
 
+def _md_text(t: str) -> str:
+    return re.sub(r"([\\`*_\[\]<>])", r"\\\1", t)
+
+
 @router.get("/conversations/{cid}/export")
 def export_conversation(cid: str, ctx: Ctx = Depends(current), format: str = "md"):
     if not ctx.st.settings.value_for(ctx.s, "chat.export", ctx.principal):
@@ -489,12 +496,17 @@ def export_conversation(cid: str, ctx: Ctx = Depends(current), format: str = "md
     ctx.need("chat.export")
     c = _own_conv(ctx, cid)
     models = {m.id: m for m in ctx.s.execute(select(Model)).scalars()}
-    msgs = [_msg_out(ctx, m, models) for m in ctx.s.execute(select(Message).where(Message.conversation_id == c.id).order_by(Message.created_at)).scalars()]
+    srcs = _sources_for(ctx, c.id)
+    msgs = [_msg_out(ctx, m, models, srcs) for m in ctx.s.execute(select(Message).where(Message.conversation_id == c.id).order_by(Message.created_at)).scalars()]
     if format == "json":
         return {"schema": "semechka.conversation/1", "title": _title(ctx, c), "messages": msgs}
     lines = [f"# {_title(ctx, c)}", ""]
     for m in msgs:
         lines += [f"**{'You' if m['role'] == 'user' else (m['model'] or 'Assistant')}**", "", m["content"], ""]
+        cited = [x for x in m.get("sources") or [] if x.get("url")]  # web documents a Yaob system cited
+        if cited:
+            lines += ["Sources:", ""] + [f"{x['n']}. [{_md_text(x.get('title') or x['url'])}](<{x['url']}>)"
+                                         + (f" ({x['published']})" if x.get("published") else "") for x in cited] + [""]
     return PlainTextResponse("\n".join(lines), media_type="text/markdown")
 
 
@@ -543,6 +555,9 @@ class GenIn(BaseModel):
     preset: Literal["iphone_photo"] | None = None
     scenes: list[str] = Field(default_factory=list, max_length=12)
     no_save_history: list[dict] | None = None  # ephemeral only: the client-held transcript
+    # Web search for this reply (Yaob systems that report web_search): auto lets the system decide, off forbids it.
+    # Ignored for every other model, which never receives it.
+    web_search: Literal["auto", "on", "off"] | None = None
 
 
 class EphemeralIn(BaseModel):
@@ -552,6 +567,7 @@ class EphemeralIn(BaseModel):
     workspace: str = Field(default="chat", pattern="^(chat|code)$")
     assistant_id: str | None = None
     collection_ids: list[str] = Field(default_factory=list, max_length=20)
+    web_search: Literal["auto", "on", "off"] | None = None
 
 
 def _sse(ev: dict) -> str:
@@ -596,6 +612,20 @@ def _effective_params(ctx: Ctx, m: Model, requested: dict | None) -> dict:
     return params
 
 
+def _web_mode(m: Model, requested: str | None) -> str | None:
+    """The web search mode sent with this reply: only to models whose runtime identity lists web_search (auto unless
+    the person chose otherwise); None, and nothing is sent, for every other model."""
+    if not yaob.has_web_search(m.meta):
+        return None
+    return requested if requested in yaob.WEB_MODES else "auto"
+
+
+def merge_sources(knowledge: list[dict], web: list[dict]) -> list[dict]:
+    """Knowledge passages first (numbered as the model saw them), then the documents a Yaob system cited, which keep
+    their own numbers because the reply's [n] markers refer to them."""
+    return [*(knowledge or []), *({**w, "kind": w.get("kind") or "web"} for w in (web or []))]
+
+
 def _admit(ctx: Ctx):
     """Quota and concurrency admission, server-side."""
     s, st, p = ctx.s, ctx.st, ctx.principal
@@ -633,6 +663,8 @@ def _stats(m: Model, b: Backend, params: dict, t0: float, t_first: float | None,
         stats["tokens_per_s"], stats["tps_source"] = round(tim["predicted_per_second"], 2), "backend"
     elif ct and t_first and t_end > t_first:
         stats["tokens_per_s"], stats["tps_source"] = round(ct / (t_end - t_first), 2), "measured by Semechka"
+    if (ev_done or {}).get("provenance"):  # a Yaob server's record of this reply; shown with tech.job.trace
+        stats["provenance_id"] = ev_done["provenance"]
     if isinstance((ev_done or {}).get("trinodal"), dict) and ev_done["trinodal"]:
         stats["trinodal"] = ev_done["trinodal"]  # run metadata of a Trinodal AI reply; filtered by tech.* permission on every read
     return {k: v for k, v in stats.items() if v is not None}
@@ -711,6 +743,8 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
     if sys_parts:
         messages = [{"role": "system", "content": "\n\n".join(sys_parts)}] + messages
     sources = ctx_args.get("sources") or []
+    knowledge = list(sources)
+    provenance = None
     asst_id = uid("g_")
     yield _sse({"type": "start", "assistant_id": asst_id, "user_message_id": user_msg_id,
                 "model": m_copy.alias, "saved": save})
@@ -773,8 +807,18 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
                             if ev["reasoning"]:
                                 reasoning.append(ev["reasoning"])
                             yield _sse({"type": "delta", "content": ev["content"], "reasoning": ev["reasoning"]})
+                        elif ev["type"] == "status" and ev.get("state") in yaob.STATUS_STATES:
+                            # a Yaob system is searching the web, reading what it found, or checking its answer
+                            yield _sse({"type": "activity", **{k: ev[k] for k in ("state", "query", "count") if k in ev}})
+                        elif ev["type"] == "status":  # a cold model is loading (llamacpp adapter): say so instead of going quiet
+                            yield _sse({"type": "engine", "state": ev.get("state"), "model": m_copy.alias,
+                                        "elapsed": ev.get("elapsed")})
+                        elif ev["type"] == "sources":  # documents a Yaob system cites; the latest list wins
+                            sources = merge_sources(knowledge, ev.get("sources") or [])
+                            yield _sse({"type": "sources", "sources": sources, "skipped": ctx_args.get("skipped_collections", 0)})
                         elif ev["type"] == "done":
                             done_ev = ev
+                            provenance = ev.get("provenance")
                         if ticket is not None and ticket.abort.is_set():  # an operator asked this request to stop
                             status, admin_stop = "stopped", True
                             break
@@ -828,11 +872,18 @@ async def _stream(ctx_args, model_pk, messages, params, *, save, conv_id, user_m
 def _finish(st, ctx_args, m, b, params, messages, text, status, save, conv_id, asst_id, parent, t0, t_first, done_ev,
             queue_info=None, sources=None, dropped=0):
     stats = _stats(m, b, params, t0, t_first, time.monotonic(), done_ev, sum(len(t) for t in text), queue_info)
+    meta = {}
+    if dropped:
+        meta["trimmed"] = dropped
+    if (done_ev or {}).get("provenance"):
+        meta["provenance"] = done_ev["provenance"]
+    if params.get("web_search"):
+        meta["web_search"] = params["web_search"]
     with st.db.session() as s:
         if save:
             s.add(Message(id=asst_id, conversation_id=conv_id, parent_id=parent, role="assistant", model_id=m.id,
                           content_enc=st.vault.encrypt("".join(text), "content"), stats=stats, status=status,
-                          meta={"trimmed": dropped} if dropped else None))
+                          meta=meta or None))
             if sources:
                 s.flush()
                 s.add(MessageSources(message_id=asst_id, sources_enc=st.vault.encrypt(json.dumps(sources, ensure_ascii=False), "sources")))
@@ -907,7 +958,13 @@ async def generate(cid: str, body: GenIn, request: Request, ctx: Ctx = Depends(c
         raise
     m, b = _resolve_model(ctx, body.model_id, c.model_id or r0.assistant_model_id)
     params = _apply_assistant_params(_effective_params(ctx, m, body.params), body.params, r0)
+    if web := _web_mode(m, body.web_search):
+        params["web_search"] = web
     _admit(ctx)
+    # Everything above only reads. This handler is a coroutine, so its session began as a reader: take the write lock explicitly (on a worker
+    # thread) before the first write. Without this, two people starting a chat in the same instant made the second one fail with
+    # "database is locked" (HTTP 500) because a reader cannot upgrade over another writer's commit.
+    await abegin_write(ctx)
     user_msg_id = None
     if body.mode == "send":
         content = _check_text(ctx, body.content, need=not body.attachments)
@@ -1093,6 +1150,8 @@ async def ephemeral_generate(body: EphemeralIn, request: Request, ctx: Ctx = Dep
     r0 = chat_context.resolve(ctx, workspace=body.workspace, assistant_id=body.assistant_id, collection_ids=body.collection_ids)
     m, b = _resolve_model(ctx, body.model_id, r0.assistant_model_id)
     params = _apply_assistant_params(_effective_params(ctx, m, body.params), body.params, r0)
+    if web := _web_mode(m, body.web_search):
+        params["web_search"] = web
     _admit(ctx)
     raw = []
     for x in body.messages:

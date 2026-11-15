@@ -58,6 +58,8 @@ def test_profile_is_offered_as_a_video_model_with_the_engines_form(mp):
     assert m["profile"]["ready"] is True and m["profile"]["inputs_schema"]["video"]["required"] is True
     assert m["profile"]["operations"] == ["swap", "remove"]
     assert "fake-clip" in [x["alias"] for x in mp.get("/api/media/options", params={"kind": "video"}).json()["models"]]
+    rows = {x["alias"]: x for x in mp.get("/api/media/options", params={"kind": "video"}).json()["models"]}
+    assert "duration" in rows["fake-clip"] and not any("duration" in x for x in rows.values() if x.get("profile"))     # a profile takes its length from the source video: no seconds to choose
 
 
 def test_profile_job_uploads_the_files_runs_as_a_durable_job_and_stores_the_result(mp):

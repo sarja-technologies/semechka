@@ -1,0 +1,400 @@
+[
+ {
+  "id": 77,
+  "ts": 1794299620.417927,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 122
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 76,
+  "ts": 1794299620.364879,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.update",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "autonomy": "auto"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 73,
+  "ts": 1794299541.124059,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 243
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 72,
+  "ts": 1794299541.06101,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.update",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "autonomy": "auto"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 66,
+  "ts": 1794299475.8960147,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 50
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 65,
+  "ts": 1794299475.8452294,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.update",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "skills": [
+    "sk_5af737153483432bb9bd"
+   ]
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 61,
+  "ts": 1794299471.4827983,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 114
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 58,
+  "ts": 1794299470.8073986,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.cancel",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {},
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 57,
+  "ts": 1794299463.7652717,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 75
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 56,
+  "ts": 1794299463.7093892,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.update",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "autonomy": "auto"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 53,
+  "ts": 1794299414.0163777,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_d52f3531538e1ce3",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 52,
+  "ts": 1794299412.7546926,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_2ed5f50c0c222515",
+   "decision": "allow_once",
+   "tool": "edit",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 51,
+  "ts": 1794299410.872317,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_6b1b865bb32f460e",
+   "decision": "deny",
+   "tool": "write",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 50,
+  "ts": 1794299404.2422407,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_eba8eb39868ec295",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 48,
+  "ts": 1794299395.3542552,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_eb4804cc0bada7a3",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 47,
+  "ts": 1794299395.3405488,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_5a9c356b566d98af",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 46,
+  "ts": 1794299395.326902,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_19184d8f7e3efe82",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 45,
+  "ts": 1794299395.3120513,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_c7c4c93447a93371",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 43,
+  "ts": 1794299391.5928795,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_8633b063a78af9a4",
+   "decision": "allow_once",
+   "tool": "read_image",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 42,
+  "ts": 1794299391.5800235,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_3645a8b1c9ad424b",
+   "decision": "allow_once",
+   "tool": "read_image",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 41,
+  "ts": 1794299391.5672212,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_5ad98ee82eeaa425",
+   "decision": "allow_once",
+   "tool": "read_image",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 40,
+  "ts": 1794299391.554071,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_6234bd673f1f89a3",
+   "decision": "allow_once",
+   "tool": "read_image",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 39,
+  "ts": 1794299383.5538385,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_ac31d9a0ea8705ee",
+   "decision": "allow_once",
+   "tool": "shell",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 38,
+  "ts": 1794299383.5430005,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.approval",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "approval": "ap_25ad2914d44e249a",
+   "decision": "allow_once",
+   "tool": "tree",
+   "extension": "developer"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 37,
+  "ts": 1794299329.298857,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.prompt",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "chars": 132
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 36,
+  "ts": 1794299328.6299176,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.update",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "model": "qwen3.6-35b-a3b",
+   "autonomy": "ask",
+   "mcp": [
+    "repo-stats"
+   ]
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 33,
+  "ts": 1794299316.0133898,
+  "actor": "u_508d05606c1d426ea958",
+  "actor_label": "bob@dev.test",
+  "action": "work.goose.session.create",
+  "target": "wg_e95a00c0cc2a4ee4bbf2",
+  "detail": {
+   "conversation": "c_066ef676a8104bd9be64",
+   "model": "qwen3.6-35b-a3b",
+   "autonomy": "auto"
+  },
+  "ip": "127.0.0.1"
+ },
+ {
+  "id": 32,
+  "ts": 1794299315.9782085,
+  "actor": "u_fe69a352a4fa4b04a6ad",
+  "actor_label": "alice@dev.test",
+  "action": "work.goose.session.create",
+  "target": "wg_2fa3e136a94d4becb93d",
+  "detail": {
+   "conversation": "c_51ec6f281b28493a8084",
+   "model": "qwen3.6-35b-a3b",
+   "autonomy": "auto"
+  },
+  "ip": "127.0.0.1"
+ }
+]

@@ -70,9 +70,18 @@ headings. Tabular figures on every number column. Chat column up to 768 px (640 
 - Density: comfortable (row 44 px) and compact (row 32 px); admin default and per-person override. Touch targets ≥ 40 px on touch.
 
 ## Layout rules
-- App shell: a full-height sidebar (260 px, resizable, a sheet under 720 px) with New conversation, search, conversation
-  history and the pages; beside it a slim 48 px header and the content region, with an optional right panel (technical
-  drawer) that becomes a sheet under 1100 px.
+- App shell: a slim 48 px header carrying the organisation's identity, the four main places (**Chat, Images, Videos, Experimental**) and the account
+  menu; on phones the same four sit in a bar at the foot of the screen. Chat adds a full-height sidebar (260 px, resizable, a sheet under 720 px) with
+  New conversation, search and conversation history. Images and Videos have no sidebar: previous work is in the Library (a quiet "Recent" row and a link on
+  each screen), so the generation screens stay about the one thing being made. Library, knowledge, assistants, usage, help, account and administration are
+  secondary and live in the account menu and the command palette. There are no standalone pages for Imajutsu, OpenJutsu, Trinodal, Workspaces, OpenSfield
+  or Code: working media tools are reached from Experimental, and a tool the server does not offer is not listed.
+- Images and Videos: the form on the left (words, model, optional reference picture, and for video the length in seconds), the result large on the right,
+  stacked on phones. Ordinary people never see frame counts or frame rates. The Generate button always says why it is disabled. Progress is only what the
+  engine reports; the result card follows the job.
+- Chat | Work: a two-segment switch at the top of every conversation. Work shows the agent's timeline in the same view: its words, tool calls with live
+  terminal output, file diffs, and approval questions (Allow once, Always allow, Deny, Always deny). While a model is being loaded the screen says so and
+  counts the seconds it has really waited (25 to 90 s is normal on the Spark). Where the server has no Work Mode the pane says that plainly.
 - Chat: one centred column; your messages in a rounded bubble on the right, replies as unboxed text under the model's
   name. The composer is pinned at the bottom: text on top, then + (attach), the mode switch and the model picker, and a
   round send button that becomes Stop while a reply runs. The empty chat puts a one-line welcome just above it.

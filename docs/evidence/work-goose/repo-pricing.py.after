@@ -1,0 +1,4 @@
+def total(prices, tax_rate):
+    """Sum of prices with tax applied once."""
+    subtotal = sum(prices)
+    return round(subtotal * (1 + tax_rate), 2)

@@ -1,0 +1,28 @@
+[Unit]
+Description=Semechka media engine (OpenSfield backend, loopback API on 127.0.0.1:8780)
+After=opensfield-comfyui.service
+Wants=opensfield-comfyui.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/opensfield/app
+EnvironmentFile=%h/opensfield/config/opensfield.env
+Environment=OPENSFIELD_OUTPUTS_DIR=%h/opensfield/state/semechka-engine/outputs
+Environment=OPENSFIELD_JOBS_FILE=%h/opensfield/state/semechka-engine/jobs.json
+Environment=OPENSFIELD_SEMECHKA_TOKEN_FILE=%h/opensfield/config/semechka-media.token
+Environment=OPENSFIELD_RECOVER_JOBS=1
+Environment=OPENSFIELD_CLIENT_PREFIX=semechka-
+Environment=OPENSFIELD_REAP=0
+Environment=OPENSFIELD_IDLE_UNLOAD=900
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/opensfield/venv-app/bin/uvicorn app.engine_main:app --host 127.0.0.1 --port 8780 --no-server-header --timeout-keep-alive 30
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/opensfield/logs/semechka-engine.log
+StandardError=append:%h/opensfield/logs/semechka-engine.log
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0027
+
+[Install]
+WantedBy=default.target

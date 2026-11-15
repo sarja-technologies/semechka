@@ -1,43 +1,62 @@
-// One place that maps a navigation entry (from /api/me ui.pages) to its route, shared by the rail, the mobile bar
-// and the command palette so a newly added mode needs a single change.
+// One place that decides what the shell offers. The primary navigation is exactly four places: Chat, Images, Videos and
+// Experimental. Everything else (Library, knowledge, assistants, usage, help, account, administration) is secondary and
+// reachable from the account menu and the command palette. What is offered always comes from /api/me; the server checks
+// every request again, so hiding an entry is a courtesy, never the guard.
 export type NavEntry = { id: string; label: string; available: boolean; reason?: string };
+export type PrimaryId = 'chat' | 'image' | 'video' | 'experimental';
+export type PrimaryEntry = { id: PrimaryId; label: string; href: string; icon: string; match: (path: string) => boolean };
 
-const ROUTES: Record<string, string> = { chat: '/chat', usage: '/usage', help: '/help', image: '/image', video: '/video', code: '/code', knowledge: '/knowledge', agents: '/agents', library: '/library', workspaces: '/workspaces', work: '/work', openjutsu: '/openjutsu', imajutsu: '/imajutsu' };
+const starts = (...p: string[]) => (path: string) => p.some((x) => path === x || path.startsWith(x + '/'));
 
-/** Route for a mode. Modes with their own page register it here; everything else lands on the explanatory page. */
-export function registerRoute(id: string, href: string) { ROUTES[id] = href; }
+const ALL: PrimaryEntry[] = [
+  { id: 'chat', label: 'Chat', href: '/chat', icon: 'chat', match: starts('/chat') },
+  { id: 'image', label: 'Images', href: '/image', icon: 'image', match: starts('/image') },
+  { id: 'video', label: 'Videos', href: '/video', icon: 'video', match: starts('/video') },
+  // the standalone Imajutsu and OpenJutsu pages are only reachable from Experimental, so they keep its tab lit
+  { id: 'experimental', label: 'Experimental', href: '/experimental', icon: 'sliders', match: starts('/experimental', '/imajutsu', '/openjutsu') }
+];
 
-/** The pages to offer from /api/me ui. Work Mode appears only when the server says it is enabled for this person
- *  (ui.operations.work.enabled); the field may be absent on older servers, which then simply never show it. */
-export function navPages(ui: any): NavEntry[] {
-  const pages: NavEntry[] = (ui?.pages ?? ui?.nav ?? []).filter((p: NavEntry) => p.id !== 'work' && p.id !== 'openjutsu' && p.id !== 'imajutsu');
-  if (ui?.operations?.work?.enabled) {
-    const at = pages.findIndex((p) => p.id === 'agents');
-    pages.splice(at >= 0 ? at + 1 : pages.length, 0, { id: 'work', label: 'Work', available: true });
-  }
-  // OpenJutsu Studio is offered the same way: only when the server says it is enabled for this person (ui.operations.openjutsu.enabled)
-  if (ui?.operations?.openjutsu?.enabled) {
-    const at = pages.findIndex((p) => p.id === 'work' || p.id === 'agents');
-    pages.splice(at >= 0 ? at + 1 : pages.length, 0, { id: 'openjutsu', label: 'OpenJutsu', available: true });
-  }
-  // Imajutsu (image generation and editing) is offered the same way: only when ui.operations.imajutsu.enabled
-  if (ui?.operations?.imajutsu?.enabled) {
-    const at = pages.findIndex((p) => p.id === 'openjutsu');
-    pages.splice(at >= 0 ? at + 1 : pages.length, 0, { id: 'imajutsu', label: 'Imajutsu', available: true });
-  }
-  return pages;
+/** True when the server offers any experimental tool: advanced generation, the picture studio, the video editor, or analysing a video. */
+export function experimentalAvailable(ui: any): boolean {
+  const o = ui?.operations ?? {};
+  return !!(o.image?.enabled || o.video?.enabled || o.imajutsu?.enabled || o.openjutsu?.enabled || o.extras?.enabled);
 }
 
-export const navHref = (n: NavEntry) => (n.available ? (ROUTES[n.id] ?? `/unavailable/${n.id}`) : `/unavailable/${n.id}`);
+/** The four primary places this person may use. A place the server does not offer is left out entirely (no dead link). */
+export function primaryNav(ui: any): PrimaryEntry[] {
+  if (!ui) return [];
+  const o = ui.operations ?? {};
+  const on: Record<PrimaryId, boolean> = {
+    chat: !!ui.modes?.chat?.enabled,
+    image: !!o.image?.enabled,
+    video: !!o.video?.enabled,
+    experimental: experimentalAvailable(ui)
+  };
+  return ALL.filter((e) => on[e.id]);
+}
 
-/** Trinodal AI: its management UI is served by Semechka at /trinodal/ (a separate page, so these are full page loads). Training
- *  links are offered only to people who hold trinodal.train; the server checks every request again. */
-export type TrinodalLink = { id: string; label: string; href: string; train?: boolean };
-export const TRINODAL_LINKS: TrinodalLink[] = [
-  { id: 'dashboard', label: 'Dashboard', href: '/trinodal/' },
-  { id: 'network', label: 'Network Explorer', href: '/trinodal/#/network' },
-  { id: 'training', label: 'Training Studio', href: '/trinodal/#/training', train: true },
-  { id: 'jobs', label: 'Training Jobs', href: '/trinodal/#/training/jobs', train: true },
-  { id: 'evaluations', label: 'Evaluations', href: '/trinodal/#/evaluations' }
-];
-export const trinodalLinks = (t: { view: boolean; train: boolean }) => (t.view ? TRINODAL_LINKS.filter((l) => !l.train || t.train) : []);
+/** Which primary place a path belongs to (the active tab), or null on account, administration and the secondary pages. */
+export const primaryOf = (path: string): PrimaryId | null => ALL.find((e) => e.match(path))?.id ?? null;
+
+// ---- secondary pages (account menu) -------------------------------------------------------------------------------------
+const SECONDARY: Record<string, { href: string; icon: string }> = {
+  library: { href: '/library', icon: 'library' },
+  knowledge: { href: '/knowledge', icon: 'knowledge' },
+  agents: { href: '/agents', icon: 'agents' },
+  usage: { href: '/usage', icon: 'usage' },
+  help: { href: '/help', icon: 'help' }
+};
+
+/** Library, knowledge, assistants, usage and help, when the server offers them. Workspaces, Code and the old Work page are not offered. */
+export function secondaryNav(ui: any): { id: string; label: string; href: string; icon: string }[] {
+  const pages: NavEntry[] = ui?.pages ?? ui?.nav ?? [];
+  return pages.filter((p) => p.available && SECONDARY[p.id]).map((p) => ({ id: p.id, label: p.label, ...SECONDARY[p.id] }));
+}
+
+/** Where `home` from /api/me lands: the chat unless it is not offered, then the first primary place. */
+export function homeHref(ui: any): string {
+  const h = ui?.home;
+  const prim = primaryNav(ui);
+  if (h && SECONDARY[h]) return SECONDARY[h].href;
+  return prim.find((p) => p.id === 'chat')?.href ?? prim[0]?.href ?? '/account';
+}

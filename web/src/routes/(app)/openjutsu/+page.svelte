@@ -6,6 +6,8 @@
   import { onMount, untrack } from 'svelte';
   import { app } from '$lib/session.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import ExpBack from '$lib/components/ExpBack.svelte';
+  import { handoff } from '$lib/media/handoff.svelte';
   import MediaDropzone from '$lib/components/media/MediaDropzone.svelte';
   import VideoStage from '$lib/components/studio/VideoStage.svelte';
   import StudioStepper from '$lib/components/studio/StudioStepper.svelte';
@@ -27,7 +29,9 @@
   onMount(() => {
     if (!op?.enabled) return;
     const u = page.url.searchParams;
-    s.init(u.get('project'), u.has('new')).then(() => {
+    s.init(u.get('project'), u.has('new')).then(async () => {
+      const h = handoff.video;   // a video chosen in the Library starts a project here
+      if (h) { handoff.video = null; await s.startProject(h); }
       const st = u.get('step');
       if (!s.project) return;
       if (st && STEPS.some((x) => x.id === st)) s.step = st as typeof s.step;
@@ -66,7 +70,7 @@
   <MediaDropzone onfiles={(f) => s.addFiles(f)} hint="Drop a video to start, or pictures to use as references" sub="Videos start a project. Pictures are added as references.">
     <div class="studio">
       <header class="top">
-        <div class="ttl"><h1>OpenJutsu Studio</h1>{#if s.project}<span class="proj" title={s.project.title}>{s.project.title || 'Untitled project'}</span>{/if}</div>
+        <div class="ttl"><ExpBack /><h1>OpenJutsu Studio</h1>{#if s.project}<span class="proj" title={s.project.title}>{s.project.title || 'Untitled project'}</span>{/if}</div>
         <div class="acts">
           {#if s.project}<span class="save tiny" class:bad={s.saveState === 'error' || s.saveState === 'conflict'} role="status" aria-live="polite" data-testid="save-state">{saveText}</span>{/if}
           <button type="button" class="btn sm" onclick={() => (jobsOpen = true)} data-testid="open-jobs"><Icon name="history" size={14} /> Jobs{s.jobs.length ? ` (${s.jobs.length})` : ''}</button>
