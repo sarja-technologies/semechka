@@ -49,7 +49,8 @@ test.describe('axe: no violations of WCAG 2.2 A/AA on any route, in all three th
     });
 
     test(`${theme}: administration`, async ({ as, browserName }) => {
-      test.slow(browserName === 'firefox', 'axe over WebDriver BiDi takes about three times as long on 23 pages');
+      // axe on 23 pages takes 30-65 s in Chrome on a loaded machine, about three times that over WebDriver BiDi
+      test.setTimeout(browserName === 'firefox' ? 360_000 : 120_000);
       await setTheme('owner', theme);
       const page = await as('owner');
       const found: string[] = [];
