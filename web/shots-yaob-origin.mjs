@@ -9,14 +9,16 @@ const BASE = process.argv[2] ?? 'http://127.0.0.1:5173';
 const PW = process.argv[3] ?? 'dev passphrase 2026 yaob';
 const OUT = path.resolve('../docs/evidence/yaob-origin');
 mkdirSync(OUT, { recursive: true });
+/** @type {string[]} */
 const problems = [];
-const check = (ok, what) => { if (!ok) problems.push(what); console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); };
+const check = (/** @type {unknown} */ ok, /** @type {string} */ what) => { if (!ok) problems.push(what); console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); };
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 for (const theme of ['light', 'dark']) {
-  for (const [vw, vh, tag] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
+  for (const [vw, vh, tag] of /** @type {Array<[number, number, string]>} */ ([[1440, 900, 'desktop'], [390, 844, 'phone']])) {
     const ctx = await browser.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: 1, hasTouch: tag === 'phone', isMobile: tag === 'phone' });
     const page = await ctx.newPage();
+    /** @type {string[]} */
     const errors = [];
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('pageerror', (e) => errors.push(String(e)));
@@ -24,7 +26,7 @@ for (const theme of ['light', 'dark']) {
     check(login.ok(), `${tag}/${theme}: login`);
     const csrf = (await (await ctx.request.get(`${BASE}/api/me`)).json()).csrf;
     await ctx.request.patch(`${BASE}/api/me`, { data: { theme, web_search: 'auto' }, headers: { 'x-csrf-token': csrf } });
-    const shot = async (name) => { await page.waitForTimeout(350); return page.screenshot({ path: path.join(OUT, `${tag}-${theme}-${name}.png`) }); };
+    const shot = async (/** @type {string} */ name) => { await page.waitForTimeout(350); return page.screenshot({ path: path.join(OUT, `${tag}-${theme}-${name}.png`) }); };
 
     await page.goto(`${BASE}/chat`);
     await page.locator('#msg').waitFor();
@@ -72,11 +74,11 @@ for (const theme of ['light', 'dark']) {
     check((await c1.getAttribute('href')) === 'https://example.org/semechka/0.12' && (await c1.getAttribute('target')) === '_blank'
       && (await c1.getAttribute('rel'))?.includes('noopener') && (await c1.getAttribute('rel'))?.includes('noreferrer'), `${tag}/${theme}: citation 1 links to source 1 in a new tab, noopener noreferrer`);
     const box = msg.getByTestId('web-sources');
-    check(await box.isVisible() && !(await box.evaluate((d) => d.open)), `${tag}/${theme}: sources collapsed under the answer`);
+    check(await box.isVisible() && !(await box.evaluate((d) => /** @type {HTMLDetailsElement} */ (d).open)), `${tag}/${theme}: sources collapsed under the answer`);
     await msg.scrollIntoViewIfNeeded();
     await shot('5-answer-collapsed');
     await box.locator('summary').click();
-    check(await box.evaluate((d) => d.open), `${tag}/${theme}: sources expand`);
+    check(await box.evaluate((d) => /** @type {HTMLDetailsElement} */ (d).open), `${tag}/${theme}: sources expand`);
     const links = box.locator('a');
     check(await links.count() === 3, `${tag}/${theme}: three source links`);
     const l = links.first();

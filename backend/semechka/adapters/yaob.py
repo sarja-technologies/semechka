@@ -20,7 +20,7 @@ STATUS_STATES = ("searching_web", "reading_sources", "verifying")
 SOURCE_KINDS = ("web", "reference")
 MAX_SOURCES = 20
 
-_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f​-‏ -‮⁦-⁩]")
+_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2066-\u2069]")
 _DATE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?([T ][0-9:.]+(Z|[+-]\d{2}:?\d{2})?)?$")
 _HOST = re.compile(r"^[a-z0-9.-]{1,253}$|^\[[0-9a-f:.]+\]$", re.I)
 _CAP = re.compile(r"^[a-z0-9_.-]{1,40}$")

@@ -55,7 +55,7 @@ def test_sources_keep_only_http_links_and_bound_every_field():
            {"n": 5, "url": "https://exa mple.org/"},
            {"n": 6},
            "not a dict",
-           {"n": 7, "url": "https://www.example.org/a?b=1", "title": "T‮\x07itle " + "y" * 400, "published": "<script>",
+           {"n": 7, "url": "https://www.example.org/a?b=1", "title": "T\u202e\x07itle " + "y" * 400, "published": "<script>",
             "snippet": "s" * 2000, "kind": "evil"},
            {"n": 7, "url": "https://example.org/duplicate-number"},
            {"n": "8", "url": "http://example.com/", "site": "Example", "published": "2026-11-12", "kind": "reference"}]
@@ -63,7 +63,7 @@ def test_sources_keep_only_http_links_and_bound_every_field():
     assert [s["n"] for s in out] == [7, 10]  # a non-numeric n takes the position in the list
     a, b = out
     assert a["url"] == "https://www.example.org/a?b=1" and a["site"] == "example.org" and a["kind"] == "web"
-    assert len(a["title"]) == 300 and "‮" not in a["title"] and "\x07" not in a["title"]
+    assert len(a["title"]) == 300 and "\u202e" not in a["title"] and "\x07" not in a["title"]
     assert "published" not in a and len(a["snippet"]) == 500
     assert b == {"n": 10, "kind": "reference", "url": "http://example.com/", "title": "Example", "site": "Example", "published": "2026-11-12"}
     assert len(yaob.sources([{"n": i, "url": f"https://e.org/{i}"} for i in range(1, 40)])) == yaob.MAX_SOURCES
